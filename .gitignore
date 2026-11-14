@@ -1,0 +1,9 @@
+.gradle/
+.idea/
+local.properties
+**/build/
+**/.cxx/
+*.jks
+*.keystore
+!signing/astra-development.keystore
+*.iml
