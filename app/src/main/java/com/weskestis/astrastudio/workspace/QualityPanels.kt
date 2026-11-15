@@ -57,7 +57,7 @@ import kotlin.math.*
     if(c==null||a==null){Text("Select an audio clip. Resample a MIDI clip first to stretch its sound.");Action("Resample selected clip",c!=null,click=resample);return}
     val focus=LocalFocusManager.current;val keyboard=LocalSoftwareKeyboardController.current
     val original=(c.last-c.first).toDouble()/a.rate
-    var beats by rememberSaveable(slot,c.first,c.last){mutableStateOf((original*s.bpm/60).toString())}
+    var beats by rememberSaveable(slot,c.first,c.last){mutableStateOf(String.format(java.util.Locale.US,"%.6f",original*s.bpm/60).trimEnd('0').trimEnd('.'))}
     var pitch by rememberSaveable(slot){mutableStateOf("0")}
     Text(c.name,color=Green);SampleWaveform(a,c.first,c.last)
     Text("Source: ${number(original)} seconds · ${a.rate} Hz. Rendered at the source rate as 32-bit float stereo.",fontSize=12.sp,color=Muted)

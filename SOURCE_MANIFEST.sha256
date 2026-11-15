@@ -94,9 +94,9 @@ bb20780e184c28eb127a7b0f6d5484d1b0e697f1c66ae5731ed7c9ecc58de8e7  app/src/main/j
 3e8bbc8c67ad019eab3c583bc7dfb61d43e69ec85ce46bb080ac9cf9d09c28b2  app/src/main/java/com/weskestis/astrastudio/synth/SynthSchema.kt
 cf5e31b00ffb6f54d22ab5a0c1750f774b93240c85f590365a5fb5cc1c4f8fa4  app/src/main/java/com/weskestis/astrastudio/workspace/ClipEditor.kt
 4c2b898da887581a739466876c4881ebc809f41b6d5a2c60daf7b35170ba09bf  app/src/main/java/com/weskestis/astrastudio/workspace/PanelNavigation.kt
-45f67c927f357a0da8a7a85c9feb60806e5c9397e3637f64c4fe4b8848d780ad  app/src/main/java/com/weskestis/astrastudio/workspace/QualityPanels.kt
+ace81e2b91644488054cea302f35ba2346a8724d537c32eead3ad68ad0b3d48c  app/src/main/java/com/weskestis/astrastudio/workspace/QualityPanels.kt
 26a56a2ab29f9fe43c8a7ac7e57fcfe4628cff4d9d199a28d1a0f7bee1706310  app/src/main/java/com/weskestis/astrastudio/workspace/SamplePanels.kt
-70d9596bbfa300e483349173bcb19617755517b78adc2426b63a3c052fb6ec84  app/src/main/java/com/weskestis/astrastudio/workspace/StudioWorkspace.kt
+4c129a279dd9e92b7fa18cf85d262e59c1b2ed797e7e243b72c7580d801ffb75  app/src/main/java/com/weskestis/astrastudio/workspace/StudioWorkspace.kt
 1ce1650c2c73cdaae3a1e2d97db4eaa91e98b216adc3c59ceca09de54b106a4d  app/src/main/java/com/weskestis/astrastudio/workspace/TimelineViews.kt
 2061145f8cf17f47aafe4f383e7922c39c821091fe44455f42ee5a0eae33b716  app/src/main/res/drawable/ic_astra.xml
 6fdcf3da21b681ce75c81ab173fd676881dfc446268feac24c7ef83b75e7e00c  app/src/main/res/values/strings.xml

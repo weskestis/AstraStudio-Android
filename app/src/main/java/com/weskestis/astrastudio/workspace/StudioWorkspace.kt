@@ -65,7 +65,8 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,imp
     val editorCandidate=state.editorSnapshot();val editorState=remember(editorCandidate){editorCandidate}
     val sequencePhase=rememberUpdatedState(state.sequence.phase)
     val sessionCandidate=state.sessionSnapshot();val sessionState=remember(sessionCandidate){sessionCandidate}
-    fun audioAction(kind: String,id: Int=0){if(state.stats.running){when(kind){"play"->service.play(view,cursor);"launch"->service.launch(id);"scene"->service.launchScene(id);"record"->service.record(id)}}else{pending=kind to id;start()}}
+    val audioRunning=state.stats.running
+    fun audioAction(kind: String,id: Int=0){if(audioRunning){when(kind){"play"->service.play(view,cursor);"launch"->service.launch(id);"scene"->service.launchScene(id);"record"->service.record(id)}}else{pending=kind to id;start()}}
     LaunchedEffect(state.stats.running){if(state.stats.running)pending?.let{pending=null;when(it.first){"play"->service.play(view,cursor);"launch"->service.launch(it.second);"scene"->service.launchScene(it.second);"record"->service.record(it.second)}}}
     LaunchedEffect(track){service.meterTrack(track)}
     Column(Modifier.fillMaxSize().safeDrawingPadding().testTag("workspace")) {
