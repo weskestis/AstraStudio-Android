@@ -5,9 +5,17 @@ Development build **0.6.0-phase6 / versionCode 6**. The same public development 
 ## Current checks
 
 - All five native suites passed locally: core, synth, effects, project and sampler.
-- The sampler suite exercises chromatic frequency, stereo, forward/reverse looping, gate/one-shot/choke, invalid wires, shared voice ownership, project/sample replacement, audition/panic and sampled MIDI WAV export. Callback allocation/free trackers both remain zero.
-- All **87 Kotlin/JUnit tests passed** locally (13 new sampler/navigation/model tests plus 74 regressions). ARM64/x86_64 APK and instrumentation APK assembled; lint passed with 0 errors. Android emulator and GitHub CI evidence are recorded after the run completes.
+- The sampler suite exercises chromatic frequency, stereo, forward/reverse looping, gate/one-shot/choke, invalid wires, overlapping unchoked pad retriggers, shared voice ownership, project/sample replacement, audition/panic and sampled MIDI WAV export. Callback allocation/free trackers both remain zero.
+- All **88 Kotlin/JUnit tests passed** locally (14 new sampler/navigation/model tests plus 74 regressions). ARM64/x86_64 APK and instrumentation APK assembled; lint passed with 0 errors. Android emulator and GitHub CI evidence are recorded after the run completes.
 - Added Android checks exercise physical Back key events through pad settings, browser details, nested sample selection, Gemini settings, clip properties and Arrangement; factory kit creation; resampling; sampler selection across rotation; ZIP rollback; portable unused samples/favorites; and actual JNI sampled WAV output and audition commands.
+
+## Delivered APK
+
+- File: `AstraStudio_Phase6_0.6.0.apk` — 28,556,396 bytes.
+- SHA-256: `5f8a9b412eae8eaefebbaab21549632078915c27a1a364480f6d5e8e5d7f00f6`.
+- Package `com.weskestis.astrastudio`, versionCode 6, minimum and target API 34; ARM64 and x86_64.
+- APK signature verification passed. Certificate SHA-256: `1bff24ae64d74c99d9540a1ecc5acccc8479367f44772b305144d2c10ce4bd45`.
+- APK 16 KiB zip alignment passed; every native library LOAD segment is aligned to at least 16 KiB.
 
 ## Limits
 

@@ -143,7 +143,7 @@ class WorkspaceSmokeTest {
             }finally{wave.delete()}
         }finally{bridge.close()}
     }
-    private fun back(){InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);compose.waitForIdle()}
+    private fun back(){compose.waitForIdle();InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);compose.waitForIdle()}
     @Test fun nestedBackDrumRackSamplerBrowserAndBounce(){
         compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
         click("File");click("Load starter song");click("Confirm project")
@@ -155,6 +155,7 @@ class WorkspaceSmokeTest {
         click("Pad 0");shot("07-drum-rack")
         click("Edit pad");compose.onNodeWithTag("Pad editor").performScrollTo().assertIsDisplayed()
         click("Sample reverse");click("Trim / loop frames")
+        compose.onNodeWithTag("Apply sample range").performScrollTo().assertIsDisplayed()
         back();compose.onNodeWithTag("Pad editor").performScrollTo().assertIsDisplayed();compose.onNodeWithTag("Apply sample range").assertDoesNotExist()
         shot("08-pad-editor");back();compose.onNodeWithTag("Pad 0").performScrollTo().assertIsDisplayed()
         // Browser opened from a pad returns to that pad's instrument panel.
