@@ -46,7 +46,7 @@ class WorkspaceSmokeTest {
         requireNotNull(resolver.openOutputStream(uri)).use { bitmap.compress(Bitmap.CompressFormat.PNG,100,it) }
         values.clear();values.put(android.provider.MediaStore.Images.Media.IS_PENDING,0);resolver.update(uri,values,null,null)
     }
-    private fun click(tag: String){val node=compose.onNodeWithTag(tag);runCatching{node.performScrollTo()};node.performClick()}
+    private fun click(tag: String){val node=compose.onNodeWithTag(tag);runCatching{node.performScrollTo()};node.assertIsDisplayed().performClick()}
     @Test fun recordingLabZoomPitchExtractionAndNavigation(){
         compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
         click("File");click("New project");click("Confirm project")
@@ -96,18 +96,32 @@ class WorkspaceSmokeTest {
             click("Record audio");click("Lab add clip")
             compose.waitUntil(20000){service.state.value.project.clip(0)?.asset?.let{it>=0}==true&&!service.state.value.busy}
             back();compose.onNodeWithTag("Launch 0").performScrollTo().assertExists()
-            // Actual platform microphone lifecycle; emulator audio is silent, not a fidelity test.
+        }finally{fixture.delete();binding.unbindService()}
+    }
+    @Test fun microphoneSurvivesBackAndSavesWave(){
+        compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val binding=ServiceTestRule();val service=(binding.bindService(Intent(context,AudioService::class.java)) as AudioService.LocalBinder).service
+        try{
+            // Actual platform capture lifecycle; emulator input is silent, not a fidelity test.
             InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(context.packageName,android.Manifest.permission.RECORD_AUDIO)
+            val previous=service.recorder.state.value.latest
             click("Record audio");click("Start microphone")
-            compose.waitUntil(15000){service.recorder.state.value.active&&service.recorder.state.value.frames>0}
+            try{compose.waitUntil(15000){service.recorder.state.value.active&&service.recorder.state.value.frames>0}}
+            catch(e: Exception){throw AssertionError("Microphone: ${service.recorder.state.value}",e)}
             val before=service.recorder.state.value.frames
             back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
             compose.waitUntil(10000){service.recorder.state.value.frames>before}
+            compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
+            compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
+            assertTrue(service.recorder.state.value.active)
+            compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_PORTRAIT}
+            compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_PORTRAIT}
             click("Record audio");click("Stop microphone")
-            compose.waitUntil(15000){!service.recorder.state.value.active&&service.recorder.state.value.latest!=original}
-            WaveFile(File(service.recorder.state.value.latest)).use{assertTrue(it.frames>0)}
+            compose.waitUntil(15000){!service.recorder.state.value.active&&service.recorder.state.value.latest!=previous}
+            WaveFile(File(service.recorder.state.value.latest)).use{assertTrue(it.frames>0);assertEquals(service.recorder.state.value.rate,it.rate)}
             shot("18-recorded-take");back()
-        }finally{service.stopCapture();fixture.delete();binding.unbindService()}
+        }finally{service.stopCapture();binding.unbindService()}
     }
     @Test fun createEditUndoArrangeAndRotate(){
         compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}

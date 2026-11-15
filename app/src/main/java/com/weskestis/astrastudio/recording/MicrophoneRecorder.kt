@@ -39,7 +39,7 @@ class MicrophoneRecorder(private val context: Context,private val completed: ()-
     private fun recover(){directory.listFiles()?.filter{it.extension=="part"}?.forEach{file->if(FloatWaveWriter.recover(file))file.renameTo(File(directory,file.nameWithoutExtension+".wav"))else if(file.length()<=44)file.delete()}}
     fun refresh(latest: String=""){
         val takes=directory.listFiles()?.filter{it.extension=="wav"}?.sortedByDescending{it.lastModified()}?.mapNotNull { file->
-            runCatching{WaveFile(file).use{RecordedTake(file.absolutePath,file.nameWithoutExtension,it.rate,it.channels,it.frames)}}.getOrNull()
+            runCatching{WaveFile(file).use{RecordedTake(file.absolutePath,displayName(file),it.rate,it.channels,it.frames)}}.getOrNull()
         }?:emptyList()
         update{it.copy(takes=takes,latest=if(latest.isBlank())it.latest else latest)}
     }
@@ -110,5 +110,8 @@ class MicrophoneRecorder(private val context: Context,private val completed: ()-
         }
     }
     override fun close(){closed=true;stop();worker.shutdown()}
-    companion object{const val MAX_TAKE_BYTES=1024L*1024*1024}
+    companion object{
+        const val MAX_TAKE_BYTES=1024L*1024*1024
+        fun displayName(file: File)=file.nameWithoutExtension.replace(Regex("_(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{8})$"),"").removePrefix("Import_").replace('_',' ')
+    }
 }

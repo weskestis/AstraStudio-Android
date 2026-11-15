@@ -38,6 +38,11 @@ private data class TakeList(val takes: List<RecordedTake>,val latest: String,val
 private fun time(frames: Long,rate: Int)=String.format(Locale.US,"%.5f s",frames.toDouble()/rate)
 private fun db(value: Double)=String.format(Locale.US,"%.1f",20*log10(max(1e-6,value)))
 
+@OptIn(ExperimentalLayoutApi::class)
+@Composable private fun LabTools(content: @Composable ()->Unit){
+    FlowRow(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){content()}
+}
+
 @Composable internal fun RecordAction(service: AudioService,open: ()->Unit){
     val flow=remember(service){service.recorder.state.map{it.active}.distinctUntilChanged()}
     val active by flow.collectAsStateWithLifecycle(false)
@@ -49,11 +54,11 @@ private fun db(value: Double)=String.format(Locale.US,"%.1f",20*log10(max(1e-6,v
     var stereo by rememberSaveable{mutableStateOf(false)}
     Text("RECORD & SAMPLE LAB",color=Green)
     Text("Capture a sound, isolate its bass tone, then play it from your keyboard.",fontSize=12.sp,color=Muted)
-    Tools{
+    LabTools{
         Action(if(state.active)"● Recording" else "● Record microphone",enabled&&!state.active,"Start microphone"){start(stereo)}
         Action("■ Stop & save",state.active&&!state.stopping,"Stop microphone"){service.stopCapture()}
     }
-    Tools{FilterChip(!stereo,{stereo=false},enabled=!state.active,label={Text("Mono")});FilterChip(stereo,{stereo=true},enabled=!state.active,label={Text("Stereo if supported")})}
+    LabTools{FilterChip(!stereo,{stereo=false},enabled=!state.active,label={Text("Mono")});FilterChip(stereo,{stereo=true},enabled=!state.active,label={Text("Stereo if supported")})}
     if(state.active||state.frames>0){
         Text("${time(state.frames,state.rate)} · ${state.rate} Hz · ${state.channels} ch",color=Green,modifier=Modifier.testTag("Capture duration"))
         LinearProgressIndicator(progress={state.peak.coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth().height(8.dp),color=if(state.peak>=.999f)Color(0xFFFF735E)else Green)
@@ -69,7 +74,7 @@ private fun db(value: Double)=String.format(Locale.US,"%.1f",20*log10(max(1e-6,v
     val takesFlow=remember(service){service.recorder.state.map{TakeList(it.takes,it.latest,it.active)}.distinctUntilChanged()}
     val takes by takesFlow.collectAsStateWithLifecycle(TakeList(emptyList(),"",false))
     CaptureControls(service,s.ready&&!s.busy,start)
-    Tools{Action("Open audio from storage",!s.busy&&!takes.active,"Lab import"){importAudio()}}
+    LabTools{Action("Open audio from storage",!s.busy&&!takes.active,"Lab import"){importAudio()}}
     val sources=remember(takes.takes,s.project.assets){takes.takes.map{LabSource(it.path,it.name,it.frames,it.rate,true,"Lab take "+it.path)}+
         s.project.assets.map{LabSource(service.samplePath(it),it.name,it.frames,it.rate,false,"Lab sample ${it.id}")}}
     var path by rememberSaveable{mutableStateOf("")}
@@ -79,7 +84,7 @@ private fun db(value: Double)=String.format(Locale.US,"%.1f",20*log10(max(1e-6,v
     LaunchedEffect(takes.latest){if(takes.latest.isNotBlank()&&takes.latest!=handledLatest){path=takes.latest;handledLatest=takes.latest;choosing=false}}
     val source=sources.firstOrNull{it.path==path}
     PanelBackHandler(choosing&&source!=null){choosing=false}
-    Tools{Action(if(source==null)"Choose a source" else "Change source",tag="Lab choose source"){choosing=!choosing}}
+    LabTools{Action(if(source==null)"Choose a source" else "Change source",tag="Lab choose source"){choosing=!choosing}}
     if(choosing||source==null){
         OutlinedTextField(query,{query=it.take(128)},label={Text("Find recording or project sample")},singleLine=true,modifier=Modifier.fillMaxWidth())
         Column(Modifier.fillMaxWidth().heightIn(max=200.dp).verticalScroll(rememberScrollState())){
@@ -112,12 +117,12 @@ private fun db(value: Double)=String.format(Locale.US,"%.1f",20*log10(max(1e-6,v
     DisposableEffect(Unit){onDispose{service.stopSelectionPreview();analysisJob?.cancel()}}
     Text(source.name,color=Green,fontSize=14.sp,modifier=Modifier.padding(top=12.dp))
     Text("${source.rate} Hz · ${time(source.frames,source.rate)} · source preserved",fontSize=12.sp,color=Muted)
-    Tools{
+    LabTools{
         Action("Zoom +",tag="Lab zoom in"){zoom(.5)};Action("Zoom −"){zoom(2.0)}
         Action("Fit selection",tag="Lab fit selection"){window(first,last)};Action("Fit all"){window(0,source.frames)}
         Action("◀ Pan"){val shift=(end-begin)/2;window(begin-shift,end-shift)};Action("Pan ▶"){val shift=(end-begin)/2;window(begin+shift,end+shift)}
     }
-    Tools{FilterChip(!pan,{pan=false},label={Text("Drag to select")});FilterChip(pan,{pan=true},label={Text("Pan / pinch zoom")})}
+    LabTools{FilterChip(!pan,{pan=false},label={Text("Drag to select")});FilterChip(pan,{pan=true},label={Text("Pan / pinch zoom")})}
     val selectionColor=Green.copy(alpha=.17f)
     var anchor by remember{mutableLongStateOf(0)}
     val currentBegin by rememberUpdatedState(begin);val currentEnd by rememberUpdatedState(end)
@@ -152,11 +157,11 @@ private fun db(value: Double)=String.format(Locale.US,"%.1f",20*log10(max(1e-6,v
         OutlinedTextField(startText,{startText=it.take(12)},label={Text("Start frame")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number,imeAction=ImeAction.Done),keyboardActions=KeyboardActions(onDone={applyRange()}),modifier=Modifier.weight(1f).testTag("Lab start frame"))
         OutlinedTextField(endText,{endText=it.take(12)},label={Text("End frame (exclusive)")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number,imeAction=ImeAction.Done),keyboardActions=KeyboardActions(onDone={applyRange()}),modifier=Modifier.weight(1f).testTag("Lab end frame"))
     }
-    Tools{
+    LabTools{
         Action("Apply frame range",valid,"Lab apply range"){applyRange()}
         Action("Select view"){first=begin;last=end};Action("Select all"){first=0;last=source.frames}
     }
-    Tools{
+    LabTools{
         Action("▶ Audition selection",enabled&&!s.busy,"Lab audition"){keyboard?.hide();service.previewSelection(source.path,first,last)}
         Action("■ Stop audition",tag="Lab stop audition"){service.stopSelectionPreview()}
         Action(if(analyzing)"Analyzing…" else "Analyze bass",!analyzing&&!s.busy,"Lab analyze"){
@@ -179,12 +184,12 @@ private fun db(value: Double)=String.format(Locale.US,"%.1f",20*log10(max(1e-6,v
     FilterChip(fade,{fade=!fade},label={Text("2 ms edge fades")},modifier=Modifier.testTag("Lab edge fades"))
     Text("Saved as 32-bit float at the source rate. No normalization. With edge fades off, selection samples are unchanged. Only the selection uses the project's 512 MiB audio budget.",fontSize=11.sp,color=Muted)
     val canSave=enabled&&!s.busy&&root.toIntOrNull() in 0..127
-    Tools{
+    LabTools{
         Action("Use as sampler",canSave,"Lab use sampler"){keyboard?.hide();service.stopSelectionPreview();service.sampleSelection(source.path,first,last,slot,true,root.toInt(),fade)}
         Action("Add audio clip",enabled&&!s.busy,"Lab add clip"){keyboard?.hide();service.stopSelectionPreview();service.sampleSelection(source.path,first,last,slot,false,60,fade)}
         if(source.take)Action("Discard original take",enabled&&!s.busy,"Lab discard"){discard=true}
     }
-    Tools{
+    LabTools{
         Action("Save original WAV",enabled&&!s.busy,"Lab save original"){save(source.path,source.name,0,source.frames)}
         Action("Save selection WAV",enabled&&!s.busy,"Lab save selection"){save(source.path,source.name+" cut",first,last)}
     }

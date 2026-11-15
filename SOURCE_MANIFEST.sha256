@@ -3,7 +3,7 @@
 9eca174da5d3a10fc9a34b2e069aab5f38039e308ad67b22b8a7346539c3837f  README.md
 7a8be0e82a871a74933cfd9c921493e999b1c6cd104668d9714478c075fb45d3  app/build.gradle.kts
 691a8fb364968d0cebe2742f22f483e14f4cb1f9ee530ddebd0f8cde13806ddd  app/proguard-rules.pro
-1930ce4d5cf21dd35824007ee7cbaeffcc8f07411742638068088cf7f9ebc1c0  app/src/androidTest/java/com/weskestis/astrastudio/WorkspaceSmokeTest.kt
+9be61496dcb30ea1bb87d2e4850460053ba32f28cdff2579b0af35c11812a026  app/src/androidTest/java/com/weskestis/astrastudio/WorkspaceSmokeTest.kt
 326822266ecc22c097d291d81567748637f7f3a0cdd3f28008bde711ff88dcba  app/src/main/AndroidManifest.xml
 49112e1ca676994a4a3ff42ead5b751cdd324fd52ed35287afb0996019e69bda  app/src/main/assets/THIRD_PARTY_LICENSES.txt
 268a4aaaf4eed9f16ae56692e94958cbe623f11de76d8fa205441814cef02475  app/src/main/cpp/AudioEngine.cpp
@@ -73,7 +73,7 @@ abd1683a861f6b113412e1e28c9bd2b56569f6bc75be9755476d7785ccb334f7  app/src/main/j
 ad043f13cce0264c7a7bba97423f48fa256d821a9be3953225601decf4fbe621  app/src/main/java/com/weskestis/astrastudio/astra/PatternGenerator.kt
 2a8250c36a44945e041284dac88b562e6b4076f6ce8bb0ef72977ec5ec2a5f01  app/src/main/java/com/weskestis/astrastudio/astra/StrictJson.kt
 11dbc4e1262fd2d295b38c130cdd3b0dd0bd3109dce66e8bf25c5c0caf5d44b3  app/src/main/java/com/weskestis/astrastudio/audio/AudioBridge.kt
-6c5894264201121b1d14e84a0bb5e163f6fb54b7928b9ff93332bc5b73e1158d  app/src/main/java/com/weskestis/astrastudio/audio/AudioService.kt
+5d52ed7ed5b6ade994507123b761fe2a9cd01d3ba72ff15140aab3e5a5dc6d2d  app/src/main/java/com/weskestis/astrastudio/audio/AudioService.kt
 96360fa0e85cbc5d26f165c473282efb4f74b95cf4089510d4f99befef7b6b53  app/src/main/java/com/weskestis/astrastudio/audio/UiSnapshots.kt
 f89e936bb0a2cfb12d378ad51c99b3a201871940d94a89e1bdea7506bb35d014  app/src/main/java/com/weskestis/astrastudio/fx/EqResponse.kt
 effca2913d034dd6078c16bad7a765985a0e88215925ba28556487cfec468db3  app/src/main/java/com/weskestis/astrastudio/fx/FxConfig.kt
@@ -90,7 +90,7 @@ a8ee99866416fdae299dbd6bda8b17462fb3185b12d1d59ce43ccd4af601e699  app/src/main/j
 283365f8cd02386c5acf9a89ccad9c6280868116d7a7ec76d4f32fed88598878  app/src/main/java/com/weskestis/astrastudio/project/StarterProject.kt
 5aadf58c879c7f51b5274cbd2dfc90fcbd003e10ccc8e4ee9c570dd6847a8474  app/src/main/java/com/weskestis/astrastudio/project/TempoMap.kt
 432e8a0bb2985efb43ddf252a63fc67c362e482e179366b743022fc2ac18f9a7  app/src/main/java/com/weskestis/astrastudio/recording/BassAnalysis.kt
-0520604a94aa8e27e21184a627d3d70f0a07cbaa9e1dfde7d8c79819da4135f4  app/src/main/java/com/weskestis/astrastudio/recording/MicrophoneRecorder.kt
+9583e45c0e670891979e4260dd49404a59eccb7a95d567dca4043d7be23dbcfa  app/src/main/java/com/weskestis/astrastudio/recording/MicrophoneRecorder.kt
 700c480f7b98ea5254888236104219cf1a66c217d71204f9077dea16db1a9983  app/src/main/java/com/weskestis/astrastudio/recording/SelectionPreview.kt
 c9204235761e35ae223fba8a781355162832e6e9f6bc5bfc912ef7a855c029ae  app/src/main/java/com/weskestis/astrastudio/recording/WaveFile.kt
 150634fa3469e6f1893d235ecbfe58ac63d98207223bf72a7ac5ac1dc42050d3  app/src/main/java/com/weskestis/astrastudio/synth/SynthEditor.kt
@@ -99,7 +99,7 @@ bb20780e184c28eb127a7b0f6d5484d1b0e697f1c66ae5731ed7c9ecc58de8e7  app/src/main/j
 cf5e31b00ffb6f54d22ab5a0c1750f774b93240c85f590365a5fb5cc1c4f8fa4  app/src/main/java/com/weskestis/astrastudio/workspace/ClipEditor.kt
 4c2b898da887581a739466876c4881ebc809f41b6d5a2c60daf7b35170ba09bf  app/src/main/java/com/weskestis/astrastudio/workspace/PanelNavigation.kt
 ace81e2b91644488054cea302f35ba2346a8724d537c32eead3ad68ad0b3d48c  app/src/main/java/com/weskestis/astrastudio/workspace/QualityPanels.kt
-4d8c87b28666f2557e0ce1f19995ce84322f48038b406c91251d43a76f4b5f99  app/src/main/java/com/weskestis/astrastudio/workspace/RecordingPanel.kt
+8ae3f64446c722144f47668bc6c5f274ae3815a743bbc75b5f15f6279a7689c4  app/src/main/java/com/weskestis/astrastudio/workspace/RecordingPanel.kt
 26a56a2ab29f9fe43c8a7ac7e57fcfe4628cff4d9d199a28d1a0f7bee1706310  app/src/main/java/com/weskestis/astrastudio/workspace/SamplePanels.kt
 31a1284cc206674597e0d95bae290656c2790646ed8986ff8bd1698c0faca56f  app/src/main/java/com/weskestis/astrastudio/workspace/StudioWorkspace.kt
 1ce1650c2c73cdaae3a1e2d97db4eaa91e98b216adc3c59ceca09de54b106a4d  app/src/main/java/com/weskestis/astrastudio/workspace/TimelineViews.kt

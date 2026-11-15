@@ -602,7 +602,7 @@ class AudioService : Service() {
         require(d.project.assets.size<64&&last>first&&(last-first)<=available/8){"Selection exceeds the remaining 512 MiB decoded sample budget or 64 sample slots. Select a shorter section."}
         val output=File(files.audioDir,"${java.util.UUID.randomUUID()}.wav")
         try{WaveFile(source).use{it.extract(output,first,last,if(fade)(it.rate*.002).roundToInt()else 0){check(!cancelled.get()){"Cancelled."}}}
-            val name=(source.nameWithoutExtension.take(48)+" cut").take(64);val next=addSamples(d,listOf(name to output),"Recorded / extracted");val a=next.project.assets.last()
+            val name=(MicrophoneRecorder.displayName(source).take(48)+" cut").take(64);val next=addSamples(d,listOf(name to output),"Recorded / extracted");val a=next.project.assets.last()
             val project=if(sampler)next.project.instrument(slot%16){it.copy(mode=1,sample=SampleZone(root=root).load(a))}
                 else next.project.put(Clip(target,name,(a.frames.toDouble()/a.rate*d.bpm/60).coerceAtLeast(.0625),asset=a.id,last=a.frames))
             next.copy(project=project).also{require(it.valid()){"Selection exceeds the timeline limits."}}
