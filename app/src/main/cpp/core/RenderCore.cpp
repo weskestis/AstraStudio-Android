@@ -14,16 +14,13 @@ RenderCore::RenderCore() noexcept {
     for (std::size_t i = 0; i < sine_.size(); ++i) {
         sine_[i] = static_cast<float>(std::sin(2.0 * std::numbers::pi * static_cast<double>(i) / 2048.0));
     }
-    for (std::size_t i = 0; i < frequencies_.size(); ++i) {
-        frequencies_[i] = 440.0 * std::pow(2.0, (static_cast<double>(i) - 69.0) / 12.0);
-    }
     prepare(48000.0);
 }
 
 bool RenderCore::prepare(double sampleRate) noexcept {
     if (!std::isfinite(sampleRate) || sampleRate < 8000.0 || sampleRate > 384000.0) return false;
     sampleRate_ = sampleRate;
-    attackStep_ = static_cast<float>(1.0 / (0.005 * sampleRate_));
+    updateLfoSteps();
     smoothing_ = static_cast<float>(1.0 - std::exp(-1.0 / (0.005 * sampleRate_)));
     return true;
 }
@@ -42,8 +39,31 @@ bool RenderCore::valid(const Command& c) noexcept {
         case CommandType::Transport:
         case CommandType::Metronome: return c.value == 0.0f || c.value == 1.0f;
         case CommandType::Tempo: return c.value >= 30.0f && c.value <= 300.0f;
+        case CommandType::PatchSnapshot: return c.note >= 0 && c.note < 64 && c.frame == kImmediate;
     }
     return false;
+}
+
+bool RenderCore::setPatch(int track, const synth::Patch& patch) noexcept {
+    if (track < 0 || track >= kTrackCount || !patch.valid()) return false;
+    for (std::size_t i = 0; i < patchSlots_.size(); ++i) {
+        bool expected = false;
+        if (!patchSlots_[i].busy.compare_exchange_strong(expected, true, std::memory_order_acquire)) continue;
+        patchSlots_[i].patch = patch;
+        // The command queue release/acquire publishes the complete immutable slot.
+        if (enqueue({CommandType::PatchSnapshot, track, static_cast<int32_t>(i), 0, 0})) return true;
+        patchSlots_[i].busy.store(false, std::memory_order_release);
+        return false;
+    }
+    // Backpressure: the producer keeps its old patch and may try again.
+    return false;
+}
+void RenderCore::recyclePatch(const Command& c) noexcept {
+    if (c.type == CommandType::PatchSnapshot) patchSlots_[c.note].busy.store(false, std::memory_order_release);
+}
+void RenderCore::updateLfoSteps() noexcept {
+    for (auto& track : tracks_) for (int i = 0; i < 4; ++i)
+        track.lfoSteps[i] = synth::lfoStep(track.patch, i, bpm_, sampleRate_);
 }
 
 bool RenderCore::enqueue(Command command) noexcept {
@@ -69,8 +89,12 @@ Command RenderCore::popScheduled() noexcept {
 }
 
 void RenderCore::resetSound() noexcept {
-    for (auto& voice : voices_) voice.active = false;
-    scheduledSize_ = 0;
+    for (auto& voice : voices_) { voice.active = false; voice.synth.silence(); }
+    // Pop in submission/frame order: several accepted edits may target one track.
+    while (scheduledSize_ != 0) {
+        const auto event = popScheduled();
+        if (event.type == CommandType::PatchSnapshot) apply(event);
+    }
     clickEnvelope_ = 0.0f;
 }
 
@@ -80,7 +104,10 @@ void RenderCore::consumeCommands() noexcept {
         resetSound();
         playing_ = false;
         // Bounded drain, even if the producer is continuously active.
-        for (std::size_t i = 0; i < kQueueCapacity && commands_.pop(command); ++i) {}
+        for (std::size_t i = 0; i < kQueueCapacity && commands_.pop(command); ++i) {
+            // Panic stops notes, but an accepted patch must still match the UI.
+            if (command.type == CommandType::PatchSnapshot) apply(command);
+        }
         return;
     }
     for (int i = 0; i < kCommandsPerCallback && commands_.pop(command); ++i) {
@@ -89,6 +116,7 @@ void RenderCore::consumeCommands() noexcept {
         if (!schedule(command)) {
             dropped_.fetch_add(1, std::memory_order_relaxed);
             resetSound();
+            if (command.type == CommandType::PatchSnapshot) apply(command);
             playing_ = false;
             // Flush the pending queue next callback as a second safety boundary.
             panic();
@@ -109,8 +137,7 @@ void RenderCore::updateTrackTargets() noexcept {
 }
 
 void RenderCore::releaseVoice(Voice& voice) noexcept {
-    voice.releasing = true;
-    voice.releaseStep = std::max(voice.envelope, 0.0001f) / static_cast<float>(0.03 * sampleRate_);
+    voice.synth.release();
 }
 
 void RenderCore::noteOn(const Command& c) noexcept {
@@ -126,18 +153,17 @@ void RenderCore::noteOn(const Command& c) noexcept {
         // Prefer a releasing/quiet voice. Stable oldest-voice tie breaking.
         selected = &voices_[0];
         for (auto& voice : voices_) {
-            if ((voice.releasing && !selected->releasing) ||
-                (voice.releasing == selected->releasing &&
-                 (voice.envelope < selected->envelope ||
-                  (voice.envelope == selected->envelope && voice.age < selected->age)))) selected = &voice;
+            if ((voice.synth.releasing() && !selected->synth.releasing()) ||
+                (voice.synth.releasing() == selected->synth.releasing() &&
+                 (voice.synth.amplitude() < selected->synth.amplitude() ||
+                  (voice.synth.amplitude() == selected->synth.amplitude() && voice.age < selected->age)))) selected = &voice;
         }
     }
-    *selected = Voice{};
     selected->id = c.noteId;
     selected->track = c.track;
     selected->note = c.note;
-    selected->increment = std::min(frequencies_[static_cast<std::size_t>(c.note)] / sampleRate_, 0.45);
-    selected->velocity = c.value;
+    const auto& track = tracks_[c.track];
+    selected->synth.start(c.note, c.value, c.noteId * 2654435761U, track.patch, sampleRate_, track.freePhases, bpm_);
     selected->active = true;
     selected->age = voiceAge_++;
 }
@@ -156,10 +182,19 @@ void RenderCore::apply(const Command& c) noexcept {
         case CommandType::TrackPan: track.pan = c.value; updateTrackTargets(); break;
         case CommandType::TrackMute: track.mute = c.value != 0.0f; updateTrackTargets(); break;
         case CommandType::TrackSolo: track.solo = c.value != 0.0f; updateTrackTargets(); break;
-        case CommandType::Tempo: bpm_ = c.value; break;
+        case CommandType::Tempo: bpm_ = c.value; updateLfoSteps(); break;
+        case CommandType::PatchSnapshot:
+            track.patch = patchSlots_[c.note].patch;
+            recyclePatch(c);
+            updateLfoSteps();
+            break;
         case CommandType::Transport:
             playing_ = c.value != 0.0f;
-            if (playing_) { beat_ = 0.0; nextClickBeat_ = 0.0; }
+            if (playing_) {
+                beat_ = 0.0; nextClickBeat_ = 0.0;
+                for (auto& t : tracks_) for (int l = 0; l < 4; ++l)
+                    if (t.patch[synth::Lfo1Sync + l * 4] != 0) t.freePhases[l] = 0;
+            }
             else {
                 // Cancel notes submitted BEFORE Stop, while preserving a new
                 // pattern submitted after it in the same control batch.
@@ -202,19 +237,15 @@ void RenderCore::render(float* output, int32_t frames) noexcept {
         std::array<float, kTrackCount> mono{};
         for (auto& voice : voices_) {
             if (!voice.active) continue;
-            if (voice.releasing) {
-                voice.envelope = std::max(0.0f, voice.envelope - voice.releaseStep);
-                if (voice.envelope == 0.0f) { voice.active = false; continue; }
-            } else voice.envelope = std::min(1.0f, voice.envelope + attackStep_);
-            mono[static_cast<std::size_t>(voice.track)] +=
-                oscillator(voice.phase) * voice.envelope * voice.velocity * 0.12f;
-            voice.phase += voice.increment;
-            if (voice.phase >= 1.0) voice.phase -= 1.0;
+            auto& t = tracks_[static_cast<std::size_t>(voice.track)];
+            mono[static_cast<std::size_t>(voice.track)] += voice.synth.render(t.patch, wavetables_, t.freePhases, bpm_);
+            voice.active = voice.synth.active();
         }
         float left = 0.0f;
         float right = 0.0f;
         for (std::size_t t = 0; t < tracks_.size(); ++t) {
             auto& track = tracks_[t];
+            for (int l = 0; l < 4; ++l) track.freePhases[l] = synth::wrap(track.freePhases[l] + track.lfoSteps[l]);
             track.left += smoothing_ * (track.targetLeft - track.left);
             track.right += smoothing_ * (track.targetRight - track.right);
             left += mono[t] * track.left;

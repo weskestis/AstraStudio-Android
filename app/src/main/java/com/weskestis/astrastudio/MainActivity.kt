@@ -41,6 +41,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.weskestis.astrastudio.audio.AudioService
 import com.weskestis.astrastudio.audio.AudioStats
 import com.weskestis.astrastudio.audio.StudioState
+import com.weskestis.astrastudio.synth.SynthEditor
 import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -105,7 +106,7 @@ private fun StudioScreen(state: StudioState, service: AudioService, start: () ->
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Column {
                 Text("ASTRA / STUDIO", fontWeight = FontWeight.Bold, fontSize = 24.sp, letterSpacing = 2.sp)
-                Text("01   AUDIO FOUNDATION", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp, letterSpacing = 2.sp)
+                Text("02   SYNTH LAB", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp, letterSpacing = 2.sp)
             }
             Text("ANDROID 14+", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
         }
@@ -116,7 +117,7 @@ private fun StudioScreen(state: StudioState, service: AudioService, start: () ->
             OutlinedButton(onClick = service::transport, enabled = state.stats.running) {
                 Text(if (state.stats.playing) "Stop transport" else "Play transport")
             }
-            OutlinedButton(onClick = service::demo, enabled = state.stats.running) { Text("Timing demo") }
+            OutlinedButton(onClick = { service.demo(selectedTrack) }, enabled = state.stats.running) { Text("Play phrase") }
             OutlinedButton(onClick = service::panic, enabled = state.stats.running) { Text("Panic") }
         }
         Text(state.message, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -146,8 +147,8 @@ private fun StudioScreen(state: StudioState, service: AudioService, start: () ->
         }
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("TRACK ${selectedTrack + 1}  /  TEST INSTRUMENT", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                Text("Hold pads to play • F minor • basic sine voice", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("TRACK ${selectedTrack + 1}  /  ${state.patches[selectedTrack].name.uppercase(Locale.US)}", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Text("Hold pads to play • F minor • selected synth patch", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val notes = listOf("F" to 41, "G" to 43, "A♭" to 44, "B♭" to 46, "C" to 48, "D♭" to 49, "E♭" to 51, "F⁺" to 53)
                     notes.forEachIndexed { index, (label, note) ->
@@ -172,6 +173,7 @@ private fun StudioScreen(state: StudioState, service: AudioService, start: () ->
                 }
             }
         }
+        SynthEditor(selectedTrack, state.patches[selectedTrack], service, state.stats.running)
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("MASTER / ENGINE", fontWeight = FontWeight.Bold, fontSize = 13.sp)
@@ -191,7 +193,7 @@ private fun StudioScreen(state: StudioState, service: AudioService, start: () ->
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        Text("Phase 1: native engine + bridge. Synth design, effects, clip editing and Astra commands follow in separate phases.",
+        Text("Phase 2: wavetable + FM synthesis. Effects, Session/Arrangement editing and Astra commands follow in later phases.",
             fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

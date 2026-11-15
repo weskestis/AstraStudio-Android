@@ -1,4 +1,4 @@
-name: Android Phase 1
+name: Android Phase 2
 on:
   push:
     branches: [main]
@@ -26,21 +26,29 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Install pinned SDK tools
         run: sdkmanager 'platforms;android-34' 'build-tools;35.0.0' 'ndk;28.0.13004108' 'cmake;3.22.1'
+      - name: Verify generated patch schema
+        run: |
+          python3 tools/generate_synth_schema.py
+          git diff --exit-code -- app/src/main/cpp/dsp/ParameterIds.h app/src/main/java/com/weskestis/astrastudio/synth/SynthSchema.kt
       - name: Native core regression tests
         run: bash scripts/test-native.sh
+      - name: Render factory preset audition
+        run: build/host/astra_render_presets build/Phase2-preset-audition.wav
       - name: Build, test and lint
         run: bash gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: AstraStudio-Phase1-APK
+          name: AstraStudio-Phase2-APK
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Phase1-test-reports
+          name: Phase2-test-reports
           path: |
             app/build/reports/tests/
             app/build/reports/lint-results-debug.html
+            build/host/Testing/Temporary/LastTest.log
+            build/Phase2-preset-audition.wav

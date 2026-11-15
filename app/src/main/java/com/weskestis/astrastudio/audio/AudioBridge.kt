@@ -1,5 +1,7 @@
 package com.weskestis.astrastudio.audio
 
+import com.weskestis.astrastudio.synth.SynthPatch
+import com.weskestis.astrastudio.synth.SynthSchema
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -58,6 +60,13 @@ class AudioBridge : AutoCloseable {
     @Synchronized fun transport(playing: Boolean): Boolean = send(8, value = if (playing) 1f else 0f)
     @Synchronized fun metronome(enabled: Boolean): Boolean = send(9, value = if (enabled) 1f else 0f)
 
+    @Synchronized fun preset(index: Int): SynthPatch {
+        require(index in SynthSchema.presets.indices)
+        return SynthPatch(SynthSchema.presets[index], checkNotNull(nativePreset(index)).toList())
+    }
+    @Synchronized fun patch(track: Int, patch: SynthPatch): Boolean =
+        handle != 0L && nativeSetPatch(handle, track, patch.wire.toFloatArray())
+
     private fun send(type: Int, track: Int = 0, note: Int = 0, noteId: Int = 0, value: Float, frame: Long = IMMEDIATE): Boolean {
         if (handle == 0L || !value.isFinite() || frame < -1) return false
         return nativeSend(handle, type, track, note, noteId, value, frame)
@@ -77,6 +86,8 @@ class AudioBridge : AutoCloseable {
             handle = 0
         }
     }
+    private external fun nativePreset(index: Int): FloatArray?
+    private external fun nativeSetPatch(handle: Long, track: Int, values: FloatArray): Boolean
     private external fun nativeCreate(): Long
     private external fun nativeDestroy(handle: Long)
     private external fun nativeStart(handle: Long, bursts: Int): Int

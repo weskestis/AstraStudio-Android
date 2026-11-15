@@ -1,5 +1,6 @@
 #pragma once
 #include "SpscRing.h"
+#include "dsp/SynthVoice.h"
 #include <array>
 #include <atomic>
 #include <cstddef>
@@ -15,7 +16,7 @@ inline constexpr std::size_t kScheduledCapacity = 8192;
 
 enum class CommandType : int32_t {
     NoteOn = 0, NoteOff = 1, MasterGain = 2, TrackGain = 3, TrackPan = 4,
-    TrackMute = 5, TrackSolo = 6, Tempo = 7, Transport = 8, Metronome = 9
+    TrackMute = 5, TrackSolo = 6, Tempo = 7, Transport = 8, Metronome = 9, PatchSnapshot = 10
 };
 struct Command {
     CommandType type{};
@@ -48,6 +49,7 @@ public:
     RenderCore() noexcept;
     bool prepare(double sampleRate) noexcept;
     bool enqueue(Command command) noexcept;
+    bool setPatch(int track, const synth::Patch& patch) noexcept;
     void panic() noexcept { panic_.store(true, std::memory_order_release); }
     void render(float* interleavedStereo, int32_t frames) noexcept;
     CoreSnapshot snapshot() const noexcept;
@@ -57,13 +59,8 @@ private:
         uint32_t id{};
         int32_t track{};
         int32_t note{};
-        double phase{};
-        double increment{};
-        float envelope{};
-        float velocity{};
-        float releaseStep{};
+        synth::SynthVoice synth;
         bool active{};
-        bool releasing{};
         uint64_t age{};
     };
     struct Track {
@@ -75,6 +72,8 @@ private:
         float right{0.565685425f};
         bool mute{};
         bool solo{};
+        synth::Patch patch;
+        std::array<double, 4> freePhases{}, lfoSteps{};
     };
     struct Later {
         bool operator()(const Command& a, const Command& b) const noexcept {
@@ -88,6 +87,8 @@ private:
     void noteOn(const Command& command) noexcept;
     void releaseVoice(Voice& voice) noexcept;
     void resetSound() noexcept;
+    void recyclePatch(const Command& command) noexcept;
+    void updateLfoSteps() noexcept;
     void updateTrackTargets() noexcept;
     float oscillator(double phase) const noexcept;
     void publish(float left, float right) noexcept;
@@ -98,7 +99,9 @@ private:
     std::array<Voice, kVoiceCount> voices_{};
     std::array<Track, kTrackCount> tracks_{};
     std::array<float, 2049> sine_{};
-    std::array<double, 128> frequencies_{};
+    synth::WavetableBank wavetables_;
+    struct PatchSlot { synth::Patch patch; std::atomic<bool> busy{false}; };
+    std::array<PatchSlot, 64> patchSlots_{};
     uint64_t nextOrder_{}; // Single, serialized control producer.
     uint64_t frame_{};
     uint64_t voiceAge_{};
@@ -108,7 +111,6 @@ private:
     double nextClickBeat_{};
     double clickPhase_{};
     float clickEnvelope_{};
-    float attackStep_{};
     float smoothing_{};
     float master_{0.7f};
     float targetMaster_{0.7f};

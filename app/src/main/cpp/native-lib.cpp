@@ -60,7 +60,7 @@ Java_com_weskestis_astrastudio_audio_AudioBridge_nativeSend(
         JNIEnv*, jobject, jlong handle, jint type, jint track, jint note, jint noteId, jfloat value, jlong frame) {
     std::lock_guard guard(registryMutex);
     auto* engine = findEngine(handle);
-    if (!engine || frame < -1 || noteId < 0) return JNI_FALSE;
+    if (!engine || frame < -1 || noteId < 0 || type < 0 || type > 9) return JNI_FALSE;
     const astra::Command command{static_cast<astra::CommandType>(type), track, note,
         static_cast<uint32_t>(noteId), value, frame == -1 ? astra::kImmediate : static_cast<uint64_t>(frame), 0};
     return engine->enqueue(command) ? JNI_TRUE : JNI_FALSE;
@@ -103,4 +103,26 @@ Java_com_weskestis_astrastudio_audio_AudioBridge_nativeReadStats(JNIEnv* env, jo
     // whose address is not aligned for double. No native pointer escapes to UI.
     std::memcpy(address, values.data(), sizeof(values));
     return JNI_TRUE;
+}
+
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_com_weskestis_astrastudio_audio_AudioBridge_nativePreset(JNIEnv* env, jobject, jint preset) {
+    if (preset < 0 || preset >= astra::synth::kPresetCount) return nullptr;
+    std::array<float, astra::synth::kWireCount> values{};
+    astra::synth::preset(preset).encode(values);
+    auto result = env->NewFloatArray(astra::synth::kWireCount);
+    if (result) env->SetFloatArrayRegion(result, 0, astra::synth::kWireCount, values.data());
+    return result;
+}
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_weskestis_astrastudio_audio_AudioBridge_nativeSetPatch(JNIEnv* env, jobject, jlong handle, jint track, jfloatArray data) {
+    if (!data || env->GetArrayLength(data) != astra::synth::kWireCount) return JNI_FALSE;
+    std::array<float, astra::synth::kWireCount> values{};
+    env->GetFloatArrayRegion(data, 0, astra::synth::kWireCount, values.data());
+    if (env->ExceptionCheck()) return JNI_FALSE;
+    astra::synth::Patch patch;
+    if (!patch.decode(values)) return JNI_FALSE;
+    std::lock_guard guard(registryMutex);
+    auto* engine = findEngine(handle);
+    return engine && engine->setPatch(track, patch) ? JNI_TRUE : JNI_FALSE;
 }

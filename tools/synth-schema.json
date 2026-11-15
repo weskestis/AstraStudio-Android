@@ -1,0 +1,780 @@
+{
+  "version": 1,
+  "parameters": [
+    [
+      "Instrument",
+      "Instrument",
+      0,
+      1,
+      0,
+      true,
+      false
+    ],
+    [
+      "Output",
+      "Patch output",
+      0,
+      1.5,
+      1,
+      false,
+      false
+    ],
+    [
+      "OscABank",
+      "Osc A bank",
+      0,
+      3,
+      0,
+      true,
+      false
+    ],
+    [
+      "OscAPosition",
+      "Osc A position",
+      0,
+      1,
+      0,
+      false,
+      false
+    ],
+    [
+      "OscALevel",
+      "Osc A level",
+      0,
+      1,
+      1,
+      false,
+      false
+    ],
+    [
+      "OscATune",
+      "Osc A semitones",
+      -24,
+      24,
+      0,
+      false,
+      false
+    ],
+    [
+      "OscADetune",
+      "Osc A cents",
+      -50,
+      50,
+      0,
+      false,
+      false
+    ],
+    [
+      "OscAWarp",
+      "Osc A warp",
+      0,
+      3,
+      0,
+      true,
+      false
+    ],
+    [
+      "OscAWarpAmount",
+      "Osc A warp amount",
+      0,
+      1,
+      0,
+      false,
+      false
+    ],
+    [
+      "OscBBank",
+      "Osc B bank",
+      0,
+      3,
+      0,
+      true,
+      false
+    ],
+    [
+      "OscBPosition",
+      "Osc B position",
+      0,
+      1,
+      0,
+      false,
+      false
+    ],
+    [
+      "OscBLevel",
+      "Osc B level",
+      0,
+      1,
+      0,
+      false,
+      false
+    ],
+    [
+      "OscBTune",
+      "Osc B semitones",
+      -24,
+      24,
+      0,
+      false,
+      false
+    ],
+    [
+      "OscBDetune",
+      "Osc B cents",
+      -50,
+      50,
+      0,
+      false,
+      false
+    ],
+    [
+      "OscBWarp",
+      "Osc B warp",
+      0,
+      3,
+      0,
+      true,
+      false
+    ],
+    [
+      "OscBWarpAmount",
+      "Osc B warp amount",
+      0,
+      1,
+      0,
+      false,
+      false
+    ],
+    [
+      "FmAmount",
+      "A \u2192 B phase FM",
+      0,
+      4,
+      0,
+      false,
+      false
+    ],
+    [
+      "SubLevel",
+      "Sub level",
+      0,
+      1,
+      0,
+      false,
+      false
+    ],
+    [
+      "NoiseLevel",
+      "Noise level",
+      0,
+      1,
+      0,
+      false,
+      false
+    ],
+    [
+      "Filter1Type",
+      "Filter 1 mode",
+      0,
+      5,
+      0,
+      true,
+      false
+    ],
+    [
+      "Filter1Cutoff",
+      "Filter 1 cutoff Hz",
+      20,
+      18000,
+      8000,
+      false,
+      true
+    ],
+    [
+      "Filter1Resonance",
+      "Filter 1 resonance",
+      0,
+      0.95,
+      0.1,
+      false,
+      false
+    ],
+    [
+      "Filter1Drive",
+      "Filter 1 drive",
+      0,
+      1,
+      0,
+      false,
+      false
+    ],
+    [
+      "Filter1Vowel",
+      "Filter 1 vowel",
+      0,
+      1,
+      0,
+      false,
+      false
+    ],
+    [
+      "Filter2Type",
+      "Filter 2 mode",
+      0,
+      5,
+      0,
+      true,
+      false
+    ],
+    [
+      "Filter2Cutoff",
+      "Filter 2 cutoff Hz",
+      20,
+      18000,
+      8000,
+      false,
+      true
+    ],
+    [
+      "Filter2Resonance",
+      "Filter 2 resonance",
+      0,
+      0.95,
+      0.1,
+      false,
+      false
+    ],
+    [
+      "Filter2Drive",
+      "Filter 2 drive",
+      0,
+      1,
+      0,
+      false,
+      false
+    ],
+    [
+      "Filter2Vowel",
+      "Filter 2 vowel",
+      0,
+      1,
+      0,
+      false,
+      false
+    ],
+    [
+      "FilterRouting",
+      "Filter routing",
+      0,
+      1,
+      0,
+      true,
+      false
+    ],
+    [
+      "Env1Attack",
+      "Envelope 1 attack seconds",
+      0.001,
+      5,
+      0.005,
+      false,
+      true
+    ],
+    [
+      "Env1Decay",
+      "Envelope 1 decay seconds",
+      0.001,
+      5,
+      0.15,
+      false,
+      true
+    ],
+    [
+      "Env1Sustain",
+      "Envelope 1 sustain",
+      0,
+      1,
+      1,
+      false,
+      false
+    ],
+    [
+      "Env1Release",
+      "Envelope 1 release seconds",
+      0.005,
+      8,
+      0.03,
+      false,
+      true
+    ],
+    [
+      "Env2Attack",
+      "Envelope 2 attack seconds",
+      0.001,
+      5,
+      0.005,
+      false,
+      true
+    ],
+    [
+      "Env2Decay",
+      "Envelope 2 decay seconds",
+      0.001,
+      5,
+      0.15,
+      false,
+      true
+    ],
+    [
+      "Env2Sustain",
+      "Envelope 2 sustain",
+      0,
+      1,
+      0.4,
+      false,
+      false
+    ],
+    [
+      "Env2Release",
+      "Envelope 2 release seconds",
+      0.005,
+      8,
+      0.15,
+      false,
+      true
+    ],
+    [
+      "Env3Attack",
+      "Envelope 3 attack seconds",
+      0.001,
+      5,
+      0.005,
+      false,
+      true
+    ],
+    [
+      "Env3Decay",
+      "Envelope 3 decay seconds",
+      0.001,
+      5,
+      0.15,
+      false,
+      true
+    ],
+    [
+      "Env3Sustain",
+      "Envelope 3 sustain",
+      0,
+      1,
+      0.4,
+      false,
+      false
+    ],
+    [
+      "Env3Release",
+      "Envelope 3 release seconds",
+      0.005,
+      8,
+      0.15,
+      false,
+      true
+    ],
+    [
+      "Lfo1Rate",
+      "LFO 1 Hz",
+      0.05,
+      20,
+      2,
+      false,
+      true
+    ],
+    [
+      "Lfo1Beats",
+      "LFO 1 beats per cycle",
+      0.0625,
+      16,
+      1,
+      false,
+      true
+    ],
+    [
+      "Lfo1Sync",
+      "LFO 1 tempo sync",
+      0,
+      1,
+      1,
+      true,
+      false
+    ],
+    [
+      "Lfo1Retrigger",
+      "LFO 1 note retrigger",
+      0,
+      1,
+      1,
+      true,
+      false
+    ],
+    [
+      "Lfo2Rate",
+      "LFO 2 Hz",
+      0.05,
+      20,
+      2,
+      false,
+      true
+    ],
+    [
+      "Lfo2Beats",
+      "LFO 2 beats per cycle",
+      0.0625,
+      16,
+      1,
+      false,
+      true
+    ],
+    [
+      "Lfo2Sync",
+      "LFO 2 tempo sync",
+      0,
+      1,
+      1,
+      true,
+      false
+    ],
+    [
+      "Lfo2Retrigger",
+      "LFO 2 note retrigger",
+      0,
+      1,
+      1,
+      true,
+      false
+    ],
+    [
+      "Lfo3Rate",
+      "LFO 3 Hz",
+      0.05,
+      20,
+      2,
+      false,
+      true
+    ],
+    [
+      "Lfo3Beats",
+      "LFO 3 beats per cycle",
+      0.0625,
+      16,
+      1,
+      false,
+      true
+    ],
+    [
+      "Lfo3Sync",
+      "LFO 3 tempo sync",
+      0,
+      1,
+      1,
+      true,
+      false
+    ],
+    [
+      "Lfo3Retrigger",
+      "LFO 3 note retrigger",
+      0,
+      1,
+      1,
+      true,
+      false
+    ],
+    [
+      "Lfo4Rate",
+      "LFO 4 Hz",
+      0.05,
+      20,
+      2,
+      false,
+      true
+    ],
+    [
+      "Lfo4Beats",
+      "LFO 4 beats per cycle",
+      0.0625,
+      16,
+      1,
+      false,
+      true
+    ],
+    [
+      "Lfo4Sync",
+      "LFO 4 tempo sync",
+      0,
+      1,
+      1,
+      true,
+      false
+    ],
+    [
+      "Lfo4Retrigger",
+      "LFO 4 note retrigger",
+      0,
+      1,
+      1,
+      true,
+      false
+    ],
+    [
+      "Algorithm",
+      "FM algorithm",
+      0,
+      3,
+      0,
+      true,
+      false
+    ],
+    [
+      "FmIndex",
+      "FM index",
+      0,
+      8,
+      2,
+      false,
+      false
+    ],
+    [
+      "Feedback",
+      "Operator 4 feedback",
+      0,
+      0.9,
+      0,
+      false,
+      false
+    ],
+    [
+      "Op1Ratio",
+      "Operator 1 ratio",
+      0.25,
+      16,
+      1,
+      false,
+      false
+    ],
+    [
+      "Op1Level",
+      "Operator 1 level",
+      0,
+      1,
+      1,
+      false,
+      false
+    ],
+    [
+      "Op1Attack",
+      "Operator 1 attack seconds",
+      0.001,
+      5,
+      0.003,
+      false,
+      true
+    ],
+    [
+      "Op1Decay",
+      "Operator 1 decay seconds",
+      0.001,
+      5,
+      0.25,
+      false,
+      true
+    ],
+    [
+      "Op1Sustain",
+      "Operator 1 sustain",
+      0,
+      1,
+      0.6,
+      false,
+      false
+    ],
+    [
+      "Op1Release",
+      "Operator 1 release seconds",
+      0.005,
+      8,
+      0.12,
+      false,
+      true
+    ],
+    [
+      "Op2Ratio",
+      "Operator 2 ratio",
+      0.25,
+      16,
+      1,
+      false,
+      false
+    ],
+    [
+      "Op2Level",
+      "Operator 2 level",
+      0,
+      1,
+      0.5,
+      false,
+      false
+    ],
+    [
+      "Op2Attack",
+      "Operator 2 attack seconds",
+      0.001,
+      5,
+      0.003,
+      false,
+      true
+    ],
+    [
+      "Op2Decay",
+      "Operator 2 decay seconds",
+      0.001,
+      5,
+      0.25,
+      false,
+      true
+    ],
+    [
+      "Op2Sustain",
+      "Operator 2 sustain",
+      0,
+      1,
+      0.6,
+      false,
+      false
+    ],
+    [
+      "Op2Release",
+      "Operator 2 release seconds",
+      0.005,
+      8,
+      0.12,
+      false,
+      true
+    ],
+    [
+      "Op3Ratio",
+      "Operator 3 ratio",
+      0.25,
+      16,
+      1,
+      false,
+      false
+    ],
+    [
+      "Op3Level",
+      "Operator 3 level",
+      0,
+      1,
+      0.5,
+      false,
+      false
+    ],
+    [
+      "Op3Attack",
+      "Operator 3 attack seconds",
+      0.001,
+      5,
+      0.003,
+      false,
+      true
+    ],
+    [
+      "Op3Decay",
+      "Operator 3 decay seconds",
+      0.001,
+      5,
+      0.25,
+      false,
+      true
+    ],
+    [
+      "Op3Sustain",
+      "Operator 3 sustain",
+      0,
+      1,
+      0.6,
+      false,
+      false
+    ],
+    [
+      "Op3Release",
+      "Operator 3 release seconds",
+      0.005,
+      8,
+      0.12,
+      false,
+      true
+    ],
+    [
+      "Op4Ratio",
+      "Operator 4 ratio",
+      0.25,
+      16,
+      1,
+      false,
+      false
+    ],
+    [
+      "Op4Level",
+      "Operator 4 level",
+      0,
+      1,
+      0.5,
+      false,
+      false
+    ],
+    [
+      "Op4Attack",
+      "Operator 4 attack seconds",
+      0.001,
+      5,
+      0.003,
+      false,
+      true
+    ],
+    [
+      "Op4Decay",
+      "Operator 4 decay seconds",
+      0.001,
+      5,
+      0.25,
+      false,
+      true
+    ],
+    [
+      "Op4Sustain",
+      "Operator 4 sustain",
+      0,
+      1,
+      0.6,
+      false,
+      false
+    ],
+    [
+      "Op4Release",
+      "Operator 4 release seconds",
+      0.005,
+      8,
+      0.12,
+      false,
+      true
+    ]
+  ],
+  "presets": [
+    "Init Sine",
+    "Liquid Riddim",
+    "Metal Maw",
+    "Trance Prism",
+    "Sub Pressure",
+    "FM Alloy",
+    "FM Donk",
+    "FM Glass Pluck"
+  ]
+}

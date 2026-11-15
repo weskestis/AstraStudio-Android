@@ -70,6 +70,10 @@ bool AudioEngine::enqueue(Command command) noexcept {
     return callback_->core.enqueue(command);
 }
 
+bool AudioEngine::setPatch(int track, const synth::Patch& patch) noexcept {
+    return stream_ && callback_ && callback_->error.load(std::memory_order_acquire) == 0 && callback_->core.setPatch(track, patch);
+}
+
 void AudioEngine::panic() noexcept {
     if (callback_) callback_->core.panic();
 }

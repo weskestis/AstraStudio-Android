@@ -27,6 +27,7 @@ public:
     int32_t start(int32_t bursts);
     void stop() noexcept;
     bool enqueue(Command command) noexcept;
+    bool setPatch(int track, const synth::Patch& patch) noexcept;
     void panic() noexcept;
     int32_t setBufferBursts(int32_t bursts) noexcept;
     EngineSnapshot snapshot() const noexcept;

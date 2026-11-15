@@ -18,8 +18,11 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import com.weskestis.astrastudio.MainActivity
 import com.weskestis.astrastudio.R
+import com.weskestis.astrastudio.synth.SynthPatch
+import com.weskestis.astrastudio.synth.SynthSchema
 import com.weskestis.astrastudio.midi.MidiInputManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,13 +30,14 @@ import kotlinx.coroutines.flow.asStateFlow
 data class TrackControls(val gain: Float = 0.8f, val pan: Float = 0f, val mute: Boolean = false, val solo: Boolean = false)
 data class StudioState(
     val stats: AudioStats = AudioStats(),
-    val message: String = "Start audio to play. Phase 1 engine test.",
+    val message: String = "Start audio to play your synth patches.",
     val bpm: Float = 145f,
     val master: Float = 0.7f,
     val bufferBursts: Int = 3,
     val metronome: Boolean = false,
     val tracks: List<TrackControls> = List(AudioBridge.TRACK_COUNT) { TrackControls() },
     val midiDevices: Int = 0,
+    val patches: List<SynthPatch> = List(AudioBridge.TRACK_COUNT) { SynthPatch.initial() },
 )
 
 class AudioService : Service() {
@@ -47,6 +51,12 @@ class AudioService : Service() {
     private lateinit var audioManager: AudioManager
     private lateinit var focusRequest: AudioFocusRequest
     private var midi: MidiInputManager? = null
+    private var presets = emptyList<SynthPatch>()
+    private val savePatches = Runnable {
+        getSharedPreferences("synth-v1", MODE_PRIVATE).edit {
+            state.value.patches.forEachIndexed { i, patch -> putString("track-$i", patch.encode()) }
+        }
+    }
     private var wantsAudio = false
     private var reconnectAttempts = 0
     private var nextReconnectAt = 0L
@@ -84,6 +94,11 @@ class AudioService : Service() {
             ContextCompat.RECEIVER_NOT_EXPORTED)
         control.post {
             bridge = AudioBridge()
+            presets = SynthSchema.presets.indices.map(bridge::preset)
+            val saved = getSharedPreferences("synth-v1", MODE_PRIVATE)
+            mutableState.value = state.value.copy(patches = List(AudioBridge.TRACK_COUNT) { index ->
+                SynthPatch.decode(saved.getString("track-$index", null)) ?: presets[when (index) { 0 -> 1; 1 -> 3; 2 -> 5; else -> 0 }]
+            })
             control.post(poll)
         }
     }
@@ -141,6 +156,7 @@ class AudioService : Service() {
         bridge.masterGain(s.master)
         bridge.tempo(s.bpm)
         bridge.metronome(s.metronome)
+        s.patches.forEachIndexed { index, patch -> bridge.patch(index, patch) }
         s.tracks.forEachIndexed { index, track ->
             bridge.trackGain(index, track.gain)
             bridge.trackPan(index, track.pan)
@@ -189,9 +205,15 @@ class AudioService : Service() {
 
     fun stopFromUi() { control.post { stopAudio("Audio stopped.") } }
     fun panic() { control.post { bridge.panic(); mutableState.value = state.value.copy(message = "All notes and scheduled events cleared.") } }
+    fun audition(track: Int, enabled: Boolean) { control.post {
+        if (enabled && wantsAudio) bridge.noteOn(track, 29, 0.8f, 20000 + track) else bridge.noteOff(track, 20000 + track)
+    } }
     fun noteOn(track: Int, note: Int, id: Int) { control.post { bridge.noteOn(track, note, 0.85f, id) } }
     fun noteOff(track: Int, id: Int) { control.post { bridge.noteOff(track, id) } }
-    fun releaseTouchNotes() { control.post { for (t in 0 until AudioBridge.TRACK_COUNT) for (key in 0..7) bridge.noteOff(t, 1 + t * 8 + key) } }
+    fun releaseTouchNotes() { control.post { for (t in 0 until AudioBridge.TRACK_COUNT) {
+        for (key in 0..7) bridge.noteOff(t, 1 + t * 8 + key)
+        bridge.noteOff(t, 20000 + t)
+    } } }
     fun transport() { control.post { bridge.transport(!bridge.stats().playing) } }
     fun master(value: Float) { control.post {
         mutableState.value = state.value.copy(master = value.coerceIn(0f, 1f))
@@ -234,10 +256,30 @@ class AudioService : Service() {
         bridge.trackSolo(index, safe.solo)
     } }
 
-    /** Two bars, F minor, basic sine tones. This demonstrates sample scheduling,
-     * not the Phase 2 sound-design engine or Phase 5 AI pattern generation.
-     */
-    fun demo() { control.post {
+    private fun editPatch(track: Int, transform: (SynthPatch) -> SynthPatch) {
+        if (track !in state.value.patches.indices) return
+        val patch = transform(state.value.patches[track])
+        if (wantsAudio && !bridge.patch(track, patch)) {
+            mutableState.value = state.value.copy(message = "Synth update busy. Try the control again.")
+            return
+        }
+        mutableState.value = state.value.copy(patches = state.value.patches.toMutableList().also { it[track] = patch })
+        control.removeCallbacks(savePatches)
+        control.postDelayed(savePatches, 500)
+    }
+    fun preset(track: Int, index: Int) { control.post {
+        if (index in presets.indices) editPatch(track) { presets[index] }
+    } }
+    fun synthParameter(track: Int, id: Int, value: Float) { control.post { editPatch(track) { it.parameter(id, value) } } }
+    fun synthRoute(track: Int, slot: Int, field: Int, value: Float) { control.post { editPatch(track) { it.route(slot, field, value) } } }
+    fun synthShape(track: Int, lfo: Int, kind: Int) { control.post { editPatch(track) { it.shape(lfo, kind) } } }
+    fun paintLfo(track: Int, lfo: Int, from: Int, fromValue: Float, to: Int, toValue: Float) {
+        control.post { editPatch(track) { it.paint(lfo, from, fromValue, to, toValue) } }
+    }
+
+    /** Two sample-scheduled bars using the selected track's current synth. */
+    fun demo(track: Int) { control.post {
+        if (track !in state.value.tracks.indices) return@post
         val stats = bridge.stats()
         if (!stats.running) return@post
         bridge.transport(false)
@@ -248,16 +290,17 @@ class AudioService : Service() {
         notes.forEachIndexed { i, note ->
             val id = nextDemoId++
             val at = base + (step * i).toLong()
-            bridge.noteOn(0, note, 0.9f, id, at)
-            bridge.noteOff(0, id, at + (step * 0.7).toLong())
+            bridge.noteOn(track, note, 0.9f, id, at)
+            bridge.noteOff(track, id, at + (step * 0.7).toLong())
         }
-        mutableState.value = state.value.copy(message = "Two-bar F-minor timing demo • basic sine test voice")
+        mutableState.value = state.value.copy(message = "Two-bar F-minor phrase • Track ${track + 1} • ${state.value.patches[track].name}")
     } }
 
     override fun onDestroy() {
         unregisterReceiver(noisyReceiver)
         control.removeCallbacksAndMessages(null)
         control.post {
+            savePatches.run()
             midi?.close()
             if (::bridge.isInitialized) bridge.close()
             audioManager.abandonAudioFocusRequest(focusRequest)
