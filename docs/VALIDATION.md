@@ -1,8 +1,24 @@
 # Phase 7 validation
 
-Development version **0.7.0-phase7 / versionCode 7**. Six native regression suites pass in the host Release build and under AddressSanitizer/UndefinedBehaviorSanitizer, including conversion, stretch, tempo and float-WAV checks. All 103 Kotlin unit tests pass. The first Android run passed the new pitch/time/tempo/float cases but exposed excessive UI recomposition during existing workflows. Stable editor/session projections and conflated Main-thread publication address that issue; the Android suite must pass on the corrected build before delivery. [Quality fixtures and limitations](QUALITY.md).
+Development **0.7.0-phase7 / versionCode 7**, Android 14+.
 
-The unchanged public development signing certificate supports in-place updates. Physical Xperia tests and live Gemini requests were not performed here.
+Verified executable/source commit: `631b53335396dad0010852844bc42c0d4780dc0f`.
+[Successful build and Android run](https://github.com/weskestis/AstraStudio-Android/actions/runs/43747332460).
+
+- All **103 Kotlin unit tests** pass, including schema migration, tempo integration/inversion, source-frame splitting, stretch capacity checks, Undo and UI snapshot invalidation.
+- All **six native suites** pass in Release and with AddressSanitizer/UndefinedBehaviorSanitizer. They include DSP, scheduling, sample conversion, stretch, export, memory bounds, and callback allocation/deallocation checks. [Measured quality fixtures](QUALITY.md).
+- All **eight Android instrumentation tests** pass on API 34 x86_64 with a 1080 × 2520 phone display; total test time 105.376 seconds. They exercise native JNI renders and portable archives, Session/Arrangement editing, live audio controls, nested Back behavior, rotation, sampler/drum rack, resampling, Astra preview/Undo, tempo maps, pitch/time rendering and the float export selector. The workflow retains the screenshots and test reports.
+- Debug APK assembly and lint pass for ARM64 and x86_64. Lint has no errors; advisory warnings include the requested SDK 34 baseline, dependency updates and existing style/backup suggestions.
+- Green/black phone and landscape screens were visually inspected. Static editors/grid no longer depend on continuously changing diagnostics; progress draws separately and delayed Main-thread state publications coalesce.
+
+## Verified APK
+
+- File: `AstraStudio_Phase7_0.7.0.apk` — **28,020,834 bytes**.
+- SHA-256: `c853f8432c743b57ce479a62398f43b2f298498d19aceff5d8bb38892962070b`.
+- Signing certificate SHA-256: `1bff24ae64d74c99d9540a1ecc5acccc8479367f44772b305144d2c10ce4bd45`.
+- The development certificate is unchanged, allowing an in-place update over prior Astra development APKs. MIT notices for the newly bundled processing libraries are inside the APK.
+
+No physical Xperia, USB hardware, thermal/latency measurements or live Gemini calls were performed here. Emulator results establish functional behavior, not a phone performance guarantee. Float output does not undo earlier clipping or certify true peaks. Stretch is offline, creates a new fixed-duration clip, and cannot automatically follow a later tempo map. Track/sample budgets are unchanged. Schema v3 opens v1/v2 projects; older APKs cannot open v3, so save a portable copy before updating if a downgrade is needed.
 
 ---
 
