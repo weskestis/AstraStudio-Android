@@ -90,7 +90,12 @@ class WorkspaceSmokeTest {
             }))
             assertEquals(remapped,restored)
             val bridge=AudioBridge()
-            try{assertTrue(bridge.loadAssets(restored.project.assets.map{it.id to files.audioFile(it)}));assertTrue(bridge.project(restored.project))
+            try{assertTrue("Load restored audio",bridge.loadAssets(restored.project.assets.map{it.id to files.audioFile(it)}))
+                assertEquals("Start live output before sending its project",0,bridge.start())
+                assertTrue("Publish warped project to live engine",bridge.project(restored.project))
+                assertTrue(bridge.tempo(restored.bpm));assertTrue(bridge.transport(true))
+                compose.waitUntil(10000){bridge.sequence().active[0]==0&&bridge.stats().beat>.05}
+                assertTrue(bridge.transport(false));bridge.stop()
                 assertEquals(0,bridge.export(output,restored,48000,0f,true))
                 val expected=kotlin.math.ceil(p.timelineSeconds(0.0,4.0,state.bpm)*48000).toLong()
                 WaveFile(output).use{assertEquals(expected,it.frames);val read=FloatArray(96000);val count=it.read(12000,48000,read);assertTrue(count>0);assertTrue(read.any{kotlin.math.abs(it)>.01f})}
