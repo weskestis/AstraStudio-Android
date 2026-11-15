@@ -122,6 +122,7 @@ docs/EFFECTS.md
 docs/PROJECT_TREE.txt
 docs/QUALITY.md
 docs/RECORDING.md
+docs/ROADMAP.md
 docs/SAMPLER.md
 docs/SYNTHESIS.md
 docs/VALIDATION.md

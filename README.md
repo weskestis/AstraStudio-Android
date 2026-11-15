@@ -2,6 +2,10 @@
 
 Android 14+ native music workstation, built for **Sony Xperia 1 IV** first. Package `com.weskestis.astrastudio`, version **0.8.0-phase8**, green and black throughout. This is a development DAW, with implemented editing/playback features and explicit limits below; it is not yet a production-certified replacement for a desktop workstation.
 
+## Full workstation development goal
+
+The goal is a professional Android DAW with Ableton Live-level workflow depth and sound-design capability. Phase 13 is a possible release milestone within that goal, not the finish line. The [full roadmap and capability ledger](docs/ROADMAP.md) records the remaining scope, current limitations and completion criteria. Phase 9 (tempo-following audio) and Phase 10 (project audio streaming/scaling) remain the next implementation milestones.
+
 ## Record audio and find bass tones
 
 Open **Record audio** (or **File → Record & Sample Lab**). Allow microphone access, choose mono or stereo, then **Record microphone → Stop & save**. The input meter shows clipping and the actual input format/route. Back, rotation and backgrounding retain the foreground recording; the notification's Stop action saves it. Monitoring is off to avoid feedback.
@@ -130,4 +134,4 @@ The debug key in `signing/astra-development.keystore` is deliberately public (`a
 - `docs/SYNTHESIS.md`: signal path, modulation units, memory/thread contract and DSP limits.
 - `docs/VALIDATION.md`: performed checks and remaining hardware validation.
 
-Phase 5 adds a working validated command interface, offline phrase commands, Gemini REST integration and explicit audio attachments. Phase 6 adds the sampler, drum rack, original starter kit, ZIP/multiple-audio import, sample collections/favorites, resampling and hierarchical Back navigation. Advanced warping/time stretching, microphone recording, importable wavetables, tempo-map editing, full MIDI expression and production certification remain future work.
+Phase 5 adds the validated command interface and optional Gemini listening. Phase 6 adds sample instruments, packs and resampling. Phase 7 adds tempo maps, independent offline pitch/time processing, improved sample-rate conversion and float export. Phase 8 adds microphone recording and the disk-backed Sample Lab. Automatic tempo-following warp, streamed multitrack playback, imported wavetables, full MIDI expression and the other workstation gaps remain tracked in [ROADMAP.md](docs/ROADMAP.md).
