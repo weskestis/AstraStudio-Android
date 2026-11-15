@@ -7,6 +7,8 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -16,6 +18,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -32,6 +37,12 @@ private data class LabSource(val path: String,val name: String,val frames: Long,
 private data class TakeList(val takes: List<RecordedTake>,val latest: String,val active: Boolean)
 private fun time(frames: Long,rate: Int)=String.format(Locale.US,"%.5f s",frames.toDouble()/rate)
 private fun db(value: Double)=String.format(Locale.US,"%.1f",20*log10(max(1e-6,value)))
+
+@Composable internal fun RecordAction(service: AudioService,open: ()->Unit){
+    val flow=remember(service){service.recorder.state.map{it.active}.distinctUntilChanged()}
+    val active by flow.collectAsStateWithLifecycle(false)
+    Action(if(active)"● Recording" else "Record audio",tag="Record audio",click=open)
+}
 
 @Composable private fun CaptureControls(service: AudioService,enabled: Boolean,start: (Boolean)->Unit){
     val state by service.recorder.state.collectAsStateWithLifecycle()
@@ -90,7 +101,7 @@ private fun db(value: Double)=String.format(Locale.US,"%.1f",20*log10(max(1e-6,v
     var analyzing by remember{mutableStateOf(false)};var analysisJob by remember{mutableStateOf<Job?>(null)}
     var fade by rememberSaveable{mutableStateOf(false)};var root by rememberSaveable{mutableStateOf("60")}
     var discard by remember{mutableStateOf(false)}
-    val scope=rememberCoroutineScope();val keyboard=LocalSoftwareKeyboardController.current
+    val scope=rememberCoroutineScope();val keyboard=LocalSoftwareKeyboardController.current;val focus=LocalFocusManager.current
     fun window(a: Long,b: Long){val span=(b-a).coerceIn(min(16L,source.frames),source.frames);begin=a.coerceIn(0,source.frames-span);end=begin+span}
     fun zoom(factor: Double){val span=((end-begin)*factor).roundToLong().coerceIn(min(16L,source.frames),source.frames);val centre=(begin+end)/2;window(centre-span/2,centre+(span+1)/2)}
     LaunchedEffect(source.path,begin,end){loading=true;error="";waveform=FloatArray(0)
@@ -134,13 +145,15 @@ private fun db(value: Double)=String.format(Locale.US,"%.1f",20*log10(max(1e-6,v
     Text("View ${time(begin,source.rate)} – ${time(end,source.rate)}${if(loading)" · reading…" else ""}",color=Muted,fontSize=11.sp,modifier=Modifier.testTag("Lab view range"))
     Text("Selection ${time(first,source.rate)} – ${time(last,source.rate)} · ${last-first} frames",fontSize=12.sp,modifier=Modifier.testTag("Lab selection"))
     var startText by rememberSaveable(first){mutableStateOf(first.toString())};var endText by rememberSaveable(last){mutableStateOf(last.toString())}
-    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
-        OutlinedTextField(startText,{startText=it.take(12)},label={Text("Start frame")},singleLine=true,modifier=Modifier.weight(1f).testTag("Lab start frame"))
-        OutlinedTextField(endText,{endText=it.take(12)},label={Text("End frame (exclusive)")},singleLine=true,modifier=Modifier.weight(1f).testTag("Lab end frame"))
-    }
     val a=startText.toLongOrNull();val b=endText.toLongOrNull()
+    val valid=a!=null&&b!=null&&a>=0&&b>a&&b<=source.frames
+    fun applyRange(){if(valid){first=a!!;last=b!!;focus.clearFocus();keyboard?.hide()}}
+    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
+        OutlinedTextField(startText,{startText=it.take(12)},label={Text("Start frame")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number,imeAction=ImeAction.Done),keyboardActions=KeyboardActions(onDone={applyRange()}),modifier=Modifier.weight(1f).testTag("Lab start frame"))
+        OutlinedTextField(endText,{endText=it.take(12)},label={Text("End frame (exclusive)")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number,imeAction=ImeAction.Done),keyboardActions=KeyboardActions(onDone={applyRange()}),modifier=Modifier.weight(1f).testTag("Lab end frame"))
+    }
     Tools{
-        Action("Apply frame range",a!=null&&b!=null&&a>=0&&b>a&&b<=source.frames,"Lab apply range"){first=a!!;last=b!!;keyboard?.hide()}
+        Action("Apply frame range",valid,"Lab apply range"){applyRange()}
         Action("Select view"){first=begin;last=end};Action("Select all"){first=0;last=source.frames}
     }
     Tools{

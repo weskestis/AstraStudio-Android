@@ -249,7 +249,7 @@ class AudioService : Service() {
             .setContentIntent(open)
             .setCategory(Notification.CATEGORY_TRANSPORT)
             .setOngoing(true)
-            .addAction(Notification.Action.Builder(null, "Stop audio", stop).build())
+            .addAction(Notification.Action.Builder(null, if(captureForeground)"Stop & save" else "Stop audio", stop).build())
             .build()
     }
 

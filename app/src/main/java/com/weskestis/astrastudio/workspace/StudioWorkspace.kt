@@ -120,7 +120,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,rec
                 FilterChip(state.metronome,{service.metronome(!state.metronome)},label={Text("Click")})
             }
             Action("Undo",state.canUndo){service.undo()};Action("Redo",state.canRedo){service.redo()}
-            Action("Record audio"){sheet="record"}
+            RecordAction(service){sheet="record"}
             Action("Keys"){sheet="keys"}
             Action("Samples"){browserPad=-2;sheet="samples"}
             Action("Resample"){sheet="resample"}
@@ -145,7 +145,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,rec
     }
     if(sheet.isNotEmpty())Dialog(onDismissRequest={backPanel()},properties=DialogProperties(usePlatformDefaultWidth=false,decorFitsSystemWindows=false,dismissOnClickOutside=false)){
         CompositionLocalProvider(LocalPanelNavigation provides panelNavigation){panelStates.SaveableStateProvider(sheet){
-        Box(Modifier.fillMaxSize().safeDrawingPadding(),contentAlignment=Alignment.BottomCenter){
+        Box(Modifier.fillMaxSize().safeDrawingPadding().imePadding(),contentAlignment=Alignment.BottomCenter){
         Surface(Modifier.fillMaxWidth().fillMaxHeight(.96f),color=Color(0xFF080F0A),shape=RoundedCornerShape(topStart=24.dp,topEnd=24.dp)){
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=12.dp)){
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text(when(sheet){"clip"->"CLIP / ${state.project.clip(slot)?.name?:"New MIDI"}";"keys"->"KEYBOARD / ${trackName(state,track)}";else->"${sheet.uppercase()} / ${trackName(state,track)}"},Modifier.weight(1f),color=Green,fontWeight=FontWeight.Bold,fontSize=13.sp);TextButton({backPanel()},Modifier.testTag("Panel back")){Text("‹ Back")};TextButton({closePanel()},Modifier.testTag("Close panel")){Text("Close ×")}}

@@ -29,27 +29,28 @@ class MicrophoneRecorder(private val context: Context,private val completed: ()-
     private var snapshot: CaptureState
         get()=mutable.value
         set(value){mutable.value=value}
+    @Synchronized private fun update(edit: (CaptureState)->CaptureState){snapshot=edit(snapshot)}
     private val worker=Executors.newSingleThreadExecutor()
     private val active=AtomicBoolean(false)
     private val stop=AtomicBoolean(false)
     @Volatile private var input: AudioRecord?=null
     @Volatile private var closed=false
     init{worker.execute{recover();refresh()}}
-    private fun recover(){directory.listFiles()?.filter{it.extension=="part"}?.forEach{file->if(FloatWaveWriter.recover(file))file.renameTo(File(directory,file.nameWithoutExtension+".wav"))else file.delete()}}
+    private fun recover(){directory.listFiles()?.filter{it.extension=="part"}?.forEach{file->if(FloatWaveWriter.recover(file))file.renameTo(File(directory,file.nameWithoutExtension+".wav"))else if(file.length()<=44)file.delete()}}
     fun refresh(latest: String=""){
         val takes=directory.listFiles()?.filter{it.extension=="wav"}?.sortedByDescending{it.lastModified()}?.mapNotNull { file->
             runCatching{WaveFile(file).use{RecordedTake(file.absolutePath,file.nameWithoutExtension,it.rate,it.channels,it.frames)}}.getOrNull()
         }?:emptyList()
-        snapshot=snapshot.copy(takes=takes,latest=latest.ifBlank{snapshot.latest})
+        update{it.copy(takes=takes,latest=if(latest.isBlank())it.latest else latest)}
     }
     fun start(stereo: Boolean): Boolean {
         if(closed||!active.compareAndSet(false,true))return false
-        stop.set(false);snapshot=snapshot.copy(active=true,stopping=false,frames=0,peak=0f,rms=0f,clipped=0,format="",route="",status="Opening microphone…")
+        stop.set(false);update{it.copy(active=true,stopping=false,frames=0,peak=0f,rms=0f,clipped=0,format="",route="",status="Opening microphone…")}
         worker.execute{capture(stereo)};return true
     }
-    fun stop(){if(active.get()){stop.set(true);snapshot=snapshot.copy(stopping=true,status="Saving recording…");runCatching{input?.stop()}}}
+    fun stop(){if(active.get()){stop.set(true);update{if(it.active)it.copy(stopping=true,status="Saving recording…")else it};runCatching{input?.stop()}}}
     fun discard(path: String){if(!active.get())worker.execute{
-        val file=File(path);if(file.parentFile?.canonicalFile==directory.canonicalFile&&file.extension=="wav"){file.delete();refresh();snapshot=snapshot.copy(latest="",status="Recording discarded.")}
+        val file=File(path);if(file.parentFile?.canonicalFile==directory.canonicalFile&&file.extension=="wav"){file.delete();refresh();update{it.copy(latest="",status="Recording discarded.")}}
     }}
     private fun capture(stereo: Boolean){
         val stamp=java.text.SimpleDateFormat("yyyy-MM-dd_HH-mm-ss",java.util.Locale.US).format(java.util.Date())
@@ -74,7 +75,7 @@ class MicrophoneRecorder(private val context: Context,private val completed: ()-
             val recorder=checkNotNull(record){"This audio input could not be opened. Close another recorder and retry."};input=recorder
             val rate=recorder.sampleRate;val channels=recorder.channelCount;val floating=recorder.audioFormat==AudioFormat.ENCODING_PCM_FLOAT
             val data=FloatArray(4096*channels);val pcm=ShortArray(data.size);var clipped=0L;var nextUpdate=0L;var checkpoint=SystemClock.elapsedRealtime();var lastRead=checkpoint
-            snapshot=snapshot.copy(rate=rate,channels=channels,format="$label · ${if(floating)"float input" else "16-bit input"} → float WAV")
+            update{it.copy(rate=rate,channels=channels,format="$label · ${if(floating)"float input" else "16-bit input"} → float WAV")}
             if(stop.get())return
             recorder.startRecording();check(recorder.recordingState==AudioRecord.RECORDSTATE_RECORDING){"Microphone did not start."}
             FloatWaveWriter(file,rate,channels).use{writer->
@@ -89,19 +90,22 @@ class MicrophoneRecorder(private val context: Context,private val completed: ()-
                     writer.write(data,keep)
                     if(lastRead>=nextUpdate){nextUpdate=lastRead+100
                         val silenced=recorder.activeRecordingConfiguration?.isClientSilenced==true
-                        snapshot=snapshot.copy(frames=writer.samples/channels,peak=peak,rms=sqrt(sum/n).toFloat(),clipped=clipped,route=recorder.routedDevice?.productName?.toString()?:"Default audio input",status=if(silenced)"Android has silenced this microphone. Check microphone privacy and other apps." else "Recording · Back keeps this take running")
+                        val route=recorder.routedDevice?.productName?.toString()?:"Default audio input"
+                        update{it.copy(frames=writer.samples/channels,peak=peak,rms=sqrt(sum/n).toFloat(),clipped=clipped,route=route,status=if(silenced)"Android has silenced this microphone. Check microphone privacy and other apps." else "Recording · Back keeps this take running")}
                     }
                     if(lastRead-checkpoint>=1000){writer.checkpoint();checkpoint=lastRead
                         if(directory.usableSpace<16L*1024*1024){warning="Stopped before storage filled.";break}}
                     if(writer.samples*4>=MAX_TAKE_BYTES){warning="Reached the 1 GiB take limit.";break}
                 }
-                snapshot=snapshot.copy(frames=writer.samples/channels)
+                update{it.copy(frames=writer.samples/channels)}
             }
         }catch(e: Exception){warning=e.message?:"Recording failed."}
         finally{
             val old=input;input=null;runCatching{old?.stop()};old?.release()
-            if(file.exists()&&FloatWaveWriter.recover(file)){val target=File(directory,file.nameWithoutExtension+".wav");if(file.renameTo(target))saved=target.absolutePath else warning="Could not finalize the recording; it will be recovered on next launch."}else file.delete()
-            active.set(false);snapshot=snapshot.copy(active=false,stopping=false,peak=0f,rms=0f,status=if(saved.isNotEmpty())"Take saved. $warning".trim()else warning.ifBlank{"No audio captured."})
+            if(file.exists()&&FloatWaveWriter.recover(file)){val target=File(directory,file.nameWithoutExtension+".wav");if(file.renameTo(target))saved=target.absolutePath else warning="Could not finalize the recording; it will be recovered on next launch."}
+            else if(file.length()>44)warning="Could not finalize the recording. Partial audio is retained for recovery on next launch. $warning"
+            else file.delete()
+            active.set(false);update{it.copy(active=false,stopping=false,peak=0f,rms=0f,status=if(saved.isNotEmpty())"Take saved. $warning".trim()else warning.ifBlank{"No audio captured."})}
             refresh(saved);completed()
         }
     }
