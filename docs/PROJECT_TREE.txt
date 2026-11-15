@@ -1,4 +1,4 @@
-Astra Studio Phase 6 — complete source inventory
+Astra Studio Phase 7 — complete source inventory
 
 .github/workflows/android.yml
 .gitignore
@@ -43,15 +43,29 @@ app/src/main/cpp/project/OfflineRender.cpp
 app/src/main/cpp/project/OfflineRender.h
 app/src/main/cpp/project/Project.cpp
 app/src/main/cpp/project/Project.h
+app/src/main/cpp/project/StretchRender.cpp
+app/src/main/cpp/project/StretchRender.h
+app/src/main/cpp/project/TempoMap.cpp
+app/src/main/cpp/project/TempoMap.h
+app/src/main/cpp/project/WaveWriter.cpp
+app/src/main/cpp/project/WaveWriter.h
 app/src/main/cpp/sampler/Sampler.cpp
 app/src/main/cpp/sampler/Sampler.h
 app/src/main/cpp/tests/AllocationTracker.cpp
 app/src/main/cpp/tests/CoreTests.cpp
 app/src/main/cpp/tests/FxTests.cpp
 app/src/main/cpp/tests/ProjectTests.cpp
+app/src/main/cpp/tests/QualityTests.cpp
 app/src/main/cpp/tests/RenderPresets.cpp
 app/src/main/cpp/tests/SamplerTests.cpp
 app/src/main/cpp/tests/SynthTests.cpp
+app/src/main/cpp/third_party/signalsmith-linear-LICENSE.txt
+app/src/main/cpp/third_party/signalsmith-linear/approx.h
+app/src/main/cpp/third_party/signalsmith-linear/fft.h
+app/src/main/cpp/third_party/signalsmith-linear/linear.h
+app/src/main/cpp/third_party/signalsmith-linear/stft.h
+app/src/main/cpp/third_party/signalsmith-stretch-LICENSE.txt
+app/src/main/cpp/third_party/signalsmith-stretch/signalsmith-stretch.h
 app/src/main/java/com/weskestis/astrastudio/MainActivity.kt
 app/src/main/java/com/weskestis/astrastudio/astra/AstraCommands.kt
 app/src/main/java/com/weskestis/astrastudio/astra/AstraPanel.kt
@@ -75,11 +89,13 @@ app/src/main/java/com/weskestis/astrastudio/project/ProjectModel.kt
 app/src/main/java/com/weskestis/astrastudio/project/Resampling.kt
 app/src/main/java/com/weskestis/astrastudio/project/SampleInstrument.kt
 app/src/main/java/com/weskestis/astrastudio/project/StarterProject.kt
+app/src/main/java/com/weskestis/astrastudio/project/TempoMap.kt
 app/src/main/java/com/weskestis/astrastudio/synth/SynthEditor.kt
 app/src/main/java/com/weskestis/astrastudio/synth/SynthPatch.kt
 app/src/main/java/com/weskestis/astrastudio/synth/SynthSchema.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/ClipEditor.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/PanelNavigation.kt
+app/src/main/java/com/weskestis/astrastudio/workspace/QualityPanels.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/SamplePanels.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/StudioWorkspace.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/TimelineViews.kt
@@ -91,12 +107,14 @@ app/src/test/java/com/weskestis/astrastudio/fx/FxConfigTest.kt
 app/src/test/java/com/weskestis/astrastudio/midi/MidiDecoderTest.kt
 app/src/test/java/com/weskestis/astrastudio/project/ProjectTests.kt
 app/src/test/java/com/weskestis/astrastudio/project/SamplerTests.kt
+app/src/test/java/com/weskestis/astrastudio/project/TempoQualityTests.kt
 app/src/test/java/com/weskestis/astrastudio/synth/SynthPatchTest.kt
 build.gradle.kts
 docs/ARCHITECTURE.md
 docs/ASTRA.md
 docs/EFFECTS.md
 docs/PROJECT_TREE.txt
+docs/QUALITY.md
 docs/SAMPLER.md
 docs/SYNTHESIS.md
 docs/VALIDATION.md

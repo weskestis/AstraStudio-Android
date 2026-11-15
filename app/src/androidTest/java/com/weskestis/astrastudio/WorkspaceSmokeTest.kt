@@ -144,6 +144,58 @@ class WorkspaceSmokeTest {
         }finally{bridge.close()}
     }
     private fun back(){compose.waitForIdle();InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);compose.waitForIdle()}
+    @Test fun tempoStretchFloatExportAndBack(){
+        compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
+        click("File");click("New project");click("Confirm project")
+        compose.waitUntil(10000){compose.onAllNodesWithTag("Empty 0").fetchSemanticsNodes().isNotEmpty()}
+        click("Tempo map")
+        compose.onNodeWithTag("Tempo beat").performScrollTo().performTextReplacement("4")
+        compose.onNodeWithTag("Tempo bpm").performScrollTo().performTextReplacement("90")
+        click("Save tempo point")
+        compose.waitUntil(10000){compose.onAllNodesWithTag("Tempo point 1").fetchSemanticsNodes().isNotEmpty()}
+        click("Tempo point 0");click("Tempo ramp");click("Save tempo point")
+        compose.onNodeWithTag("Tempo map enabled").performScrollTo().assertIsSelected()
+        shot("12-tempo-map")
+        compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
+        compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
+        compose.onNodeWithTag("Tempo map enabled").performScrollTo().assertIsSelected()
+        compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_PORTRAIT}
+        compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_PORTRAIT}
+        back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
+        click("Sample instrument");click("Instrument 2");click("Starter kit")
+        compose.waitUntil(30000){compose.onAllNodesWithText("Sub kick").fetchSemanticsNodes().isNotEmpty()}
+        back();click("Samples");click("Sample 0");click("Add audio clip");back();back()
+        compose.onNodeWithTag("Launch 0").performScrollTo().assertExists()
+        click("Stretch")
+        compose.onNodeWithTag("Stretch pitch").performScrollTo().performTextReplacement("7")
+        click("Render stretch")
+        compose.waitUntil(30000){compose.onAllNodesWithText("Stretched audio added as a new clip and in Samples → Stretched. Original preserved; Undo removes the new version.").fetchSemanticsNodes().isNotEmpty()}
+        shot("13-stretch");back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
+        compose.onNodeWithTag("Launch 16").performScrollTo().assertExists()
+        click("Undo");compose.onNodeWithTag("Empty 16").performScrollTo().assertExists()
+        compose.onNodeWithTag("Launch 0").assertExists()
+        click("Redo");compose.onNodeWithTag("Launch 16").performScrollTo().assertExists()
+        click("File");click("Export arrangement")
+        compose.onNodeWithTag("Export float").assertIsSelected();shot("14-float-export")
+        back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
+    }
+    @Test fun tempoMapAndStretchThroughNativeBridge(){
+        val context=InstrumentationRegistry.getInstrumentation().targetContext;val bridge=AudioBridge();val io=ProjectFiles(context)
+        val input=File(context.cacheDir,"stretch-source.wav");val stretched=File(context.cacheDir,"stretch-result.wav");val export=File(context.cacheDir,"tempo-float.wav");val archive=File(context.cacheDir,"tempo.astra")
+        try{
+            FactorySamples.write(0,input,AtomicBoolean(false));assertTrue(bridge.loadAssets(listOf(0 to input)))
+            val frames=bridge.assetInfo(0)!![1].toLong();val target=frames*3/2
+            assertEquals(0,bridge.stretch(stretched,0,0,frames,target,7.0))
+            val h=ByteBuffer.wrap(stretched.readBytes(),0,44).order(ByteOrder.LITTLE_ENDIAN)
+            assertEquals(3,h.getShort(20).toInt());assertEquals(32,h.getShort(34).toInt());assertEquals(target*8+44,stretched.length())
+            val base=StarterProject.create(SynthSchema.presets.indices.map(bridge::preset))
+            val project=Project(mode=1,clips=listOf(Clip(0,length=8.0).add(0.0,60,1.0)),tempoPoints=listOf(TempoPoint(0.0,120f),TempoPoint(4.0,60f)),tempoEnabled=true).place(0,0.0)
+            val doc=base.copy(project=project)
+            io.saveArchive(doc,Uri.fromFile(archive),AtomicBoolean(false));assertEquals(doc,io.openArchive(Uri.fromFile(archive),AtomicBoolean(false)))
+            assertEquals(0,bridge.export(export,doc,48000,0f,true));assertEquals(288000L*8+44,export.length())
+            assertEquals(3,ByteBuffer.wrap(export.readBytes(),0,44).order(ByteOrder.LITTLE_ENDIAN).getShort(20).toInt())
+        }finally{bridge.close();listOf(input,stretched,export,archive).forEach{it.delete()}}
+    }
     @Test fun nestedBackDrumRackSamplerBrowserAndBounce(){
         compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
         click("File");click("Load starter song");click("Confirm project")

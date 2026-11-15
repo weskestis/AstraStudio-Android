@@ -11,13 +11,15 @@ struct Zone {
 };
 struct Instrument {int mode{};Zone sample;std::array<Zone,16> pads;};
 // Prepared on the control thread. Conservative cutoff buckets suppress aliasing
-// when transposing up. A finite 16-tap window is a quality/performance tradeoff.
+// when transposing up. 64-tap Blackman-Harris sinc with interpolated phase coefficients.
 class Kernel {
 public:
-    static constexpr int taps=16,phases=64,bands=65;
+    static constexpr int taps=64,phases=128,bands=129;
     Kernel() noexcept;
-    const float* at(int band,int phase)const noexcept{return table_.data()+(band*phases+phase)*taps;}
-private:std::array<float,bands*phases*taps> table_{};
+    const float* at(int band,int phase)const noexcept{return table_.data()+(band*(phases+1)+phase)*taps;}
+    static int bandFor(double step)noexcept;
+    fx::Stereo read(const float* stereo,double position,int64_t first,int64_t last,int band,bool exactRate)const noexcept;
+private:std::array<float,bands*(phases+1)*taps> table_{};
 };
 class Voice {
 public:

@@ -84,7 +84,7 @@ The public APK contains no shared Gemini secret. Individual keys use Android Key
 
 HTTPS endpoint and model are fixed. Redirects are refused. Network timeout/cancellation and response/attachment sizes are bounded; errors do not print provider response bodies or credentials. No arbitrary URLs, filesystem commands, code execution, native addresses or file operations are available to generated commands. Late/cancelled results are discarded. Gemini errors never trigger an automatic paid-model fallback. Google model responses can be wrong; only validated, previewed musical edits enter the existing JNI/control path.
 
-Not included: live Gemini voice conversation, on-device neural LLM, autonomous background mixing, microphone recording, MIDI expression/controller mappings, tempo maps, arbitrary graph routing, new sampler/warp DSP or accurate music transcription. Phase4 editor/DSP limits still apply. Physical Xperia input, speech recognition, latency, thermal limits and live provider behavior need device testing.
+Not included: live Gemini voice conversation, on-device neural LLM, autonomous background mixing, microphone recording, MIDI expression/controller mappings, commands to edit tempo maps or stretch audio, arbitrary graph routing or accurate music transcription. Phase4 editor/DSP limits still apply. Physical Xperia input, speech recognition, latency, thermal limits and live provider behavior need device testing.
 
 ## Primary references
 
@@ -97,3 +97,5 @@ Not included: live Gemini voice conversation, on-device neural LLM, autonomous b
 - [Firebase/Gemini billing and free projects](https://firebase.google.com/docs/ai-logic/pricing)
 - [Android Keystore](https://developer.android.com/privacy-and-security/keystore)
 - [Android RecognizerIntent](https://developer.android.com/reference/android/speech/RecognizerIntent)
+
+Phase 7 project context includes the saved tempo points and enabled state. The existing `tempo` command changes base BPM; an enabled Arrangement map overrides it. Use the Tempo map and Stretch panels for those edits.

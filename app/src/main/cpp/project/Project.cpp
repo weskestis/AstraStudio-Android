@@ -53,7 +53,7 @@ std::shared_ptr<const Sample> readSample(const char* path,std::size_t remainingB
 }
 bool Plan::decode(std::span<const double> data,const Samples& audio){
     if(data.size()>400000)return false;
-    Reader r{data};const int version=r.integer(1,2);
+    Reader r{data};const int version=r.integer(1,3);
     mode=r.integer(0,1);numerator=r.integer(1,12);denominator=r.integer(2,8);if(denominator!=2&&denominator!=4&&denominator!=8)return false;
     loop=r.integer(0,1)!=0;loopStart=r.get(0,65535);loopEnd=r.get(.0625,65536);if(loopEnd<=loopStart)return false;
     const int clipCount=r.integer(0,kClips),regionCount=r.integer(0,kMaxRegions);samples=audio;
@@ -86,7 +86,7 @@ bool Plan::decode(std::span<const double> data,const Samples& audio){
     for(auto& list:regions){std::sort(list.begin(),list.end(),[](const Region& a,const Region& b){return a.start<b.start;});double end=0;
         for(const auto& x:list){if(x.start<end-1e-8)return false;end=x.start+x.length;}}
     instruments={};
-    if(version==2){
+    if(version>=2){
         auto zone=[&](sampler::Zone& z){
             z.asset=r.integer(-1,63);z.first=r.frame();z.last=r.frame();z.loopFirst=r.frame();z.loopLast=r.frame();z.root=r.integer(0,127);
             z.pitch=static_cast<float>(r.get(-48,48));z.gain=static_cast<float>(r.get(0,2));z.pan=static_cast<float>(r.get(-1,1));
@@ -96,6 +96,10 @@ bool Plan::decode(std::span<const double> data,const Samples& audio){
             return samples[z.asset]&&z.last>z.first&&z.last<=samples[z.asset]->frames()&&z.loopFirst>=z.first&&z.loopLast<=z.last&&z.loopLast>z.loopFirst&&!(z.loop&&z.oneShot);
         };
         for(auto& instrument:instruments){instrument.mode=r.integer(0,2);if(!zone(instrument.sample))return false;for(auto& pad:instrument.pads)if(!zone(pad))return false;}
+    }
+    if(version>=3){tempo.enabled=r.integer(0,1)!=0;const int count=r.integer(0,128);tempo.points.reserve(count);
+        for(int i=0;i<count;++i)tempo.points.push_back({r.get(0,65536),r.get(30,300),r.integer(0,1)!=0});
+        if(!tempo.valid())return false;
     }
     return r.ok&&r.at==data.size();
 }
@@ -124,9 +128,9 @@ void Sequencer::event(int track,const Clip& c,const Event& e)noexcept{
     auto& t=tracks_[track];auto& id=t.held[e.note];if(e.on){if(id&&note_)note_(owner_,track,0,0,id,false);id=nextId();const auto& n=c.notes[e.note];if(note_)note_(owner_,track,n.pitch,n.velocity,id,true);}
     else if(id){if(note_)note_(owner_,track,0,0,id,false);id=0;}
 }
-void Sequencer::enter(int track,int slot,int region,double phase,double audioOffset,float bpm)noexcept{
+void Sequencer::enter(int track,int slot,int region,double phase,double audioOffset,double elapsed,float bpm)noexcept{
     release(track);auto& t=tracks_[track];const auto& c=plan_->clips[slot];t.slot=slot;t.region=region;t.hash=c.hash;t.previous=phase;
-    if(c.asset>=0)t.audioPosition=c.first+audioOffset+phase*60/bpm*plan_->samples[c.asset]->rate;
+    if(c.asset>=0){const auto& a=*plan_->samples[c.asset];t.audioPosition=c.first+audioOffset+(elapsed>=0?elapsed:phase*60/bpm)*a.rate;t.audioBand=sampler::Kernel::bandFor(a.rate/rate_);}
     else{
         for(std::size_t n=0;n<c.notes.size();++n){const auto& x=c.notes[n];if(x.start<=phase+1e-10&&x.start+x.length>phase+1e-10)event(track,c,{x.start,static_cast<int>(n),true});}
         while(t.cursor<c.events.size()&&c.events[t.cursor].beat<=phase+1e-10)++t.cursor;
@@ -137,19 +141,20 @@ void Sequencer::tick(double beat,float bpm,std::array<fx::Stereo,16>& audio)noex
     if(!plan_)return;
     if(previousBeat_>=0&&beat<previousBeat_)for(int i=0;i<16;++i)release(i);
     previousBeat_=beat;
-    for(int i=0;i<16;++i){auto& t=tracks_[i];int slot=-1,region=-1;double phase=0,audioOffset=0;
+    for(int i=0;i<16;++i){auto& t=tracks_[i];int slot=-1,region=-1;double phase=0,audioOffset=0,elapsed=-1;
         if(plan_->mode==0){if(t.queued!=-2&&beat+1e-10>=t.due){release(i);t.scene=t.queued;t.queued=-2;t.launchBeat=t.due;}
             if(t.scene>=0){slot=t.scene*16+i;if(!plan_->clips[slot].present){slot=-1;t.scene=-1;}else phase=std::fmod(std::max(0.0,beat-t.launchBeat),plan_->clips[slot].length);}}
         else{const auto& list=plan_->regions[i];auto at=std::upper_bound(list.begin(),list.end(),beat+1e-10,[](double b,const Region& r){return b<r.start;});
             if(at!=list.begin()){--at;if(beat<at->start+at->length-1e-10){slot=at->slot;region=at->id;const auto& c=plan_->clips[slot];
-                phase=std::fmod(std::max(0.0,beat-at->start+at->offset),c.length);audioOffset=static_cast<double>(at->audioOffset);}}}
+                phase=std::fmod(std::max(0.0,beat-at->start+at->offset),c.length);audioOffset=static_cast<double>(at->audioOffset);
+                }}}
         if(slot<0){if(t.slot>=0)release(i);clearAutomation(i);t.phase=0;continue;}
         const auto& c=plan_->clips[slot];bool entered=t.slot!=slot||t.region!=region||t.hash!=c.hash||phase+1e-8<t.previous;
-        if(entered)enter(i,slot,region,phase,audioOffset,bpm);
+        if(entered){if(c.asset>=0&&plan_->mode==1){const double cycleStart=beat-phase;elapsed=plan_->tempo.seconds(std::max(0.0,cycleStart),beat,bpm);if(cycleStart<0)elapsed+=-cycleStart*60/plan_->tempo.bpmAt(0,bpm);}
+            enter(i,slot,region,phase,audioOffset,elapsed,bpm);}
         if(c.asset<0){while(t.cursor<c.events.size()&&c.events[t.cursor].beat<=phase+1e-10)event(i,c,c.events[t.cursor++]);}
-        else{const auto& sample=*plan_->samples[c.asset];const int64_t at=static_cast<int64_t>(t.audioPosition);if(at>=c.first&&at<c.last){
-                const auto next=std::min(at+1,c.last-1);const float fraction=static_cast<float>(t.audioPosition-at);const auto a=static_cast<std::size_t>(at)*2,b=static_cast<std::size_t>(next)*2;
-                audio[i]={sample.stereo[a]+fraction*(sample.stereo[b]-sample.stereo[a]),sample.stereo[a+1]+fraction*(sample.stereo[b+1]-sample.stereo[a+1])};}
+        else{const auto& sample=*plan_->samples[c.asset];if(kernel_)audio[i]=kernel_->read(sample.stereo.data(),t.audioPosition,c.first,c.last,t.audioBand,sample.rate==rate_);
+            else {const auto at=static_cast<int64_t>(t.audioPosition);if(at>=c.first&&at<c.last)audio[i]={sample.stereo[at*2],sample.stereo[at*2+1]};}
             t.audioPosition+=sample.rate/rate_;}
         if(entered||automationClock_==0)for(int lane=0;lane<4;++lane){const auto& points=c.lanes[lane];const bool enabled=!points.empty();float value=0;
             if(enabled){auto at=std::upper_bound(points.begin(),points.end(),phase,[](double b,const Point& p){return b<p.beat;});

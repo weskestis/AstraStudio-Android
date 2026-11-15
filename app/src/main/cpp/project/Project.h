@@ -1,6 +1,7 @@
 #pragma once
 #include "fx/FxPrimitives.h"
 #include "sampler/Sampler.h"
+#include "TempoMap.h"
 #include <atomic>
 #include <span>
 #include <string>
@@ -23,6 +24,7 @@ struct Region {int id{},slot{};double start{},length{},offset{};int64_t audioOff
 struct Plan {
     int mode{},numerator{4},denominator{4};bool loop{};double loopStart{},loopEnd{16};
     std::array<Clip,kClips> clips;std::array<std::vector<Region>,kTracks> regions;Samples samples;std::array<sampler::Instrument,kTracks> instruments;
+    TempoMap tempo;
     bool decode(std::span<const double> data,const Samples& audio);
     double barBeats()const noexcept{return numerator*4.0/denominator;}
     double endBeat()const noexcept;
@@ -36,7 +38,7 @@ public:
     using NoteFn=void(*)(void*,int,int,float,uint32_t,bool) noexcept;
     using AutoFn=void(*)(void*,int,int,float,bool) noexcept;
     void bind(void* owner,NoteFn note,AutoFn automation)noexcept{owner_=owner;note_=note;automation_=automation;}
-    void prepare(double rate)noexcept{rate_=rate;}
+    void prepare(double rate,const sampler::Kernel* kernel=nullptr)noexcept{rate_=rate;kernel_=kernel;}
     void activate(const Plan* next)noexcept;
     void stop(bool clearLaunches=false)noexcept;
     void rewind()noexcept{stop();for(auto& t:tracks_){t.launchBeat=0;t.queued=-2;}}
@@ -49,13 +51,13 @@ public:
     Snapshot snapshot()const noexcept;
 private:
     struct Track {int scene{-1},queued{-2};double launchBeat{},due{},previous{-1};int slot{-1},region{-1};uint64_t hash{};
-        std::size_t cursor{};std::array<uint32_t,kMaxNotes> held{};double audioPosition{};float phase{};
+        std::size_t cursor{};std::array<uint32_t,kMaxNotes> held{};double audioPosition{};int audioBand{};float phase{};
         std::array<float,4> automation{};std::array<bool,4> automated{};};
     void release(int track)noexcept;void clearAutomation(int track)noexcept;
-    void enter(int track,int slot,int region,double phase,double audioOffset,float bpm)noexcept;
+    void enter(int track,int slot,int region,double phase,double audioOffset,double elapsed,float bpm)noexcept;
     void event(int track,const Clip& clip,const Event& e)noexcept;
     uint32_t nextId()noexcept;
-    const Plan* plan_{};std::array<Track,16> tracks_{};double rate_{48000},previousBeat_{-1};uint32_t id_{kSequenceId};int automationClock_{};
+    const sampler::Kernel* kernel_{};const Plan* plan_{};std::array<Track,16> tracks_{};double rate_{48000},previousBeat_{-1};uint32_t id_{kSequenceId};int automationClock_{};
     void* owner_{};NoteFn note_{};AutoFn automation_{};
 };
 } // namespace astra::project

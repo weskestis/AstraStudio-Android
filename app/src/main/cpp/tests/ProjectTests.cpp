@@ -32,7 +32,7 @@ struct Log {
     std::array<float,4> values{};std::array<bool,4> enabled{};
     static void note(void* ptr,int track,int key,float,uint32_t id,bool on)noexcept{auto& l=*static_cast<Log*>(ptr);if(l.count<l.notes.size())l.notes[l.count++]={track,key,id,on,l.beat};}
     static void automation(void* ptr,int,int lane,float value,bool enabled)noexcept{auto& l=*static_cast<Log*>(ptr);l.values[lane]=value;l.enabled[lane]=enabled;}
-    void bind(Sequencer& s){s.bind(this,note,automation);s.prepare(48000);}
+    void bind(Sequencer& s){s.bind(this,note,automation);static const auto kernel=std::make_unique<sampler::Kernel>();s.prepare(48000,kernel.get());}
     std::array<fx::Stereo,16> tick(Sequencer& s,double at,float bpm=120){beat=at;std::array<fx::Stereo,16> out{};inRender=true;s.tick(at,bpm,out);inRender=false;return out;}
 };
 void render(RenderCore& c,float* output,int frames){inRender=true;c.render(output,frames);inRender=false;}
@@ -64,7 +64,7 @@ int main(){
         Wire w;w.v[1]=1;const int split=12345;const double cut=split/24000.0;w.clip(0,1,{}, {},0,0,24000).region(1,0,0,cut).region(2,0,cut,1-cut,0,split);auto p=decodePlan(w.v,audio);check(p!=nullptr,"sample precise split accepted");Sequencer s;Log l;l.bind(s);s.activate(p.get());
         for(int i=0;i<24000;++i){const auto out=l.tick(s,i/24000.0);check(std::abs(out[0].l-sample->stereo[i*2])<1e-6&&std::abs(out[0].r-sample->stereo[i*2+1])<1e-6,"stereo split is continuous at original sample positions");}
         check(l.tick(s,1)[0].l==0,"audio region end silent");
-        sample->rate=24000;Sequencer resampled;Log r;r.bind(resampled);resampled.activate(p.get());const auto x=r.tick(resampled,0)[0];const auto y=r.tick(resampled,1/24000.0)[0];check(x.l==0&&std::abs(y.l-.5f/24000)<1e-8,"linear sample rate interpolation");
+        sample->rate=24000;Sequencer resampled;Log r;r.bind(resampled);resampled.activate(p.get());for(int n=0;n<=100;++n)r.tick(resampled,n/24000.0);const auto y=r.tick(resampled,101/24000.0)[0];check(std::abs(y.l-50.5f/24000)<1e-7,"band-limited interpolation follows an interior ramp");
     }
     {auto core=std::make_unique<RenderCore>();std::array<float,1024> out{};check(core->setProject(midi.v,empty)&&core->setProject(midi.v,empty)&&core->setProject(midi.v,empty),"three immutable plan slots");check(!core->setProject(midi.v,empty),"plan publication backpressure");render(*core,out.data(),512);check(core->setProject(midi.v,empty),"retired plan reused off render thread");core->enqueue({CommandType::Transport,0,0,0,1});core->enqueue({CommandType::LaunchClip,0,0,0,0});render(*core,out.data(),512);check(core->sequenceSnapshot().active[0]==0,"RenderCore launches compiled clip");core->panic();render(*core,out.data(),512);check(core->snapshot().activeVoices==0&&!core->snapshot().playing,"panic clears sequence and voices");
         std::atomic<bool> finished{false};std::thread producer([&]{for(int i=0;i<1000;++i)while(!core->setProject(midi.v,empty))std::this_thread::yield();finished=true;});while(!finished)render(*core,out.data(),64);producer.join();render(*core,out.data(),512);check(core->snapshot().droppedCommands==0,"concurrent project snapshots publish safely");

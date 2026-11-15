@@ -17,3 +17,7 @@ adb shell test -s /sdcard/Pictures/AstraStudio/08-pad-editor.png
 adb shell test -s /sdcard/Pictures/AstraStudio/09-sample-browser.png
 adb shell test -s /sdcard/Pictures/AstraStudio/10-resample.png
 adb shell test -s /sdcard/Pictures/AstraStudio/11-sampler.png
+
+adb shell test -s /sdcard/Pictures/AstraStudio/12-tempo-map.png
+adb shell test -s /sdcard/Pictures/AstraStudio/13-stretch.png
+adb shell test -s /sdcard/Pictures/AstraStudio/14-float-export.png

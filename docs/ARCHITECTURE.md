@@ -1,4 +1,4 @@
-# Engine and Android architecture — Phase 6
+# Engine and Android architecture — Phase 7
 
 The application combines the Phase 1 native audio foundation with Phase 2 wavetable/FM synthesis and a phone-oriented synth editor. It is not yet a completed DAW. See `SYNTHESIS.md` for the signal path, modulation and patch-publication contract. Phase 3 adds the effects engine described in `EFFECTS.md`; Phase 4 adds the sequencer, editing and persistence described in `WORKSPACE.md`. Phase 5 adds the reversible assistant and Gemini integration described in `ASTRA.md`.
 
@@ -42,9 +42,9 @@ Track volume, equal-power pan, mute/solo and master gain are smoothed over about
 
 Engine frame zero begins when a fresh stream starts. Frames advance while the stream is active, even when transport is stopped; live keyboard notes still work with transport stopped. A scheduled command specifies an absolute frame in that stream's sample clock. `-1` means the next callback in which the command is dequeued. A past event is applied immediately when dispatched and counted as late.
 
-Transport Start resets the musical beat to zero. Tempo is integrated per sample, so changing BPM does not resample or speed up any audio. Imported audio plays at original speed through sample-rate conversion. No independent time stretching exists in this phase. Transport Stop releases active voices and cancels note events submitted before Stop, including events still in the command queue. A new pattern submitted after Stop is preserved. Panic clears pending note events and voices and stops transport; accepted complete patch changes are retained so the engine stays consistent with the UI.
+Transport Start resets the musical beat to zero. Tempo is integrated per sample, so changing BPM does not resample or speed up any audio. Imported audio plays at original speed through sample-rate conversion. Offline independent time stretching creates a new float sample; it does not run in the callback. Transport Stop releases active voices and cancels note events submitted before Stop, including events still in the command queue. A new pattern submitted after Stop is preserved. Panic clears pending note events and voices and stops transport; accepted complete patch changes are retained so the engine stays consistent with the UI.
 
-Phase 4 advances clip events directly from the integrated native beat clock on every audio sample. Live tempo changes retime future MIDI events and launch boundaries. The synth-only audition phrase still uses fixed absolute frames, independently of the arranger. There is no saved tempo map yet.
+Phase 4 advances clip events directly from the integrated native beat clock on every audio sample. Live tempo changes retime future MIDI events and launch boundaries. The synth-only audition phrase still uses fixed absolute frames, independently of the arranger. Phase 7 adds an immutable saved tempo map with analytic integration and a cached exponential beat-clock recurrence for linear BPM ramps. Session ignores the map.
 
 The JNI telemetry direct buffer has 20 native-endian doubles. It is owned by Kotlin, reused for polling and copied with `memcpy` to avoid alignment assumptions. Its fields are: running, sample rate, burst frames, buffer frames, DSP load, xruns, frame, active voices, left/right peak, drops, late events, clipped frames, error, exclusive, BPM, playing, beat, track capacity, voice capacity. Each field is an atomic observation, not a transactionally consistent snapshot. Integer values remain exact in a double for practical session durations.
 
@@ -56,7 +56,7 @@ Each plan owns references to immutable decoded stereo assets. Session and Arrang
 
 The control handler owns its current StudioState; a main-thread handler publishes snapshots to Compose collectors. Status publication never runs Compose view work on the audio control thread, including under the instrumentation test dispatcher.
 
-The dedicated project I/O worker performs archive operations, Android MediaCodec decoding, atomic autosave and offline export. Long I/O never holds the Kotlin audio monitor or native registry mutex. Offline export snapshots assets and uses a separate RenderCore with the same synth/rack/send/limiter path. It trims fixed algorithmic latency and writes deterministic-dithered 24-bit WAV outside render calls. A dataSync foreground service covers user-started file jobs.
+The dedicated project I/O worker performs archive operations, Android MediaCodec decoding, atomic autosave and offline export. Long I/O never holds the Kotlin audio monitor or native registry mutex. Offline export snapshots assets and uses a separate RenderCore with the same synth/rack/send/limiter path. It trims fixed algorithmic latency and writes float32 WAV or deterministic-dithered 24-bit WAV outside render calls. A dataSync foreground service covers user-started file jobs.
 
 Undo/Redo stores 64 immutable project snapshots; continuous controls coalesce and MIDI takes form one group. Audio files are immutable and retained privately for safe Undo; opening/new-project clears history as appropriate. Phase 6 portable archives retain all browser audio, including unused samples and inactive pad assignments. Audio import is capped by a 512 MiB decoded asset budget, not a 60-second duration limit.
 
@@ -85,7 +85,7 @@ ARM64 is the primary physical-device target. The test screen uses density-indepe
 
 | 6 (implemented) | Native sample voices, 16-pad drum rack, original kit, sample browser/packs, resampling, portable sample state and nested Back navigation |
 
-Phase 6 implements the sampler, drum rack and resampling in `SAMPLER.md`. Granular synthesis and independent time-stretch algorithms remain future work. Ableton's proprietary devices and “Complex Pro” algorithm are not available to copy; any equivalent mode must have an original or appropriately licensed implementation and an honest name. No absent module has a fake control, empty DSP method or placeholder implementation in this source.
+Phase 6 implements the sampler, drum rack and resampling in `SAMPLER.md`. Phase 7 adds independently licensed offline pitch/time processing; granular synthesis and automatic live warp remain future work. Ableton's proprietary devices and “Complex Pro” algorithm are not available to copy; any equivalent mode must have an original or appropriately licensed implementation and an honest name. No absent module has a fake control, empty DSP method or placeholder implementation in this source.
 
 ## Primary references
 

@@ -1,4 +1,12 @@
-# Phase 6 validation
+# Phase 7 validation
+
+Development version **0.7.0-phase7 / versionCode 7**. Six native regression suites pass in the host Release build, including new conversion, stretch, tempo and float-WAV checks. Android and sanitizer validation is run by the Phase 7 workflow; only a successful matching-source run is a verified build. [Quality fixtures and limitations](QUALITY.md).
+
+The unchanged public development signing certificate supports in-place updates. Physical Xperia tests and live Gemini requests were not performed here.
+
+---
+
+# Phase 6 historical validation
 
 Development build **0.6.0-phase6 / versionCode 6**. The same public development certificate permits installing over Phase 5 without uninstalling.
 

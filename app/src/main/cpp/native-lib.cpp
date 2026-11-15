@@ -1,5 +1,6 @@
 #include "AudioEngine.h"
 #include "project/OfflineRender.h"
+#include "project/StretchRender.h"
 #include <jni.h>
 #include <array>
 #include <cstring>
@@ -202,7 +203,7 @@ Java_com_weskestis_astrastudio_audio_AudioBridge_nativeAssetInfo(JNIEnv* env,job
     auto array=env->NewDoubleArray(1026);if(array)env->SetDoubleArrayRegion(array,0,1026,result.data());return array;
 }
 extern "C" JNIEXPORT jint JNICALL
-Java_com_weskestis_astrastudio_audio_AudioBridge_nativeExport(JNIEnv* env,jobject,jlong handle,jstring path,jdoubleArray data,jfloatArray patchData,jfloatArray effectData,jfloatArray mixData,jint rate,jfloat tail){
+Java_com_weskestis_astrastudio_audio_AudioBridge_nativeExport(JNIEnv* env,jobject,jlong handle,jstring path,jdoubleArray data,jfloatArray patchData,jfloatArray effectData,jfloatArray mixData,jint rate,jfloat tail,jboolean floating){
     if(!path||!data||!patchData||!effectData||!mixData||env->GetArrayLength(data)>400000||
        env->GetArrayLength(patchData)!=16*astra::synth::kWireCount||env->GetArrayLength(effectData)!=16*astra::fx::kWireCount||env->GetArrayLength(mixData)!=astra::project::kMixValues)return 1;
     bool expected=false;if(!exportBusy.compare_exchange_strong(expected,true))return 1;
@@ -215,10 +216,23 @@ Java_com_weskestis_astrastudio_audio_AudioBridge_nativeExport(JNIEnv* env,jobjec
         for(int i=0;i<16;++i){std::array<float,astra::synth::kWireCount> p;env->GetFloatArrayRegion(patchData,i*astra::synth::kWireCount,astra::synth::kWireCount,p.data());if(!patches[i].decode(p))return 1;
             std::array<float,astra::fx::kWireCount> f;env->GetFloatArrayRegion(effectData,i*astra::fx::kWireCount,astra::fx::kWireCount,f.data());if(!effects[i].decode(f))return 1;}
         if(env->ExceptionCheck())return 1;
-        return astra::project::renderWave(output.text,wire,samples,patches,effects,mix,rate,tail,exportCancel,exportProgress);
+        return astra::project::renderWave(output.text,wire,samples,patches,effects,mix,rate,tail,exportCancel,exportProgress,floating);
     }catch(const std::bad_alloc&){return 1;}
 }
 extern "C" JNIEXPORT void JNICALL
 Java_com_weskestis_astrastudio_audio_AudioBridge_nativeCancelExport(JNIEnv*,jobject){exportCancel=true;}
 extern "C" JNIEXPORT jfloat JNICALL
 Java_com_weskestis_astrastudio_audio_AudioBridge_nativeExportProgress(JNIEnv*,jobject){return exportProgress.load();}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_com_weskestis_astrastudio_audio_AudioBridge_nativeStretch(JNIEnv* env,jobject,jlong handle,jstring path,jint id,jlong first,jlong last,jlong frames,jdouble semitones){
+    if(!path||id<0||id>=64)return 1;
+    bool expected=false;if(!exportBusy.compare_exchange_strong(expected,true))return 1;
+    struct Done{~Done(){exportBusy.store(false);}}done;exportCancel=false;exportProgress=0;
+    try{std::shared_ptr<const astra::project::Sample> sample;std::size_t used=0;
+        {std::lock_guard guard(registryMutex);auto* e=findEngine(handle);if(!e)return 1;sample=e->samples[id];for(const auto& a:e->samples)if(a)used+=a->stereo.size()*sizeof(float);}
+        if(!sample||used>astra::project::kSampleBudget||frames<=0||static_cast<uint64_t>(frames)>(astra::project::kSampleBudget-used)/8)return 1;
+        Utf output(env,path);if(!output.text)return 2;
+        return astra::project::stretchWave(output.text,*sample,first,last,frames,semitones,exportCancel,exportProgress);
+    }catch(const std::exception&){return 1;}
+}

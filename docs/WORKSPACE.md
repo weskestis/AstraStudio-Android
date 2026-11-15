@@ -32,7 +32,7 @@ WAV export always uses Arrangement, includes the same synths, effects, automatio
 
 16 tracks, 8 scenes, 128 shared voices, 512 nonoverlapping arrangement regions, 256 notes per clip, 64 audio assets and 512 MiB decoded stereo audio per project. Timeline ends at 65,536 quarter-note beats. Full-length tracks fit within the audio budget; there is no arbitrary 60-second import cutoff. Raw input/archives also have bounded size, and RIFF export is limited to 4 GiB. Actual polyphony, route latency and thermal limits require Xperia testing.
 
-Not implemented: microphone recording, simultaneous recording into multiple clips, arrangement overdub, MIDI file interchange, tempo maps, per-note expression, sampler/drum rack, plugin hosting, advanced time stretch, arbitrary automation targets, arrangement crossfades, per-region pitch envelopes or arbitrary Astra operations beyond the Phase 5 allowlist. The original starter uses synthesized percussion, not a hidden drum sampler. Astra commands and Gemini listening are described in [ASTRA.md](ASTRA.md).
+Not implemented: microphone recording, simultaneous recording into multiple clips, arrangement overdub, MIDI file interchange, per-note expression, plugin hosting, automatic live time stretch, arbitrary automation targets, arrangement crossfades, per-region pitch envelopes or arbitrary Astra operations beyond the Phase 5 allowlist. The original starter uses synthesized percussion, not a hidden drum sampler. Astra commands and Gemini listening are described in [ASTRA.md](ASTRA.md).
 
 ## Wire contracts
 
@@ -46,3 +46,7 @@ Primary references: [Android document picker](https://developer.android.com/trai
 ## Phase 6 extension
 
 See [SAMPLER.md](SAMPLER.md) for sample instruments, packs and resampling. Project JSON version 2 adds sample assignments, favorites and collections; version 1 projects remain readable. Portable projects now retain every browser asset, including unused samples. Android Back first returns from subpages and dialogs, then closes panels, then returns Arrangement to Session.
+
+## Phase 7 extension
+
+Tempo maps, offline pitch/time stretching and float WAV export are documented in [QUALITY.md](QUALITY.md). Files save as schema v3; versions 1 and 2 still load. Older APKs cannot read v3 projects.

@@ -113,6 +113,7 @@ private:
     void resetSound() noexcept;
     void recyclePatch(const Command& command) noexcept;
     void updateLfoSteps() noexcept;
+    void updateTempo(float bpm)noexcept;
     void updateTrackTargets() noexcept;
     float oscillator(double phase) const noexcept;
     void publish(float left, float right) noexcept;
@@ -154,7 +155,8 @@ private:
     float smoothing_{};
     float master_{0.7f};
     float targetMaster_{0.7f};
-    float bpm_{145.0f};
+    float bpm_{145.0f},baseBpm_{145.0f};
+    project::TempoClock tempoClock_;
     bool playing_{};
     bool metronome_{};
     uint32_t late_{};

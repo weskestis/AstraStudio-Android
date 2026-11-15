@@ -1,6 +1,6 @@
-# Phase 6 — samples, drum rack, resampling and Back
+# Samples, drum rack, resampling and Back
 
-Development version 0.6.0-phase6 / versionCode 6. Android 14 minimum, ARM64 and x86_64; the development signing certificate is unchanged.
+Introduced in Phase 6, updated for 0.7.0-phase7 / versionCode 7. Android 14 minimum, ARM64 and x86_64; the development signing certificate is unchanged.
 
 ## Play samples
 
@@ -12,7 +12,7 @@ Choose a sample from **Samples**, open its details, then assign it to the sample
 
 **Trim / loop frames** edits exact source-frame positions. End frames are exclusive. White waveform lines mark the trim range; yellow lines mark the loop. Loop bounds must be inside the trimmed range. One-shot ignores ordinary note-off; gated playback releases on note-off. Loop and one-shot are mutually exclusive. Transport Stop releases one-shots too; Panic clears all notes, audition and effect tails. Changes to a zone take effect on its next note; currently playing notes retain their original settings. Switching instrument mode stops that track's held voices.
 
-This is pitch-linked sample playback: transposition changes speed and duration. Independent time stretching, granular synthesis, tempo maps and microphone recording remain future work.
+This is pitch-linked sample playback: transposition changes speed and duration. Phase 7 adds offline independent time stretching and Arrangement tempo maps; see [QUALITY.md](QUALITY.md). Granular synthesis and microphone recording remain future work.
 
 ## Browser and packs
 
@@ -26,7 +26,7 @@ Search by name, filter by collection, or select **Favorites**. Details allow a f
 
 ## Resampling
 
-Select a clip and open **Resample**, or choose **Arrangement** in that panel. **Resample to browser** writes 48 kHz, 24-bit stereo WAV with an adjustable 0–30 second effect tail. Results appear under **Samples → Resampled**. There is no automatic destructive replacement: the source stays editable, and assigning the bounce is a separate operation.
+Select a clip and open **Resample**, or choose **Arrangement** in that panel. **Resample to browser** writes 48 kHz, 32-bit float stereo WAV with an adjustable 0–30 second effect tail. Results appear under **Samples → Resampled**. There is no automatic destructive replacement: the source stays editable, and assigning the bounce is a separate operation.
 
 An isolated clip bounce plays one cycle at the current project tempo, including its instrument, track rack, sends and master processing. Other tracks do not play and therefore do not drive external sidechains. The full-arrangement option includes all arranged tracks and their sidechains, ignores playback looping and uses the existing offline engine. Fixed engine latency is trimmed. Assign a processed bounce to a fresh track to avoid applying the same effects twice. An early duration/memory check rejects a bounce that would exceed the sample budget.
 
@@ -53,7 +53,7 @@ The system keyboard consumes Back first while visible. Rotation and returns from
 
 Project wire version 2 appends 16 immutable instrument configurations. A zone is 17 bounded numeric values and an instrument is its mode plus one sampler zone and sixteen pad zones (290 values). Native and Kotlin validation reject invalid IDs, nonfinite values, fractional frame fields, invalid trim/loop ranges and incompatible one-shot looping. JSON project version 2 persists these values; version 1 projects migrate to synth mode with empty sample assignments. Older APKs cannot open newly saved version 2 projects.
 
-Sample voices share the existing 128-voice pool and per-track stereo effects. A precomputed 16-tap, 64-phase windowed-sinc table uses conservative cutoff buckets for upward transposition. Integer-rate playback has a direct path. Start/end ramps, loop-edge fades, envelopes and choke fades reduce discontinuities; finite interpolation and very large transpositions are not alias-free guarantees. Sample-rate conversion for existing timeline audio clips remains unchanged. There is no FFT, allocation, file access, shared-pointer ownership operation or mutex in a sample voice tick.
+Sample voices share the existing 128-voice pool and per-track stereo effects. A precomputed 64-tap, 128-phase windowed-sinc table uses conservative cutoff buckets for upward transposition. Integer-rate playback has a direct path. Start/end ramps, loop-edge fades, envelopes and choke fades reduce discontinuities; finite interpolation and very large transpositions are not alias-free guarantees. Timeline audio now uses the same converter, with double accumulation and interpolation between adjacent phase kernels. There is no FFT, allocation, file access, shared-pointer ownership operation or mutex in a sample voice tick.
 
 An active plan owns all raw sample pointers used by voices. Before retiring it, the callback stops voices whose sample identity or instrument mode changed. Voices can continue across unrelated edits only if the new plan retains the same asset pointer. Reclamation happens when a control-thread producer reuses a retired plan slot. Browser audition follows the same ownership rule and has separate queue commands; panic discards pending audition starts.
 

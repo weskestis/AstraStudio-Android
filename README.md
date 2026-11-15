@@ -1,16 +1,22 @@
-# Astra Studio — Phase 6
+# Astra Studio — Phase 7
 
-Android 14+ native music workstation, built for **Sony Xperia 1 IV** first. Package `com.weskestis.astrastudio`, version **0.6.0-phase6**, green and black throughout. This is a development DAW, with implemented editing/playback features and explicit limits below; it is not yet a production-certified replacement for a desktop workstation.
+Android 14+ native music workstation, built for **Sony Xperia 1 IV** first. Package `com.weskestis.astrastudio`, version **0.7.0-phase7**, green and black throughout. This is a development DAW, with implemented editing/playback features and explicit limits below; it is not yet a production-certified replacement for a desktop workstation.
 
 ## Sampler, drum rack and resampling
 
 Open **Sampler / drums** in the bottom device chain. **Drum rack → Load starter kit** supplies 16 original samples, including an 808. Load your own sounds through **Samples → Import samples** (multiple files) or **Import ZIP pack**. The keyboard sampler and 16 pads support pitch, trim, reverse, envelopes, looping, velocity and choke groups, with the same effects and WAV-export path as the synths.
 
-**Resample** turns the selected clip or full arrangement into a 24-bit WAV in **Samples → Resampled**. Originals remain editable. Search, favorite and organize samples into collections; portable projects carry the browser and all assignments. Limits remain 64 assets / 512 MiB decoded audio. ZIP packs are supported; RAR and independent time stretching are not included.
+**Resample** turns the selected clip or full arrangement into a 32-bit float WAV in **Samples → Resampled**. Originals remain editable. Search, favorite and organize samples into collections; portable projects carry the browser and all assignments. Limits remain 64 assets / 512 MiB decoded audio. ZIP packs are supported; RAR is not included. Independent offline time stretching is described below.
 
 **Android Back returns through the current screen**: detail → parent panel → workspace, then Arrangement → Session. It leaves the Activity only from Session with no open panel. The system keyboard closes first when visible. **Close ×** closes a whole panel directly.
 
 Full controls and behavior: [Phase 6 sampler guide](docs/SAMPLER.md).
+
+## Fidelity, tempo and stretch
+
+**Tempo map** adds up to 128 saved BPM points, with sudden changes or ramps, to Arrangement playback and export. Session retains its base tempo. **Stretch** creates a new audio clip with independent duration and pitch, preserving the original; it is an offline render, not automatic live warping. The 64-tap sampler/timeline sample-rate converter and float WAV bounces reduce conversion artifacts. Float32 is the default export format; PCM24 remains available.
+
+[Phase 7 controls, measured checks and limitations](docs/QUALITY.md). These improvements do not certify mastering transparency, true-peak safety or Xperia performance.
 
 ## Astra commands and Gemini listening
 
@@ -26,7 +32,7 @@ Full workflow, command reference and limitations: [Astra Phase 5](docs/ASTRA.md)
 
 ## Install and make a track
 
-Install `AstraStudio_Phase6_0.6.0.apk` over Phase 1–5. The development signing certificate is unchanged. GitHub fallback: **Actions → Android Phase 6 → a successful run → AstraStudio-Phase6-APK**.
+Install `AstraStudio_Phase7_0.7.0.apk` over Phase 1–6. The development signing certificate is unchanged. GitHub fallback: **Actions → Android Phase 7 → a successful run → AstraStudio-Phase7-APK**.
 
 1. **File → Load starter song** opens Green circuit: original, editable MIDI drums, bass and lead, two scenes and a 16-bar arrangement. Save your current project first.
 2. Tap **Start audio**, then **Play**. Session Play launches Scene 1; Arrangement Play begins at the white cursor. Clip/scene launch buttons follow the selected bar, quarter-note or eighth-note quantization.
@@ -35,7 +41,7 @@ Install `AstraStudio_Phase6_0.6.0.apk` over Phase 1–5. The development signing
 5. In **Arrangement**, tap the ruler to set the cursor, then **Place clip**. Drag regions, duplicate, split or edit exact lengths with **Region**. Audio splits can use individual source samples.
 6. The bottom **device chain** opens the track mixer, synth and effects. Mixer includes arm, mute, solo, pan and post-fader reverb/echo sends.
 7. **File → Import audio** accepts PCM WAV directly and other mono/stereo formats supported by Android's codecs. **Save portable project** creates a `.astra` ZIP with all used audio, notes, automation, mix, synth and effect settings. Work also autosaves privately on the phone.
-8. **Export arrangement WAV** renders 24-bit stereo at 44.1 or 48 kHz through the same DSP, with optional effect tails. Export ignores playback looping.
+8. **Export arrangement WAV** renders 32-bit float or dithered 24-bit stereo at 44.1 or 48 kHz through the same DSP, with optional effect tails. Export ignores playback looping.
 
 Detailed controls, limits and file format: [Phase 4 workflow](docs/WORKSPACE.md). Build/verification evidence: [Validation](docs/VALIDATION.md).
 

@@ -111,17 +111,21 @@ class AudioBridge : AutoCloseable {
         return h!=0L&&nativeLoadAssets(h,assets.map{it.first}.toIntArray(),assets.map{it.second.absolutePath}.toTypedArray())
     }
     fun assetInfo(id: Int): DoubleArray? {val h=synchronized(this){handle};return if(h==0L)null else nativeAssetInfo(h,id)}
-    fun export(file: File,document: ProjectDocument,rate: Int,tail: Float): Int {
+    fun export(file: File,document: ProjectDocument,rate: Int,tail: Float,floating: Boolean=false): Int {
         val h=synchronized(this){handle}
-        return nativeExport(h,file.absolutePath,document.project.nativeWire(),document.patches.flatMap{it.wire}.toFloatArray(),document.effects.flatMap{it.wire}.toFloatArray(),document.mixWire(),rate,tail)
+        return nativeExport(h,file.absolutePath,document.project.nativeWire(),document.patches.flatMap{it.wire}.toFloatArray(),document.effects.flatMap{it.wire}.toFloatArray(),document.mixWire(),rate,tail,floating)
     }
+    fun stretch(file: File,asset: Int,first: Long,last: Long,frames: Long,semitones: Double): Int {
+        val h=synchronized(this){handle};return if(h==0L)1 else nativeStretch(h,file.absolutePath,asset,first,last,frames,semitones)
+    }
+    private external fun nativeStretch(handle: Long,path: String,asset: Int,first: Long,last: Long,frames: Long,semitones: Double): Int
     fun cancelExport()=nativeCancelExport()
     fun exportProgress()=nativeExportProgress()
     private external fun nativeSetProject(handle: Long, data: DoubleArray): Boolean
     private external fun nativeReadSequence(handle: Long, buffer: ByteBuffer): Boolean
     private external fun nativeLoadAssets(handle: Long, ids: IntArray, paths: Array<String>): Boolean
     private external fun nativeAssetInfo(handle: Long, id: Int): DoubleArray?
-    private external fun nativeExport(handle: Long, path: String, data: DoubleArray, patches: FloatArray, effects: FloatArray, mix: FloatArray, rate: Int, tail: Float): Int
+    private external fun nativeExport(handle: Long, path: String, data: DoubleArray, patches: FloatArray, effects: FloatArray, mix: FloatArray, rate: Int, tail: Float, floating: Boolean): Int
     private external fun nativeCancelExport()
     private external fun nativeExportProgress(): Float
 

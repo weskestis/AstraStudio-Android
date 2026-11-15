@@ -6,12 +6,12 @@ object Resampling {
         if(whole){require(d.project.regions.isNotEmpty()){ "Place clips in Arrangement first." };return d}
         val clip=d.project.clip(slot)?:error("Select a clip to resample.")
         // Isolate this clip while retaining its instrument, rack, sends and master.
-        return d.copy(project=d.project.copy(regions=listOf(Region(1,slot,0.0,clip.length)),mode=1,loop=false),
+        return d.copy(project=d.project.copy(regions=listOf(Region(1,slot,0.0,clip.length)),mode=1,loop=false,tempoEnabled=false),
             tracks=d.tracks.mapIndexed{i,t->t.copy(solo=i==clip.track,mute=false)})
     }
     fun checkCapacity(d: ProjectDocument,source: ProjectDocument,rate: Int,tail: Float) {
         require(rate in listOf(44100,48000)&&tail.isFinite()&&tail in 0f..30f)
-        val frames=ceilFrames(source.project.endBeat*60/source.bpm*rate)+ceilFrames(tail*rate.toDouble())
+        val frames=ceilFrames(source.project.timelineSeconds(0.0,source.project.endBeat,source.bpm)*rate)+ceilFrames(tail*rate.toDouble())
         require(frames>0&&frames+d.project.assets.sumOf{it.frames}<=67108864){"Resampling would exceed the 512 MiB decoded audio budget. Shorten the phrase or tail."}
         require(d.project.assets.size<64){"This project already contains 64 samples."}
     }

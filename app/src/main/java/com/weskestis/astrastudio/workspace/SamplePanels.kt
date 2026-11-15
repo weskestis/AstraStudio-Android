@@ -134,5 +134,5 @@ import kotlin.math.roundToInt
     Action("Resample to browser",!s.busy&&tail.toFloatOrNull()?.let{it.isFinite()&&it in 0f..30f}==true&&(if(whole)s.project.regions.isNotEmpty()else s.project.clip(slot)!=null),"Render resample"){service.resample(slot,whole,tail.toFloat())}
     Text(s.message,color=Green,modifier=Modifier.padding(vertical=12.dp))
     Action("Open samples",click=browse)
-    Text("Creates a 48 kHz, 24-bit WAV in the Resampled collection. The source remains editable. Use the result on a fresh track to avoid processing its effects twice.",fontSize=12.sp,color=Muted)
+    Text("Creates a 48 kHz, 32-bit float WAV in the Resampled collection. The source remains editable. Use the result on a fresh track to avoid processing its effects twice.",fontSize=12.sp,color=Muted)
 }

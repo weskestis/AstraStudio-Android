@@ -24,7 +24,7 @@ bool RenderCore::prepare(double sampleRate) noexcept {
     for (auto& track : tracks_) if (!track.effects.prepare(sampleRate)) return false;
     if (!limiter_.prepare(sampleRate)) return false;
     clickDelay_.reset();
-    sequence_.prepare(sampleRate);
+    sequence_.prepare(sampleRate,&sampleKernel_);
     if(!returnA_.prepare(static_cast<float>(sampleRate))||!returnB_.prepare(static_cast<float>(sampleRate)))return false;
     returnConfig_[fx::ReverbMix]=1;returnConfig_[fx::DelayMix]=1;
     returnA_.set(returnConfig_.values,static_cast<float>(sampleRate));returnA_.reset();
@@ -250,9 +250,7 @@ void RenderCore::apply(const Command& c) noexcept {
         case CommandType::TrackMute: track.mute = c.value != 0.0f; updateTrackTargets(); break;
         case CommandType::TrackSolo: track.solo = c.value != 0.0f; updateTrackTargets(); break;
         case CommandType::Tempo:
-            bpm_ = c.value; updateLfoSteps();
-            for (auto& t : tracks_) t.effects.tempo(bpm_);
-            returnB_.set(returnConfig_.values,static_cast<float>(sampleRate_),bpm_);
+            baseBpm_=c.value;tempoClock_.reset();updateTempo(c.value);
             break;
         case CommandType::FxSnapshot:
             track.fxConfig=fxSlots_[c.note].config;
@@ -269,7 +267,7 @@ void RenderCore::apply(const Command& c) noexcept {
             for(auto& v:voices_)if(v.active){const int mode=next->instruments[v.track].mode;
                 const int oldMode=activePlan_>=0?planSlots_[activePlan_].plan->instruments[v.track].mode:0;
                 if(mode!=oldMode||(v.sampled&&(v.sample.asset()<0||next->samples[v.sample.asset()].get()!=v.sample.source()))){v.active=false;v.sample.silence();v.synth.silence();}}
-            sequence_.activate(next);const int old=activePlan_;activePlan_=c.note;
+            sequence_.activate(next);tempoClock_.reset();const int old=activePlan_;activePlan_=c.note;
             if(old>=0)planSlots_[old].busy.store(false,std::memory_order_release);
             break;
         }
@@ -321,6 +319,12 @@ float RenderCore::oscillator(double phase) const noexcept {
     return sine_[index] + fraction * (sine_[index + 1] - sine_[index]);
 }
 
+void RenderCore::updateTempo(float bpm)noexcept {
+    if(bpm_==bpm)return;
+    bpm_=bpm;updateLfoSteps();
+    for(auto& t:tracks_)t.effects.tempo(bpm_);
+    returnB_.set(returnConfig_.values,static_cast<float>(sampleRate_),bpm_);
+}
 void RenderCore::render(float* output, int32_t frames) noexcept {
     if (output == nullptr || frames <= 0) return;
     consumeCommands();
@@ -335,7 +339,13 @@ void RenderCore::render(float* output, int32_t frames) noexcept {
             ++events;
         }
         std::array<fx::Stereo,kTrackCount> clipAudio{};
-        if(playing_){if(sequence_.loop(beat_))nextClickBeat_=beat_;sequence_.tick(beat_,bpm_,clipAudio);}
+        const auto* plan=activePlan_>=0?planSlots_[activePlan_].plan.get():nullptr;
+        const auto* tempo=plan&&plan->mode==1?&plan->tempo:nullptr;
+        if(playing_){if(sequence_.loop(beat_))nextClickBeat_=beat_;
+            const float live=tempo?static_cast<float>(tempo->bpmAt(beat_,baseBpm_)):baseBpm_;
+            if((frame_&31)==0||std::abs(live-bpm_)>.1f)updateTempo(live);
+            sequence_.tick(beat_,baseBpm_,clipAudio);}
+        else if(bpm_!=baseBpm_)updateTempo(baseBpm_);
         std::array<float, kTrackCount> mono{};
         for (auto& voice : voices_) {
             if (!voice.active) continue;
@@ -368,7 +378,7 @@ void RenderCore::render(float* output, int32_t frames) noexcept {
                 if (metronome_) { clickEnvelope_ = 0.16f; clickPhase_ = 0.0; }
                 nextClickBeat_ = (std::floor(beat_/sequence_.beatUnit())+1)*sequence_.beatUnit();
             }
-            beat_ += static_cast<double>(bpm_) / (60.0 * sampleRate_);
+            beat_=tempoClock_.tick(tempo,beat_,baseBpm_,sampleRate_);
         }
         fx::Stereo clickSample{};
         if (clickEnvelope_ > 0.00001f) {

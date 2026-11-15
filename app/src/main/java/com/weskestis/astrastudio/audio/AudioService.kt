@@ -292,7 +292,7 @@ class AudioService : Service() {
                 }
             }
             val stats = bridge.stats()
-            mutableState.value = mutableState.value.copy(stats = stats, fxStats = if (stats.running) bridge.fxStats() else FxStats(), sequence=if(stats.running)bridge.sequence() else SequenceStats(), progress=if(mutableState.value.work in listOf("Rendering WAV","Resampling"))bridge.exportProgress() else mutableState.value.progress)
+            mutableState.value = mutableState.value.copy(stats = stats, fxStats = if (stats.running) bridge.fxStats() else FxStats(), sequence=if(stats.running)bridge.sequence() else SequenceStats(), progress=if(mutableState.value.work in listOf("Rendering WAV","Resampling","Stretching audio"))bridge.exportProgress() else mutableState.value.progress)
             if (wantsAudio && stats.running) {
                 if (++stablePolls >= 100) reconnectAttempts = 0
             } else stablePolls = 0
@@ -520,23 +520,34 @@ class AudioService : Service() {
     fun resample(slot: Int,whole: Boolean,tail: Float){work("Resampling",{d->
         val source=Resampling.source(d,slot,whole);Resampling.checkCapacity(d,source,48000,tail)
         val file=File(files.audioDir,"${java.util.UUID.randomUUID()}.wav")
-        try{check(!cancelled.get()){ "Cancelled." };val result=bridge.export(file,source,48000,tail)
+        try{check(!cancelled.get()){ "Cancelled." };val result=bridge.export(file,source,48000,tail,true)
             check(result==0){if(result==3)"Cancelled." else "Could not resample this phrase."}
             val name=(if(whole)d.project.name else d.project.clip(slot)!!.name)+" bounce"
             addSamples(d,listOf(name.take(128) to file),"Resampled")
         }catch(e: Exception){file.delete();throw e}
     },"Bounce added to Samples → Resampled. Assign it to a pad, sampler or audio clip.")}
+    fun stretchClip(slot: Int,beats: Double,semitones: Double){work("Stretching audio",{d->
+        val clip=d.project.clip(slot)?:error("Select an audio clip.")
+        val target=d.project.emptySlot(slot%16)?:error("This track needs an empty scene slot for the new clip.")
+        val frames=StretchSettings.outputFrames(d.project,clip,d.bpm,beats,semitones)
+        val file=File(files.audioDir,"${java.util.UUID.randomUUID()}.wav")
+        try{check(!cancelled.get()){ "Cancelled." };val code=bridge.stretch(file,clip.asset,clip.first,clip.last,frames,semitones)
+            check(code==0){if(code==3)"Cancelled." else "Could not stretch this audio."}
+            val name=(clip.name+" stretched").take(64);val next=addSamples(d,listOf(name to file),"Stretched");val asset=next.project.assets.last()
+            next.copy(project=next.project.put(Clip(target,name,beats,asset=asset.id,last=asset.frames)))
+        }catch(e: Exception){file.delete();throw e}
+    },"Stretched audio added as a new clip and in Samples → Stretched. Original preserved; Undo removes the new version.")}
     fun saveProject(uri: Uri){work("Saving project",{files.saveArchive(it,uri,cancelled);null},"Project saved with synths, effects and audio.")}
     fun openProject(uri: Uri){control.post{if(!mutableState.value.busy)stopAudio("Opening project…")};work("Opening project",{val d=files.openArchive(uri,cancelled);loadAssets(d);d},"Project opened. Start audio to play.",true)}
     fun starter(){control.post{if(!mutableState.value.ready||mutableState.value.busy)return@post;stopTransport();commit{old->StarterProject.create(presets).let{it.copy(project=it.project.copy(assets=old.project.assets))}};message("Green circuit loaded. Start audio and press Play, or launch individual clips.")}}
     fun newProject(){control.post{if(mutableState.value.busy)return@post;stopTransport();history.clear();adopt(document().copy(project=Project(),tracks=List(16){TrackControls()}));syncEngine();message("New project. Your synth patches and effects are retained.")}}
-    fun exportWave(uri: Uri,rate: Int=48000,tail: Float=4f){work("Rendering WAV",{d->
+    fun exportWave(uri: Uri,rate: Int=48000,tail: Float=4f,floating: Boolean=false){work("Rendering WAV",{d->
         require(d.project.regions.isNotEmpty()){ "Place clips in Arrangement before exporting." }
         val file=File(cacheDir,"export-${System.nanoTime()}.wav")
-        try{val result=bridge.export(file,d,rate,tail);check(result==0){when(result){2->"Could not write the WAV file.";3->"Cancelled.";else->"Could not render this arrangement."}}
+        try{val result=bridge.export(file,d,rate,tail,floating);check(result==0){when(result){2->"Could not write the WAV file.";3->"Cancelled.";else->"Could not render this arrangement."}}
             files.publishWave(file,uri,cancelled)
         }finally{file.delete()};null
-    },"24-bit stereo WAV exported.")}
+    },if(floating)"32-bit float stereo WAV exported." else "24-bit stereo WAV exported.")}
 
     private fun astraState(edit: (AstraState)->AstraState) { mutableState.value=mutableState.value.copy(astra=edit(mutableState.value.astra)) }
     private fun refreshForeground() {
