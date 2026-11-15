@@ -1,6 +1,10 @@
 package com.weskestis.astrastudio.project
 
 import com.weskestis.astrastudio.audio.TrackControls
+import com.weskestis.astrastudio.audio.StudioState
+import com.weskestis.astrastudio.audio.AudioStats
+import com.weskestis.astrastudio.audio.editorSnapshot
+import com.weskestis.astrastudio.audio.sessionSnapshot
 import com.weskestis.astrastudio.fx.FxConfig
 import com.weskestis.astrastudio.synth.SynthPatch
 import org.json.JSONObject
@@ -27,4 +31,6 @@ class TempoQualityTests {
     @Test fun stretchDurationAndPitchHaveSeparateControls(){val c=Clip(0,length=20.0,asset=0,last=asset.frames);val p=Project(assets=listOf(asset),clips=listOf(c));assertEquals(480000L,StretchSettings.outputFrames(p,c,120f,20.0,0.0));assertEquals(600000L,StretchSettings.outputFrames(p,c,120f,25.0,7.0));assertEquals(600000L,StretchSettings.outputFrames(p,c,120f,25.0,-12.0));reject{StretchSettings.outputFrames(p,c,120f,41.0,0.0)};reject{StretchSettings.outputFrames(p,c,120f,9.0,0.0)};reject{StretchSettings.outputFrames(p,c,120f,20.0,25.0)};reject{StretchSettings.outputFrames(p,c,120f,20.0,Double.NaN)}}
     @Test fun stretchBudgetsAccountForRetainedOriginal(){val c=Clip(0,asset=0,last=asset.frames);val p=Project(assets=listOf(asset,asset.copy(id=1,file="large.wav",frames=67108864-asset.frames)),clips=listOf(c));reject{StretchSettings.outputFrames(p,c,120f,20.0,0.0)};reject{StretchSettings.outputFrames(p,Clip(1),120f,20.0,0.0)}}
     @Test fun tempoEditsUndoInOneStep(){val before=d();val after=before.copy(project=before.project.copy(tempoPoints=ramp,tempoEnabled=true));val history=ProjectHistory();history.commit(before,after);assertEquals(before,history.undo(after));assertEquals(after,history.redo(before))}
+    @Test fun meterPollingDoesNotInvalidateStaticEditors(){val a=StudioState(stats=AudioStats(running=true,frame=10,cpuLoad=.1));val b=a.copy(stats=a.stats.copy(frame=2048,cpuLoad=.2,peakLeft=.8f));assertEquals(a.editorSnapshot(),b.editorSnapshot());assertEquals(a.sessionSnapshot(),b.sessionSnapshot());assertNotEquals(a.editorSnapshot(),a.copy(stats=AudioStats()).editorSnapshot());assertNotEquals(a.editorSnapshot(),a.copy(project=a.project.copy(tempoPoints=ramp)).editorSnapshot())}
+    @Test fun sessionSeparatesDrawProgressFromStructuralEdits(){val a=StudioState();val b=a.copy(sequence=a.sequence.copy(phase=listOf(.5f)+List(15){0f}));assertEquals(a.sessionSnapshot(),b.sessionSnapshot());assertEquals(a.editorSnapshot(),b.editorSnapshot());assertNotEquals(a.sessionSnapshot(),a.copy(sequence=a.sequence.copy(active=listOf(0)+List(15){-1})).sessionSnapshot());assertNotEquals(a.sessionSnapshot(),a.copy(project=a.project.put(Clip(0))).sessionSnapshot())}
 }

@@ -8,6 +8,7 @@ app/build.gradle.kts
 app/proguard-rules.pro
 app/src/androidTest/java/com/weskestis/astrastudio/WorkspaceSmokeTest.kt
 app/src/main/AndroidManifest.xml
+app/src/main/assets/THIRD_PARTY_LICENSES.txt
 app/src/main/cpp/AudioEngine.cpp
 app/src/main/cpp/AudioEngine.h
 app/src/main/cpp/CMakeLists.txt
@@ -76,6 +77,7 @@ app/src/main/java/com/weskestis/astrastudio/astra/PatternGenerator.kt
 app/src/main/java/com/weskestis/astrastudio/astra/StrictJson.kt
 app/src/main/java/com/weskestis/astrastudio/audio/AudioBridge.kt
 app/src/main/java/com/weskestis/astrastudio/audio/AudioService.kt
+app/src/main/java/com/weskestis/astrastudio/audio/UiSnapshots.kt
 app/src/main/java/com/weskestis/astrastudio/fx/EqResponse.kt
 app/src/main/java/com/weskestis/astrastudio/fx/FxConfig.kt
 app/src/main/java/com/weskestis/astrastudio/fx/FxEditor.kt

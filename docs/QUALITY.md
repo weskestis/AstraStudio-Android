@@ -17,6 +17,8 @@ Sampler and timeline sample-rate conversion use a shared precomputed 64-tap Blac
 
 Offline stretching uses **Signalsmith Stretch 1.3.2** with its default high-quality configuration, double-precision analysis/reconstruction, deterministic seed, stereo phase linking, explicit preroll/tail handling and cancellation. No FFT processing or new allocation is introduced into the live sample callback. Original source-rate data is used; outputs are padded/trimmed to the exact requested frame count. Exact unchanged duration with zero pitch shift bypasses the stretcher bit-for-bit.
 
+Editor panels and the Session grid retain stable snapshots between structural edits. Live clip progress is read during drawing; high-frequency diagnostics no longer invalidate the entire grid/pad/browser tree. UI publications coalesce if Main falls behind, while the control/audio clocks keep running.
+
 The tempo clock integrates linear BPM ramps analytically, caches their recurrence between boundaries, and resets on seeks/plan changes. Musical note timing is sampled at the engine rate. Tempo-synced effects/LFO coefficients refresh at a short control cadence (up to 32 samples); they do not imply zero-latency parameter changes. Map and audio state transfer as one immutable project snapshot.
 
 ## Measured regression fixtures

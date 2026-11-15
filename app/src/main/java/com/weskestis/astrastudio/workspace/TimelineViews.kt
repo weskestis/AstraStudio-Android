@@ -25,7 +25,7 @@ import kotlin.math.*
 
 @Composable
 internal fun SessionView(s: StudioState,selected: Int,select: (Int)->Unit,edit: (Int)->Unit,create: (Int)->Unit,
-    launch: (Int)->Unit,scene: (Int)->Unit,stop: (Int)->Unit,mixer: (Int)->Unit){
+    launch: (Int)->Unit,scene: (Int)->Unit,stop: (Int)->Unit,mixer: (Int)->Unit,phase: (Int)->Float){
     Row(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("Session grid")){
         Column(Modifier.width(60.dp)){
             Box(Modifier.height(96.dp),contentAlignment=Alignment.Center){Text("SCENE",fontSize=9.sp,color=Muted)}
@@ -46,7 +46,7 @@ internal fun SessionView(s: StudioState,selected: Int,select: (Int)->Unit,edit: 
                             Column(Modifier.weight(1f).fillMaxHeight().pointerInput(slot){detectTapGestures(onTap={select(slot)},onDoubleTap={edit(slot)},onLongPress={edit(slot)})}.padding(end=6.dp,top=6.dp)){
                                 Text(c.name,maxLines=1,overflow=TextOverflow.Ellipsis,color=if(active)Green else Color(0xFFE7F5E9),fontSize=11.sp)
                                 Canvas(Modifier.fillMaxWidth().height(26.dp)){clipPreview(c,s.project,Offset.Zero,size,if(active)Green else Color(0xFF79AA85))}
-                                if(active)LinearProgressIndicator(progress={s.sequence.phase[track].coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth().height(2.dp),color=Green)
+                                if(active)LinearProgressIndicator(progress={phase(track).coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth().height(2.dp),color=Green)
                             }
                         }
                     }

@@ -1,6 +1,6 @@
 # Phase 7 validation
 
-Development version **0.7.0-phase7 / versionCode 7**. Six native regression suites pass in the host Release build, including new conversion, stretch, tempo and float-WAV checks. Android and sanitizer validation is run by the Phase 7 workflow; only a successful matching-source run is a verified build. [Quality fixtures and limitations](QUALITY.md).
+Development version **0.7.0-phase7 / versionCode 7**. Six native regression suites pass in the host Release build and under AddressSanitizer/UndefinedBehaviorSanitizer, including conversion, stretch, tempo and float-WAV checks. All 103 Kotlin unit tests pass. The first Android run passed the new pitch/time/tempo/float cases but exposed excessive UI recomposition during existing workflows. Stable editor/session projections and conflated Main-thread publication address that issue; the Android suite must pass on the corrected build before delivery. [Quality fixtures and limitations](QUALITY.md).
 
 The unchanged public development signing certificate supports in-place updates. Physical Xperia tests and live Gemini requests were not performed here.
 

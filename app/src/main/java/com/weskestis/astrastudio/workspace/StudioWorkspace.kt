@@ -62,6 +62,9 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,imp
     var pending by remember { mutableStateOf<Pair<String,Int>?>(null) }
     val compact=androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp<520
     val track=slot%16
+    val editorCandidate=state.editorSnapshot();val editorState=remember(editorCandidate){editorCandidate}
+    val sequencePhase=rememberUpdatedState(state.sequence.phase)
+    val sessionCandidate=state.sessionSnapshot();val sessionState=remember(sessionCandidate){sessionCandidate}
     fun audioAction(kind: String,id: Int=0){if(state.stats.running){when(kind){"play"->service.play(view,cursor);"launch"->service.launch(id);"scene"->service.launchScene(id);"record"->service.record(id)}}else{pending=kind to id;start()}}
     LaunchedEffect(state.stats.running){if(state.stats.running)pending?.let{pending=null;when(it.first){"play"->service.play(view,cursor);"launch"->service.launch(it.second);"scene"->service.launchScene(it.second);"record"->service.record(it.second)}}}
     LaunchedEffect(track){service.meterTrack(track)}
@@ -125,7 +128,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,imp
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if(!state.ready)Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center){CircularProgressIndicator()}
-            else if(view==0)SessionView(state,slot,select={slot=it},edit={slot=it;sheet="clip"},create={service.newClip(it);slot=it;sheet="clip"},launch={audioAction("launch",it)},scene={audioAction("scene",it)},stop=service::stopTrack,mixer={slot=slot/16*16+it;sheet="mixer"})
+            else if(view==0)SessionView(sessionState,slot,select={slot=it},edit={slot=it;sheet="clip"},create={service.newClip(it);slot=it;sheet="clip"},launch={audioAction("launch",it)},scene={audioAction("scene",it)},stop=service::stopTrack,mixer={slot=slot/16*16+it;sheet="mixer"},phase={sequencePhase.value[it]})
             else ArrangementView(state,slot,selectedRegion,cursor,select={selectedRegion=it.id;slot=it.slot},cursorChange={cursor=it},service=service,edit={sheet="clip"},trackSelect={slot=slot/16*16+it})
         }
         if(!compact)Tools {
@@ -135,7 +138,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,imp
             Action("Import audio",state.ready){importAudio(slot)}
             Action("Delete clip",state.project.clip(slot)!=null){confirm="delete"}
         }
-        DeviceRack(state,track,service,compact){if(it=="clip"&&state.project.clip(slot)==null)service.newClip(slot);if(it.startsWith("effects:")){fxUnit=it.substringAfter(":").toInt();sheet="effects"}else sheet=it}
+        DeviceRack(editorState,track,service,compact){if(it=="clip"&&state.project.clip(slot)==null)service.newClip(slot);if(it.startsWith("effects:")){fxUnit=it.substringAfter(":").toInt();sheet="effects"}else sheet=it}
     }
     if(sheet.isNotEmpty())Dialog(onDismissRequest={backPanel()},properties=DialogProperties(usePlatformDefaultWidth=false,decorFitsSystemWindows=false,dismissOnClickOutside=false)){
         CompositionLocalProvider(LocalPanelNavigation provides panelNavigation){panelStates.SaveableStateProvider(sheet){
@@ -144,18 +147,18 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,imp
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=12.dp)){
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text(when(sheet){"clip"->"CLIP / ${state.project.clip(slot)?.name?:"New MIDI"}";"keys"->"KEYBOARD / ${trackName(state,track)}";else->"${sheet.uppercase()} / ${trackName(state,track)}"},Modifier.weight(1f),color=Green,fontWeight=FontWeight.Bold,fontSize=13.sp);TextButton({backPanel()},Modifier.testTag("Panel back")){Text("‹ Back")};TextButton({closePanel()},Modifier.testTag("Close panel")){Text("Close ×")}}
             when(sheet){
-                "astra"->AstraPanel(state,service,slot)
-                "clip"->state.project.clip(slot)?.let{ClipEditor(it,state,service)}?:Text("Creating clip…")
+                "astra"->AstraPanel(editorState,service,slot)
+                "clip"->state.project.clip(slot)?.let{ClipEditor(it,editorState,service)}?:Text("Creating clip…")
                 "synth"->{Tools{Action("Use synth",state.project.instruments[track].mode!=0){service.instrument(track,0)};Action("Sampler / drums"){sheet="instrument"}};SynthEditor(track,state.patches[track],service,state.stats.running)}
-                "instrument"->SampleInstrumentPanel(state,track,slot,service,start){browse(it)}
-                "samples"->SampleBrowser(state,track,slot,if(browserPad==-2)null else browserPad,service,start,importSamples,importPack){service.stopPreview();if(parentSheet.isNotEmpty()){sheet=parentSheet;parentSheet=""}else sheet="instrument"}
-                "resample"->ResamplePanel(state,slot,service){browse()}
-                "tempo"->TempoPanel(state,service)
-                "stretch"->StretchPanel(state,slot,service,{browse()},{sheet="resample"})
+                "instrument"->SampleInstrumentPanel(editorState,track,slot,service,start){browse(it)}
+                "samples"->SampleBrowser(editorState,track,slot,if(browserPad==-2)null else browserPad,service,start,importSamples,importPack){service.stopPreview();if(parentSheet.isNotEmpty()){sheet=parentSheet;parentSheet=""}else sheet="instrument"}
+                "resample"->ResamplePanel(editorState,slot,service){browse()}
+                "tempo"->TempoPanel(editorState,service)
+                "stretch"->StretchPanel(editorState,slot,service,{browse()},{sheet="resample"})
                 "effects"->FxEditor(track,state,service,fxUnit)
-                "mixer"->Mixer(state,track,service)
+                "mixer"->Mixer(editorState,track,service)
                 "master"->MasterPanel(state,service)
-                "project"->ProjectPanel(state,service)
+                "project"->ProjectPanel(editorState,service)
                 "keys"->{Tools{Action(if(state.stats.running)"Audio on" else "Start audio"){if(!state.stats.running)start()};Action(if(state.recording>=0)"Finish recording" else "Record to selected clip"){audioAction("record",slot)}};Keyboard(track,state.stats.running,service)}
                 "help"->HelpPanel()
             }

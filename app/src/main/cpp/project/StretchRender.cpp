@@ -5,8 +5,9 @@
 namespace astra::project {
 int stretchWave(const char* path,const Sample& sample,int64_t first,int64_t last,int64_t outputFrames,double semitones,
                 std::atomic<bool>& cancel,std::atomic<float>& progress) {
+    if(first<0||last<=first||last>sample.frames())return 1;
     const auto count=last-first;
-    if(first<0||last>sample.frames()||count<=0||outputFrames<=0||outputFrames>static_cast<int64_t>(kSampleBudget/8)||
+    if(outputFrames<=0||outputFrames>static_cast<int64_t>(kSampleBudget/8)||
        outputFrames<count*.5||outputFrames>count*2.0||!std::isfinite(semitones)||std::abs(semitones)>24)return 1;
     WaveWriter writer(path,sample.rate,outputFrames,true);if(!writer.good())return 2;
     if(outputFrames==count&&semitones==0){

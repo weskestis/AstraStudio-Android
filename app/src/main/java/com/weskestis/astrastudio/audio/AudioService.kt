@@ -74,14 +74,21 @@ class AudioService : Service() {
     val state = publishedState.asStateFlow()
     private val uiHandler = Handler(Looper.getMainLooper())
     @Volatile private var controlSnapshot = StudioState()
+    private val uiPublicationPending = AtomicBoolean(false)
+    private val publishState = Runnable {
+        uiPublicationPending.set(false)
+        publishedState.value = controlSnapshot
+    }
     // Control reads never wait for the UI. Publication is marshalled onto Main,
     // including when an instrumented collector uses an unconfined dispatcher.
     private val mutableState = object {
         var value: StudioState
             get() = controlSnapshot
             set(next) {
+                if(next==controlSnapshot)return
                 controlSnapshot = next
-                uiHandler.post { publishedState.value = next }
+                // A slow frame must not accumulate a queue of obsolete meter states.
+                if(uiPublicationPending.compareAndSet(false,true))uiHandler.post(publishState)
             }
     }
     private lateinit var thread: HandlerThread
