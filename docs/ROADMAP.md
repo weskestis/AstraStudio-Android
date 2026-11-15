@@ -20,7 +20,7 @@ The earlier proposal of five additional phases described a possible first-releas
 | Quality milestones, starting with Phase 12 | Device profiling, audio quality, stability, accessibility and long-session testing | Publish device/build/route-specific measurements and reproduce regressions. Apply this work throughout development, not only at the end. |
 | Release milestones, starting with Phase 13 | Recovery, migration, tutorials, packaging, signing/update compatibility and release readiness | A release candidate has an explicit supported feature/capacity list and passes its acceptance checks. Shipping one does not retire unfinished capability rows. |
 
-The next implementation milestone is Phase 9. This document changes the plan; it does not mark future features as implemented or start a background build.
+Phase 9 implementation now adds source-tempo/downbeat warp, independent pitch, shared playback/export processing and schema-v4 persistence. Validation for its installable build is recorded separately; it does not complete the broader warp-marker/granular workstream. Phase 10 is next.
 
 ## Capability ledger
 
@@ -30,7 +30,7 @@ These are project requirements and acceptance criteria. “Partial” means an i
 | --- | --- | --- |
 | Session performance | Partial: launch grid, scenes, quantization | More flexible scene/clip capacity, launch behaviors, follow actions, capture of a Session performance into Arrangement, and reliable live editing with deterministic timing. |
 | Arrangement editing | Partial: regions, splits, duplicates and basic zoom | Multiselection and linked editing, fades/crossfades, consolidation, detailed clip properties, flexible lanes, group organization, and touch editing without accidental panel closure. |
-| Warping and granular sound | Partial: fixed-duration offline stretch | Persistent warp markers, transient/downbeat tools, automatic musical alignment, material-appropriate algorithms and granular manipulation. Verify sound and timing independently; a mode label alone is insufficient. |
+| Warping and granular sound | Partial: offline stretch plus source-tempo/downbeat clip warp | Persistent warp markers, transient/downbeat tools, automatic musical alignment, material-appropriate algorithms and granular manipulation. Verify sound and timing independently; a mode label alone is insufficient. |
 | Audio recording | Partial: independent microphone takes and extraction | Recording directly into Session/Arrangement, punch/loop recording, latency compensation, input routing/monitoring, supported USB/multichannel inputs, take lanes and comping. Measure input/output timing on real hardware. |
 | MIDI composition | Partial: piano roll, velocity, quantize, legato and basic MIDI capture | MIDI file interchange, multi-clip editing, groove/swing, chance and generative note tools, retrospective capture, scale/tuning tools and production-ready MIDI effects. |
 | Expressive MIDI and controllers | Partial: basic MIDI 1/2 notes and panic CCs | Per-note expression, pitch/pressure/timbre capture and editing, mapping/learn, controller feedback, external MIDI output and clock/sync. Validate the actual advertised protocol features with hardware. |

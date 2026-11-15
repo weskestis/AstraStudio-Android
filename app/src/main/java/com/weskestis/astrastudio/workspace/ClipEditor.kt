@@ -113,7 +113,7 @@ private fun noteName(n: Int)="${noteNames[n%12]}${n/12-1}"
     Text("${a.name} · ${a.rate} Hz · ${number((c.last-c.first).toDouble()/a.rate)} seconds\nPlayback keeps the recording's original speed and pitch.",color=Muted,fontSize=12.sp)
     NumberField("First source sample (inclusive)",first,{first=it});Tools{Action("Start −1"){first=max(0,(first.toLongOrNull()?:0)-1).toString()};Action("Start +1"){first=((first.toLongOrNull()?:0)+1).toString()}}
     NumberField("Last source sample (exclusive)",last,{last=it});Tools{Action("End −1"){last=max(1,(last.toLongOrNull()?:1)-1).toString()};Action("End +1"){last=min(a.frames,(last.toLongOrNull()?:0)+1).toString()}}
-    Action("Apply sample trim",first.toLongOrNull()?.let{x->last.toLongOrNull()?.let{y->x>=0&&y>x&&y<=a.frames}==true}==true){service.clipEdit(c.slot){it.resize(max(.0625,(last.toLong()-first.toLong()).toDouble()/a.rate*s.bpm/60)).copy(first=first.toLong(),last=last.toLong())}}
+    Action("Apply sample trim",first.toLongOrNull()?.let{x->last.toLongOrNull()?.let{y->x>=0&&y>x&&y<=a.frames}==true}==true){service.clipEdit(c.slot){WarpSettings.trim(it,first.toLong(),last.toLong(),a,s.bpm)}}
     Text("Trimming changes this source clip everywhere it is used. If a region starts beyond the new end, remove that region first.",color=Muted,fontSize=11.sp)
 }
 

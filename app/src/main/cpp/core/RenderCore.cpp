@@ -24,7 +24,7 @@ bool RenderCore::prepare(double sampleRate) noexcept {
     for (auto& track : tracks_) if (!track.effects.prepare(sampleRate)) return false;
     if (!limiter_.prepare(sampleRate)) return false;
     clickDelay_.reset();
-    sequence_.prepare(sampleRate,&sampleKernel_);
+    if(!sequence_.prepare(sampleRate,&sampleKernel_))return false;
     if(!returnA_.prepare(static_cast<float>(sampleRate))||!returnB_.prepare(static_cast<float>(sampleRate)))return false;
     returnConfig_[fx::ReverbMix]=1;returnConfig_[fx::DelayMix]=1;
     returnA_.set(returnConfig_.values,static_cast<float>(sampleRate));returnA_.reset();

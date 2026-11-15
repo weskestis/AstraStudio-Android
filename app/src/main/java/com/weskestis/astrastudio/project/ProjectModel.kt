@@ -10,7 +10,8 @@ data class AutoPoint(val beat: Double,val value: Float)
 data class AudioAsset(val id: Int,val name: String,val file: String,val rate: Int,val frames: Long,val waveform: List<Float>,val favorite: Boolean=false,val group: String="Imports")
 data class Clip(val slot: Int,val name: String="MIDI clip",val length: Double=16.0,
     val notes: List<MidiNote> = emptyList(),val automation: List<List<AutoPoint>> = List(4){emptyList()},
-    val asset: Int = -1,val first: Long = 0,val last: Long = 0,val root: Int = 5,val minor: Boolean = true) {
+    val asset: Int = -1,val first: Long = 0,val last: Long = 0,val root: Int = 5,val minor: Boolean = true,
+    val warp: Boolean=false,val sourceBpm: Double=120.0,val warpStart: Long=0,val pitch: Double=0.0) {
     val track get()=slot%16
     val scene get()=slot/16
     val isAudio get()=asset>=0
@@ -68,13 +69,13 @@ data class Project(val name: String="Untitled",val numerator: Int=4,val denomina
         val r=regions.firstOrNull{it.id==id}?:error("Choose a region.");val c=clip(r.slot)!!
         require(at>r.beat+1.0/960&&at<r.beat+r.length-1.0/960){"Put the cursor inside the selected region."}
         var left=at-r.beat;var offset=r.audioOffset
-        if(c.isAudio){val a=asset(c.asset)!!;val frames=round(timelineSeconds(r.beat,at,bpm)*a.rate).toLong();left=TempoMap.advance(if(tempoEnabled)tempoPoints else emptyList(),r.beat,frames.toDouble()/a.rate,bpm)-r.beat;offset+=frames;require(offset<c.last-c.first){"Split falls after the audio ends."}}
+        if(c.isAudio&&!c.warp){val a=asset(c.asset)!!;val frames=round(timelineSeconds(r.beat,at,bpm)*a.rate).toLong();left=TempoMap.advance(if(tempoEnabled)tempoPoints else emptyList(),r.beat,frames.toDouble()/a.rate,bpm)-r.beat;offset+=frames;require(offset<c.last-c.first){"Split falls after the audio ends."}}
         val b=r.copy(id=(regions.maxOfOrNull{it.id}?:0)+1,beat=r.beat+left,length=r.length-left,
-            offset=if(c.isAudio)0.0 else (r.offset+left)%c.length,audioOffset=offset)
+            offset=if(c.isAudio&&!c.warp)0.0 else (r.offset+left)%c.length,audioOffset=offset)
         val next=copy(regions=regions.filter{it.id!=id}+r.copy(length=left)+b);require(next.valid());return next
     }
     fun nativeWire(): DoubleArray {
-        val data=ArrayList<Double>();data.addAll(listOf(3.0,mode.toDouble(),numerator.toDouble(),denominator.toDouble(),if(loop)1.0 else 0.0,loopStart,loopEnd,clips.size.toDouble(),regions.size.toDouble()))
+        val data=ArrayList<Double>();data.addAll(listOf(4.0,mode.toDouble(),numerator.toDouble(),denominator.toDouble(),if(loop)1.0 else 0.0,loopStart,loopEnd,clips.size.toDouble(),regions.size.toDouble()))
         for(c in clips.sortedBy{it.slot}) {
             data.addAll(listOf(c.slot.toDouble(),c.length,c.asset.toDouble(),c.first.toDouble(),c.last.toDouble(),c.notes.size.toDouble(),c.automation.sumOf{it.size}.toDouble()))
             for(n in c.notes)data.addAll(listOf(n.beat,n.length,n.pitch.toDouble(),n.velocity.toDouble()))
@@ -83,6 +84,7 @@ data class Project(val name: String="Untitled",val numerator: Int=4,val denomina
         for(r in regions)data.addAll(listOf(r.id.toDouble(),r.slot.toDouble(),r.beat,r.length,r.offset,r.audioOffset.toDouble()))
         for(i in instruments){data.add(i.mode.toDouble());data.addAll(i.sample.wire());for(p in i.pads)data.addAll(p.wire())}
         data.add(if(tempoEnabled)1.0 else 0.0);data.add(tempoPoints.size.toDouble());for(p in tempoPoints)data.addAll(listOf(p.beat,p.bpm.toDouble(),if(p.ramp)1.0 else 0.0))
+        val audio=clips.filter{it.isAudio};data.add(audio.size.toDouble());for(c in audio)data.addAll(listOf(c.slot.toDouble(),if(c.warp)1.0 else 0.0,c.sourceBpm,c.warpStart.toDouble(),c.pitch))
         return data.toDoubleArray()
     }
     fun valid(): Boolean {
@@ -94,8 +96,9 @@ data class Project(val name: String="Untitled",val numerator: Int=4,val denomina
         if(assets.size>64||assets.map{it.id}.toSet().size!=assets.size||assets.sumOf{it.frames}>67108864)return false
         for(a in assets)if(a.id !in 0..63||a.rate !in 8000..384000||a.frames !in 1..67108864||!a.file.matches(Regex("[A-Za-z0-9_-]{1,100}\\.wav"))||a.name.isBlank()||a.name.length>128||a.group.length>64||a.waveform.size!=1024||a.waveform.any{!it.isFinite()||abs(it)>8})return false
         for(c in clips){
+            if(!c.sourceBpm.isFinite()||c.sourceBpm !in 30.0..300.0||!c.pitch.isFinite()||c.pitch !in -24.0..24.0||c.warpStart<0||(!c.isAudio&&(c.warp||c.warpStart!=0L||c.pitch!=0.0)))return false
             if(c.slot !in 0..127||c.name.isBlank()||c.name.length>64||!c.length.isFinite()||c.length !in .0625..65536.0||c.root !in 0..11||c.asset !in -1..63||c.first<0||c.last<0||c.notes.size>256||c.notes.map{it.id}.toSet().size!=c.notes.size||c.automation.size!=4)return false
-            if(c.isAudio){val a=asset(c.asset)?:return false;if(c.last<=c.first||c.last>a.frames||c.notes.isNotEmpty())return false}
+            if(c.isAudio){val a=asset(c.asset)?:return false;if(c.last<=c.first||c.last>a.frames||c.notes.isNotEmpty()||c.warpStart>=c.last-c.first)return false}
             for(n in c.notes)if(n.id !in 1..1000000000||!n.beat.isFinite()||!n.length.isFinite()||n.beat<0||n.length<1.0/960||n.beat+n.length>c.length+1e-8||n.pitch !in 0..127||!n.velocity.isFinite()||n.velocity !in .001f..1f)return false
             for(lane in 0..3){val points=c.automation[lane];if(points.size>64)return false;var last=-1.0
                 for(p in points){if(!p.beat.isFinite()||p.beat !in 0.0..c.length||p.beat<=last||!p.value.isFinite()||p.value !in Clip.autoLow[lane]..Clip.autoHigh[lane])return false;last=p.beat}}

@@ -1,10 +1,16 @@
-# Astra Studio — Phase 8
+# Astra Studio — Phase 9
 
-Android 14+ native music workstation, built for **Sony Xperia 1 IV** first. Package `com.weskestis.astrastudio`, version **0.8.0-phase8**, green and black throughout. This is a development DAW, with implemented editing/playback features and explicit limits below; it is not yet a production-certified replacement for a desktop workstation.
+Android 14+ native music workstation, built for **Sony Xperia 1 IV** first. Package `com.weskestis.astrastudio`, version **0.9.0-phase9**, green and black throughout. This is a development DAW, with implemented editing/playback features and explicit limits below; it is not yet a production-certified replacement for a desktop workstation.
 
 ## Full workstation development goal
 
-The goal is a professional Android DAW with Ableton Live-level workflow depth and sound-design capability. Phase 13 is a possible release milestone within that goal, not the finish line. The [full roadmap and capability ledger](docs/ROADMAP.md) records the remaining scope, current limitations and completion criteria. Phase 9 (tempo-following audio) and Phase 10 (project audio streaming/scaling) remain the next implementation milestones.
+The goal is a professional Android DAW with Ableton Live-level workflow depth and sound-design capability. Phase 13 is a possible release milestone within that goal, not the finish line. The [full roadmap and capability ledger](docs/ROADMAP.md) records the remaining scope, current limitations and completion criteria. Phase 9 adds tempo-following audio; Phase 10 (project audio streaming/scaling) is next.
+
+## Tempo-following audio
+
+Select an audio clip and open **Warp**. Enter its **source BPM**, choose the **downbeat source frame**, enable Warp and apply. The clip follows Session BPM and Arrangement tempo steps/ramps while preserving pitch. Set an independent pitch shift of −24 to +24 semitones. **Fit source to clip length** calculates BPM from the selected audio and existing beat length; it is not automatic beat detection.
+
+Settings are nondestructive, saved in portable/autosaved projects and undoable. Playback, resampling and WAV export share the same processing. Warped Arrangement splits retain musical source position, and the waveform follows the beat mapping. Original audio is never rewritten. [Warp controls, implementation and limitations](docs/WARP.md).
 
 ## Record audio and find bass tones
 
@@ -12,7 +18,7 @@ Open **Record audio** (or **File → Record & Sample Lab**). Allow microphone ac
 
 Choose a take or a project sample. Zoom, pan/pinch, drag a selection or enter exact source frames. **Analyze bass** shows an estimated fundamental, MIDI note/cents, periodicity, RMS/peak and a 20 Hz–2 kHz spectrum. **Use as sampler** maps the selection to the keyboard with an editable root note; **Add audio clip** puts it in the selected track's next free slot. Both preserve the original and support Undo. Optional 2 ms edge fades prevent hard-cut clicks; fades default off for unchanged samples.
 
-Recordings and **Open audio from storage** use disk-backed reading, preview and waveform windows. Each take/import supports up to 1 GiB of audio, while only extracted samples enter the unchanged **512 MiB / 64 asset project budget**. Full multitrack playback still uses decoded RAM, and automatic tempo-following warp is still pending. [Recording controls, fidelity and storage details](docs/RECORDING.md).
+Recordings and **Open audio from storage** use disk-backed reading, preview and waveform windows. Each take/import supports up to 1 GiB of audio, while only extracted samples enter the unchanged **512 MiB / 64 asset project budget**. Full multitrack playback still uses decoded RAM, and its capacity limits remain unchanged. [Recording controls, fidelity and storage details](docs/RECORDING.md).
 
 ## Sampler, drum rack and resampling
 
@@ -44,7 +50,7 @@ Full workflow, command reference and limitations: [Astra Phase 5](docs/ASTRA.md)
 
 ## Install and make a track
 
-Install `AstraStudio_Phase8_0.8.0.apk` over Phase 1–7. The development signing certificate is unchanged. GitHub fallback: **Actions → Android Phase 8 → a successful run → AstraStudio-Phase8-APK**.
+Install `AstraStudio_Phase9_0.9.0.apk` over Phase 1–8. The development signing certificate is unchanged. GitHub fallback: **Actions → Android Phase 9 → a successful run → AstraStudio-Phase9-APK**.
 
 1. **File → Load starter song** opens Green circuit: original, editable MIDI drums, bass and lead, two scenes and a 16-bar arrangement. Save your current project first.
 2. Tap **Start audio**, then **Play**. Session Play launches Scene 1; Arrangement Play begins at the white cursor. Clip/scene launch buttons follow the selected bar, quarter-note or eighth-note quantization.
@@ -134,4 +140,4 @@ The debug key in `signing/astra-development.keystore` is deliberately public (`a
 - `docs/SYNTHESIS.md`: signal path, modulation units, memory/thread contract and DSP limits.
 - `docs/VALIDATION.md`: performed checks and remaining hardware validation.
 
-Phase 5 adds the validated command interface and optional Gemini listening. Phase 6 adds sample instruments, packs and resampling. Phase 7 adds tempo maps, independent offline pitch/time processing, improved sample-rate conversion and float export. Phase 8 adds microphone recording and the disk-backed Sample Lab. Automatic tempo-following warp, streamed multitrack playback, imported wavetables, full MIDI expression and the other workstation gaps remain tracked in [ROADMAP.md](docs/ROADMAP.md).
+Phase 5 adds the validated command interface and optional Gemini listening. Phase 6 adds sample instruments, packs and resampling. Phase 7 adds tempo maps, independent offline pitch/time processing, improved sample-rate conversion and float export. Phase 8 adds microphone recording and the disk-backed Sample Lab. Phase 9 adds source-tempo/downbeat warp with independent pitch. Streamed multitrack playback, imported wavetables, full MIDI expression and the other workstation gaps remain tracked in [ROADMAP.md](docs/ROADMAP.md).

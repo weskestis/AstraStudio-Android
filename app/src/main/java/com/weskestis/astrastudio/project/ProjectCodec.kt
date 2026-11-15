@@ -12,7 +12,7 @@ object ProjectCodec {
     fun encode(d: ProjectDocument): String {
         require(d.valid())
         val p=d.project
-        val root=JSONObject().put("format","astra-studio").put("version",3).put("name",p.name)
+        val root=JSONObject().put("format","astra-studio").put("version",4).put("name",p.name)
             .put("bpm",d.bpm.toDouble()).put("master",d.master.toDouble()).put("limiterDrive",d.limiterDrive.toDouble()).put("limiterRelease",d.limiterRelease.toDouble())
             .put("signature",array(listOf(p.numerator,p.denominator))).put("mode",p.mode).put("quantization",p.quantization)
             .put("tempoEnabled",p.tempoEnabled).put("tempoPoints",array(p.tempoPoints.map{array(listOf(it.beat,it.bpm,if(it.ramp)1 else 0))}))
@@ -22,6 +22,7 @@ object ProjectCodec {
             .put("instruments",array(p.instruments.map{array(listOf(it.mode)+it.sample.wire()+it.pads.flatMap{pad->pad.wire()})}))
             .put("assets",array(p.assets.map{JSONObject().put("id",it.id).put("name",it.name).put("file",it.file).put("rate",it.rate).put("frames",it.frames).put("waveform",array(it.waveform)).put("favorite",it.favorite).put("group",it.group)}))
             .put("clips",array(p.clips.map{c->JSONObject().put("slot",c.slot).put("name",c.name).put("length",c.length).put("asset",c.asset).put("first",c.first).put("last",c.last).put("root",c.root).put("minor",c.minor)
+                .put("warp",c.warp).put("sourceBpm",c.sourceBpm).put("warpStart",c.warpStart).put("pitch",c.pitch)
                 .put("notes",array(c.notes.map{array(listOf(it.id,it.beat,it.length,it.pitch,it.velocity))}))
                 .put("automation",array(c.automation.map{lane->array(lane.map{array(listOf(it.beat,it.value))})}))}))
             .put("regions",array(p.regions.map{array(listOf(it.id,it.slot,it.beat,it.length,it.offset,it.audioOffset))}))
@@ -34,12 +35,14 @@ object ProjectCodec {
     private fun JSONArray.frame(index: Int): Long {val v=getDouble(index);require(v.isFinite()&&v==kotlin.math.floor(v)&&v in 0.0..67108864.0);return v.toLong()}
     fun decode(text: String): ProjectDocument {
         require(text.toByteArray(Charsets.UTF_8).size<=MAX_JSON_BYTES){"Project description is too large."}
-        val r=JSONObject(text);require(r.getString("format")=="astra-studio"&&r.int("version") in 1..3){"Unsupported project format/version."}
+        val r=JSONObject(text);require(r.getString("format")=="astra-studio"&&r.int("version") in 1..4){"Unsupported project format/version."}
         val signature=r.getJSONArray("signature");require(signature.length()==2)
         val clips=r.getJSONArray("clips").let{a->a.items(128).map{i->val c=a.getJSONObject(i);val notes=c.getJSONArray("notes");val lanes=c.getJSONArray("automation");require(lanes.length()==4)
             Clip(c.int("slot"),c.getString("name"),c.getDouble("length"),notes.items(256).map{j->val n=notes.getJSONArray(j);require(n.length()==5);MidiNote(n.int(0),n.getDouble(1),n.getDouble(2),n.int(3),n.getDouble(4).toFloat())},
                 (0..3).map{lane->lanes.getJSONArray(lane).let{points->points.items(64).map{j->val p=points.getJSONArray(j);require(p.length()==2);AutoPoint(p.getDouble(0),p.getDouble(1).toFloat())}}},
-                c.int("asset"),c.frame("first"),c.frame("last"),c.int("root"),c.getBoolean("minor"))}}
+                c.int("asset"),c.frame("first"),c.frame("last"),c.int("root"),c.getBoolean("minor"),
+                if(r.int("version")>=4)c.getBoolean("warp")else false,if(r.int("version")>=4)c.getDouble("sourceBpm")else 120.0,
+                if(r.int("version")>=4)c.frame("warpStart")else 0,if(r.int("version")>=4)c.getDouble("pitch")else 0.0)}}
         val regions=r.getJSONArray("regions").let{a->a.items(512).map{i->val x=a.getJSONArray(i);require(x.length()==6);Region(x.int(0),x.int(1),x.getDouble(2),x.getDouble(3),x.getDouble(4),x.frame(5))}}
         val assets=r.getJSONArray("assets").let{a->a.items(64).map{i->val x=a.getJSONObject(i);val w=x.getJSONArray("waveform");require(w.length()==1024);AudioAsset(x.int("id"),x.getString("name"),x.getString("file"),x.int("rate"),x.frame("frames"),(0 until 1024).map{w.getDouble(it).toFloat()},x.optBoolean("favorite",false),x.optString("group","Imports"))}}
         val tracks=r.getJSONArray("tracks").let{a->require(a.length()==16);(0..15).map{i->val t=a.getJSONObject(i);TrackControls(t.getDouble("gain").toFloat(),t.getDouble("pan").toFloat(),t.getBoolean("mute"),t.getBoolean("solo"),t.getBoolean("armed"),t.getDouble("sendA").toFloat(),t.getDouble("sendB").toFloat(),t.getString("name"))}}

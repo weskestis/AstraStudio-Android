@@ -53,7 +53,7 @@ std::shared_ptr<const Sample> readSample(const char* path,std::size_t remainingB
 }
 bool Plan::decode(std::span<const double> data,const Samples& audio){
     if(data.size()>400000)return false;
-    Reader r{data};const int version=r.integer(1,3);
+    Reader r{data};const int version=r.integer(1,4);
     mode=r.integer(0,1);numerator=r.integer(1,12);denominator=r.integer(2,8);if(denominator!=2&&denominator!=4&&denominator!=8)return false;
     loop=r.integer(0,1)!=0;loopStart=r.get(0,65535);loopEnd=r.get(.0625,65536);if(loopEnd<=loopStart)return false;
     const int clipCount=r.integer(0,kClips),regionCount=r.integer(0,kMaxRegions);samples=audio;
@@ -101,6 +101,15 @@ bool Plan::decode(std::span<const double> data,const Samples& audio){
         for(int i=0;i<count;++i)tempo.points.push_back({r.get(0,65536),r.get(30,300),r.integer(0,1)!=0});
         if(!tempo.valid())return false;
     }
+    if(version>=4){const int count=r.integer(0,kClips);std::array<bool,kClips> seen{};
+        for(int i=0;i<count&&r.ok;++i){const int slot=r.integer(0,kClips-1);auto& c=clips[slot];
+            if(seen[slot]||!c.present||c.asset<0)return false;
+            seen[slot]=true;
+            c.warp=r.integer(0,1);c.sourceBpm=r.get(30,300);c.warpStart=r.frame();c.pitch=r.get(-24,24);
+            if(c.warpStart>=c.last-c.first)return false;
+            hash(c.hash,c.warp);hash(c.hash,c.sourceBpm);hash(c.hash,double(c.warpStart));hash(c.hash,c.pitch);
+        }
+    }
     return r.ok&&r.at==data.size();
 }
 std::unique_ptr<Plan> decodePlan(std::span<const double> data,const Samples& samples)noexcept{
@@ -108,11 +117,18 @@ std::unique_ptr<Plan> decodePlan(std::span<const double> data,const Samples& sam
 }
 double Plan::endBeat()const noexcept{double end=0;for(const auto& list:regions)if(!list.empty())end=std::max(end,list.back().start+list.back().length);return end;}
 uint32_t Sequencer::nextId()noexcept{if(++id_>=0x7ffffffeU)id_=kSequenceId;return id_;}
+bool Sequencer::prepare(double rate,const sampler::Kernel* kernel)noexcept{
+    rate_=rate;kernel_=kernel;
+    if(kernel)for(auto& warp:warps_)if(!warp.prepare(rate,kernel))return false;
+    return true;
+}
 void Sequencer::release(int track)noexcept{auto& t=tracks_[track];if(note_)for(auto& id:t.held)if(id){note_(owner_,track,0,0,id,false);id=0;}t.slot=t.region=-1;t.previous=-1;t.cursor=0;}
 void Sequencer::clearAutomation(int track)noexcept{auto& t=tracks_[track];for(int lane=0;lane<4;++lane)if(t.automated[lane]){t.automated[lane]=false;if(automation_)automation_(owner_,track,lane,0,false);}}
 void Sequencer::activate(const Plan* next)noexcept{
     for(int i=0;i<16;++i){auto& t=tracks_[i];if(!next||!plan_||next->mode!=plan_->mode||(next->mode==1&&next->regions[i]!=plan_->regions[i])||
-        (t.slot>=0&&(!next->clips[t.slot].present||next->clips[t.slot].hash!=t.hash))){release(i);clearAutomation(i);}}
+        (t.slot>=0&&(!next->clips[t.slot].present||next->clips[t.slot].hash!=t.hash||
+            (plan_->clips[t.slot].asset>=0&&next->samples[plan_->clips[t.slot].asset]!=plan_->samples[plan_->clips[t.slot].asset])||
+            (plan_->clips[t.slot].warp&&(next->tempo.enabled!=plan_->tempo.enabled||next->tempo.points!=plan_->tempo.points))))){release(i);clearAutomation(i);}}
     plan_=next;automationClock_=0;
 }
 void Sequencer::stop(bool clear)noexcept{for(int i=0;i<16;++i){release(i);clearAutomation(i);tracks_[i].phase=0;if(clear){tracks_[i].scene=-1;tracks_[i].queued=-2;}}
@@ -149,18 +165,23 @@ void Sequencer::tick(double beat,float bpm,std::array<fx::Stereo,16>& audio)noex
                 phase=std::fmod(std::max(0.0,beat-at->start+at->offset),c.length);audioOffset=static_cast<double>(at->audioOffset);
                 }}}
         if(slot<0){if(t.slot>=0)release(i);clearAutomation(i);t.phase=0;continue;}
-        const auto& c=plan_->clips[slot];bool entered=t.slot!=slot||t.region!=region||t.hash!=c.hash||phase+1e-8<t.previous;
+        const auto& c=plan_->clips[slot];bool entered=t.slot!=slot||t.region!=region||t.hash!=c.hash||phase+1e-8<t.previous||(c.warp&&t.warpBpm!=bpm);
+        const bool continueWarp=c.warp&&t.slot==slot&&t.hash==c.hash&&t.warpBpm==bpm&&region>=0&&t.region>=0&&
+            audioOffset==t.lastAudioOffset&&std::abs((phase-t.previous)-(beat-t.previousAbsolute))<1e-7;
         if(entered){if(c.asset>=0&&plan_->mode==1){const double cycleStart=beat-phase;elapsed=plan_->tempo.seconds(std::max(0.0,cycleStart),beat,bpm);if(cycleStart<0)elapsed+=-cycleStart*60/plan_->tempo.bpmAt(0,bpm);}
             enter(i,slot,region,phase,audioOffset,elapsed,bpm);}
         if(c.asset<0){while(t.cursor<c.events.size()&&c.events[t.cursor].beat<=phase+1e-10)event(i,c,c.events[t.cursor++]);}
-        else{const auto& sample=*plan_->samples[c.asset];if(kernel_)audio[i]=kernel_->read(sample.stereo.data(),t.audioPosition,c.first,c.last,t.audioBand,sample.rate==rate_);
+        else{const auto& sample=*plan_->samples[c.asset];if(c.warp&&kernel_){const auto* map=plan_->mode==1?&plan_->tempo:nullptr;
+                if(entered&&!continueWarp){warps_[i].start(c,sample,beat,phase,audioOffset,bpm,map);t.warpBpm=bpm;}
+                audio[i]=warps_[i].tick(sample,map);
+            }else if(kernel_)audio[i]=kernel_->read(sample.stereo.data(),t.audioPosition,c.first,c.last,t.audioBand,sample.rate==rate_);
             else {const auto at=static_cast<int64_t>(t.audioPosition);if(at>=c.first&&at<c.last)audio[i]={sample.stereo[at*2],sample.stereo[at*2+1]};}
             t.audioPosition+=sample.rate/rate_;}
         if(entered||automationClock_==0)for(int lane=0;lane<4;++lane){const auto& points=c.lanes[lane];const bool enabled=!points.empty();float value=0;
             if(enabled){auto at=std::upper_bound(points.begin(),points.end(),phase,[](double b,const Point& p){return b<p.beat;});
                 if(at==points.begin())value=at->value;else if(at==points.end())value=points.back().value;else{const auto& a=*(at-1);value=a.value+static_cast<float>((phase-a.beat)/(at->beat-a.beat))*(at->value-a.value);}}
             if(enabled!=t.automated[lane]||(enabled&&value!=t.automation[lane])){t.automated[lane]=enabled;t.automation[lane]=value;if(automation_)automation_(owner_,i,lane,value,enabled);}}
-        t.previous=phase;t.phase=static_cast<float>(phase/c.length);
+        t.previous=phase;t.previousAbsolute=beat;t.lastAudioOffset=audioOffset;t.phase=static_cast<float>(phase/c.length);
     }automationClock_=(automationClock_+1)&31;
 }
 Snapshot Sequencer::snapshot()const noexcept{Snapshot s;s.mode=plan_?plan_->mode:0;for(int i=0;i<16;++i){s.active[i]=tracks_[i].slot;s.queued[i]=tracks_[i].queued;s.phase[i]=tracks_[i].phase;}return s;}

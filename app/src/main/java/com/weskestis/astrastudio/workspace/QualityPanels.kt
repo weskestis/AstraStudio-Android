@@ -25,7 +25,7 @@ import kotlin.math.*
     Text("TEMPO / SHAPE THE ARRANGEMENT",color=Green,fontWeight=FontWeight.Bold)
     Text("Add a point for a sudden tempo change. Ramp to next gradually reaches the following point's BPM. Positions use quarter-note beats starting at 0.",fontSize=12.sp,color=Muted)
     FilterChip(p.tempoEnabled,{service.projectEdit{it.copy(tempoEnabled=!it.tempoEnabled,tempoPoints=it.tempoPoints.ifEmpty{listOf(TempoPoint(0.0,s.bpm))})}},label={Text("Arrangement tempo map")},modifier=Modifier.testTag("Tempo map enabled"))
-    Text("Session uses ${number(s.bpm.toDouble())} BPM. The enabled map controls Arrangement playback and export. Audio clips keep their original speed; use Stretch for a new fixed-duration version.",fontSize=12.sp,color=Muted)
+    Text("Session uses ${number(s.bpm.toDouble())} BPM. The enabled map controls Arrangement playback and export. Enable Warp on an audio clip to follow tempo changes while preserving pitch. Unwarped clips retain their original speed.",fontSize=12.sp,color=Muted)
     if(p.tempoPoints.isNotEmpty())Canvas(Modifier.fillMaxWidth().height(120.dp).padding(vertical=12.dp).background(Color.Black).testTag("Tempo curve")){
         val end=max(16.0,p.tempoPoints.last().beat);fun xy(x: Double,y: Double)=Offset((x/end*size.width).toFloat(),(size.height*(1-(y-30)/270)).toFloat())
         p.tempoPoints.forEachIndexed{i,a->val b=p.tempoPoints.getOrNull(i+1)

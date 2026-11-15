@@ -1,3 +1,9 @@
+# Phase 9 validation in progress
+
+Development **0.9.0-phase9 / versionCode 9**, Android 14+. Local unit tests, assembly and lint are passing; final CI results and the verified APK identity will be recorded after the Android interface run. Phase 8 remains the previous delivered reference below. Phase 9 adds bounded tempo-following audio; see [warp implementation and limits](WARP.md).
+
+---
+
 # Phase 8 validation
 
 Development **0.8.0-phase8 / versionCode 8**, Android 14+.

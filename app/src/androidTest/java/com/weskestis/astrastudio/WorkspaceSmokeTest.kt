@@ -47,6 +47,49 @@ class WorkspaceSmokeTest {
         values.clear();values.put(android.provider.MediaStore.Images.Media.IS_PENDING,0);resolver.update(uri,values,null,null)
     }
     private fun click(tag: String){val node=compose.onNodeWithTag(tag);runCatching{node.performScrollTo()};node.assertIsDisplayed().performClick()}
+    @Test fun warpControlsUndoRotationArchiveAndNativeExport(){
+        compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
+        click("File");click("New project");click("Confirm project")
+        compose.waitUntil(10000){compose.onAllNodesWithTag("Empty 0").fetchSemanticsNodes().isNotEmpty()}
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val binding=ServiceTestRule();val service=(binding.bindService(Intent(context,AudioService::class.java)) as AudioService.LocalBinder).service
+        val source=File(context.cacheDir,"Warp_220Hz.wav");val archive=File(context.cacheDir,"warped.astra");val output=File(context.cacheDir,"warped.wav")
+        val samples=FloatArray(48000*4){(.4*kotlin.math.sin(2*Math.PI*220*it/48000)).toFloat()}
+        FloatWaveWriter(source,48000,1).use{it.write(samples,samples.size)}
+        try{
+            service.importAudio(Uri.fromFile(source),0)
+            compose.waitUntil(20000){service.state.value.project.clip(0)!=null&&!service.state.value.busy}
+            click("Warp");click("Warp enabled")
+            compose.onNodeWithTag("Warp source BPM").performScrollTo().performTextReplacement("120")
+            compose.onNodeWithTag("Warp downbeat").performScrollTo().performTextReplacement("24000")
+            compose.onNodeWithTag("Warp pitch").performScrollTo().performTextReplacement("7")
+            click("Apply warp")
+            compose.waitUntil(10000){service.state.value.project.clip(0)?.warp==true}
+            compose.onNodeWithTag("Warp enabled").performScrollTo().assertIsSelected();shot("19-warp-phone")
+            compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
+            compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
+            compose.onNodeWithTag("Warp downbeat").performScrollTo().assertTextContains("24000",substring=true)
+            compose.onNodeWithTag("Warp pitch").performScrollTo().assertTextContains("7",substring=true);shot("20-warp-landscape")
+            compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_PORTRAIT}
+            compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_PORTRAIT}
+            back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
+            click("Undo");compose.waitUntil(10000){service.state.value.project.clip(0)?.warp==false}
+            click("Redo");compose.waitUntil(10000){service.state.value.project.clip(0)?.warp==true}
+            val state=service.state.value;val c=state.project.clip(0)!!
+            assertEquals(24000L,c.warpStart);assertEquals(7.0,c.pitch,0.0)
+            val p=state.project.put(c.copy(length=4.0)).copy(mode=1,tempoEnabled=true,tempoPoints=listOf(TempoPoint(0.0,120f,true),TempoPoint(2.0,90f))).place(0,0.0)
+            val document=ProjectDocument(p,state.bpm,state.master,state.limiterDrive,state.limiterRelease,state.tracks,state.patches,state.effects)
+            val files=ProjectFiles(context);files.saveArchive(document,Uri.fromFile(archive),AtomicBoolean(false))
+            val restored=files.openArchive(Uri.fromFile(archive),AtomicBoolean(false));assertEquals(document,restored)
+            val bridge=AudioBridge()
+            try{assertTrue(bridge.loadAssets(restored.project.assets.map{it.id to files.audioFile(it)}));assertTrue(bridge.project(restored.project))
+                assertEquals(0,bridge.export(output,restored,48000,0f,true))
+                val expected=kotlin.math.ceil(p.timelineSeconds(0.0,4.0,state.bpm)*48000).toLong()
+                WaveFile(output).use{assertEquals(expected,it.frames);val read=FloatArray(96000);val count=it.read(12000,48000,read);assertTrue(count>0);assertTrue(read.any{kotlin.math.abs(it)>.01f})}
+                assertTrue(files.audioFile(restored.project.assets.single()).exists())
+            }finally{bridge.close()}
+        }finally{binding.unbindService();listOf(source,archive,output).forEach{it.delete()}}
+    }
     @Test fun recordingLabZoomPitchExtractionAndNavigation(){
         compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
         click("File");click("New project");click("Confirm project")

@@ -63,7 +63,7 @@ internal fun DrawScope.clipPreview(c: Clip,p: Project,origin: Offset,area: Size,
         if(c.isAudio){val a=p.asset(c.asset)?:return@clipRect
             val first=c.first.toDouble()/a.frames;val last=c.last.toDouble()/a.frames
             val steps=area.width.toInt().coerceIn(1,512)
-            for(x in 0 until steps){val position=if(audioOffset==null)first+(last-first)*x/steps else (c.first+audioOffset+(if(regionBeat!=null&&p.tempoEnabled){val now=regionBeat+length*x/steps;val phase=(offset+length*x/steps)%c.length;val begin=now-phase;p.timelineSeconds(max(0.0,begin),now,bpm)+if(begin<0)-begin*60/TempoMap.bpmAt(p.tempoPoints,0.0,bpm)else 0.0}else ((offset+length*x/steps)%c.length)*60/bpm)*a.rate)/a.frames
+            for(x in 0 until steps){val position=if(c.warp)WarpSettings.sourceFrame(c,a,(offset+length*x/steps)%c.length,audioOffset?:0)/a.frames else if(audioOffset==null)first+(last-first)*x/steps else (c.first+audioOffset+(if(regionBeat!=null&&p.tempoEnabled){val now=regionBeat+length*x/steps;val phase=(offset+length*x/steps)%c.length;val begin=now-phase;p.timelineSeconds(max(0.0,begin),now,bpm)+if(begin<0)-begin*60/TempoMap.bpmAt(p.tempoPoints,0.0,bpm)else 0.0}else ((offset+length*x/steps)%c.length)*60/bpm)*a.rate)/a.frames
                 if(position<first||position>=last)continue
                 val bin=(position*512).toInt().coerceIn(0,511)
                 drawLine(color,Offset(origin.x+x*area.width/steps,origin.y+area.height*(.5f-a.waveform[bin*2].coerceIn(-1f,1f)*.45f)),Offset(origin.x+x*area.width/steps,origin.y+area.height*(.5f-a.waveform[bin*2+1].coerceIn(-1f,1f)*.45f)),max(1f,area.width/steps))}
@@ -161,7 +161,7 @@ internal fun DrawScope.clipPreview(c: Clip,p: Project,origin: Offset,area: Size,
     var frame by remember(r.id){mutableStateOf(((r.length*60/bpm*(a?.rate?:48000))/2).roundToLong().toString())}
     AlertDialog(onDismissRequest=close,title={Text("Arrangement region")},text={Column(Modifier.verticalScroll(rememberScrollState())){
         Text(c.name,color=Green);NumberField("Start beat · 0-based",at,{at=it});NumberField("Length in beats",length,{length=it})
-        if(a!=null){Text("Split at a source-sample offset from this region's start (${a.rate} Hz).",fontSize=12.sp);NumberField("Sample offset",frame,{frame=it});Action("Split at sample",frame.toLongOrNull()?.let{it>0}==true){service.projectEdit{it.splitRegion(r.id,TempoMap.advance(if(it.tempoEnabled)it.tempoPoints else emptyList(),r.beat,frame.toLong().toDouble()/a.rate,bpm),bpm)};close()}}
+        if(a!=null){Text("Split at a source-sample offset from this region's start (${a.rate} Hz).",fontSize=12.sp);NumberField("Sample offset",frame,{frame=it});Action("Split at sample",frame.toLongOrNull()?.let{it>0}==true){service.projectEdit{it.splitRegion(r.id,if(c.warp)r.beat+frame.toLong().toDouble()/a.rate*c.sourceBpm/60 else TempoMap.advance(if(it.tempoEnabled)it.tempoPoints else emptyList(),r.beat,frame.toLong().toDouble()/a.rate,bpm),bpm)};close()}}
         Action("Delete region"){service.projectEdit{it.copy(regions=it.regions.filter{v->v.id!=r.id})};close()}
     }},confirmButton={TextButton({service.projectEdit{it.editRegion(r.id,at.toDouble(),length.toDouble())};close()},enabled=at.toDoubleOrNull()?.isFinite()==true&&length.toDoubleOrNull()?.let{it.isFinite()&&it>0}==true){Text("Apply")}},dismissButton={TextButton(close){Text("Cancel")}})
 }

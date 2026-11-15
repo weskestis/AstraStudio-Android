@@ -2,6 +2,7 @@
 #include "fx/FxPrimitives.h"
 #include "sampler/Sampler.h"
 #include "TempoMap.h"
+#include "WarpVoice.h"
 #include <atomic>
 #include <span>
 #include <string>
@@ -18,6 +19,7 @@ struct Event {double beat{};int note{};bool on{};};
 struct Point {double beat{};float value{};};
 struct Clip {
     bool present{};double length{4};int asset{-1};int64_t first{},last{};uint64_t hash{};
+    bool warp{};double sourceBpm{120},pitch{};int64_t warpStart{};
     std::vector<Note> notes;std::vector<Event> events;std::array<std::vector<Point>,4> lanes;
 };
 struct Region {int id{},slot{};double start{},length{},offset{};int64_t audioOffset{};bool operator==(const Region&)const=default;};
@@ -38,7 +40,7 @@ public:
     using NoteFn=void(*)(void*,int,int,float,uint32_t,bool) noexcept;
     using AutoFn=void(*)(void*,int,int,float,bool) noexcept;
     void bind(void* owner,NoteFn note,AutoFn automation)noexcept{owner_=owner;note_=note;automation_=automation;}
-    void prepare(double rate,const sampler::Kernel* kernel=nullptr)noexcept{rate_=rate;kernel_=kernel;}
+    bool prepare(double rate,const sampler::Kernel* kernel=nullptr)noexcept;
     void activate(const Plan* next)noexcept;
     void stop(bool clearLaunches=false)noexcept;
     void rewind()noexcept{stop();for(auto& t:tracks_){t.launchBeat=0;t.queued=-2;}}
@@ -51,13 +53,14 @@ public:
     Snapshot snapshot()const noexcept;
 private:
     struct Track {int scene{-1},queued{-2};double launchBeat{},due{},previous{-1};int slot{-1},region{-1};uint64_t hash{};
-        std::size_t cursor{};std::array<uint32_t,kMaxNotes> held{};double audioPosition{};int audioBand{};float phase{};
+        std::size_t cursor{};std::array<uint32_t,kMaxNotes> held{};double audioPosition{},warpBpm{},previousAbsolute{},lastAudioOffset{};int audioBand{};float phase{};
         std::array<float,4> automation{};std::array<bool,4> automated{};};
     void release(int track)noexcept;void clearAutomation(int track)noexcept;
     void enter(int track,int slot,int region,double phase,double audioOffset,double elapsed,float bpm)noexcept;
     void event(int track,const Clip& clip,const Event& e)noexcept;
     uint32_t nextId()noexcept;
     const sampler::Kernel* kernel_{};const Plan* plan_{};std::array<Track,16> tracks_{};double rate_{48000},previousBeat_{-1};uint32_t id_{kSequenceId};int automationClock_{};
+    std::array<WarpVoice,16> warps_;
     void* owner_{};NoteFn note_{};AutoFn automation_{};
 };
 } // namespace astra::project

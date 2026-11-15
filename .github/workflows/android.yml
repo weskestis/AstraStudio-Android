@@ -1,4 +1,4 @@
-name: Android Phase 8
+name: Android Phase 9
 on:
   push:
     branches: [main]
@@ -50,14 +50,14 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: AstraStudio-Phase8-APK
+          name: AstraStudio-Phase9-APK
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Phase8-test-reports
+          name: Phase9-test-reports
           path: |
             app/build/reports/tests/
             app/build/reports/lint-results-debug.html
@@ -100,7 +100,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Phase8-interface-validation
+          name: Phase9-interface-validation
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
