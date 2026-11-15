@@ -25,7 +25,23 @@ class WorkspaceSmokeTest {
     @get:Rule val compose=createAndroidComposeRule<MainActivity>()
     @get:Rule val notifications=GrantPermissionRule.grant(android.Manifest.permission.POST_NOTIFICATIONS)
     @After fun captureFinalState(){runCatching{shot("99-last-screen")};runCatching{compose.onAllNodes(isRoot())[0].printToLog("ASTRA_UI_TEST")}}
-    private fun shot(name: String){val context=InstrumentationRegistry.getInstrumentation().targetContext;val dir=File(context.filesDir,"screenshots").also{it.mkdirs()};compose.onAllNodes(isRoot())[compose.onAllNodes(isRoot()).fetchSemanticsNodes().lastIndex].captureToImage().asAndroidBitmap().let{bitmap->File(dir,"$name.png").outputStream().use{bitmap.compress(Bitmap.CompressFormat.PNG,100,it)}}}
+    private fun shot(name: String) {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val roots=compose.onAllNodes(isRoot())
+        val bitmap=roots[roots.fetchSemanticsNodes().lastIndex].captureToImage().asAndroidBitmap()
+        // UTP uninstalls the app after the test, removing its private directory.
+        // MediaStore output survives that cleanup and is collected from the emulator.
+        val values=android.content.ContentValues().apply {
+            put(android.provider.MediaStore.Images.Media.DISPLAY_NAME,"$name.png")
+            put(android.provider.MediaStore.Images.Media.MIME_TYPE,"image/png")
+            put(android.provider.MediaStore.Images.Media.RELATIVE_PATH,"Pictures/AstraStudio")
+            put(android.provider.MediaStore.Images.Media.IS_PENDING,1)
+        }
+        val resolver=context.contentResolver
+        val uri=requireNotNull(resolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,values))
+        requireNotNull(resolver.openOutputStream(uri)).use { bitmap.compress(Bitmap.CompressFormat.PNG,100,it) }
+        values.clear();values.put(android.provider.MediaStore.Images.Media.IS_PENDING,0);resolver.update(uri,values,null,null)
+    }
     private fun click(tag: String){val node=compose.onNodeWithTag(tag);runCatching{node.performScrollTo()};node.performClick()}
     @Test fun createEditUndoArrangeAndRotate(){
         compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
