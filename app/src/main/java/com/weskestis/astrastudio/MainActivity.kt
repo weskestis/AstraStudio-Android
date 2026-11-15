@@ -12,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -51,9 +52,10 @@ class MainActivity : ComponentActivity() {
                 onBackground=Color(0xFFE7F5E9),onSurface=Color(0xFFE7F5E9),surfaceVariant=Color(0xFF102016),
                 onSurfaceVariant=Color(0xFFA2BAA7),surfaceTint=Color(0xFF55F27A),outline=Color(0xFF487052),outlineVariant=Color(0xFF26472E))) {
                 Surface(Modifier.fillMaxSize(),color=MaterialTheme.colorScheme.background) {
+                    val workspaceState=rememberSaveableStateHolder()
                     val service=audioService
                     if(service==null) Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center){Text("Opening Astra Studio…")}
-                    else {
+                    else workspaceState.SaveableStateProvider("studio") {
                         val state by service.state.collectAsStateWithLifecycle()
                         LaunchedEffect(pendingUri,state.ready,state.busy) {
                             val uri=pendingUri

@@ -4,13 +4,14 @@ import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import android.net.Uri
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
 import com.weskestis.astrastudio.audio.AudioBridge
 import com.weskestis.astrastudio.project.*
 import com.weskestis.astrastudio.synth.SynthSchema
+import com.weskestis.astrastudio.astra.*
+import com.weskestis.astrastudio.astra.AstraCommands.command as cmd
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -27,8 +28,7 @@ class WorkspaceSmokeTest {
     @After fun captureFinalState(){runCatching{shot("99-last-screen")};runCatching{compose.onAllNodes(isRoot())[0].printToLog("ASTRA_UI_TEST")}}
     private fun shot(name: String) {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
-        val roots=compose.onAllNodes(isRoot())
-        val bitmap=roots[roots.fetchSemanticsNodes().lastIndex].captureToImage().asAndroidBitmap()
+        val bitmap=requireNotNull(InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot())
         // UTP uninstalls the app after the test, removing its private directory.
         // MediaStore output survives that cleanup and is collected from the emulator.
         val values=android.content.ContentValues().apply {
@@ -94,6 +94,53 @@ class WorkspaceSmokeTest {
             assertEquals(audioDoc.project.clips,reopened.project.clips);assertTrue(io.audioFile(reopened.project.assets.single()).readBytes().contentEquals(imported.second.readBytes()))
             val autosave=ProjectFiles(context);autosave.save(d);assertEquals(d,autosave.load())
             archive.delete();wave.delete();imported.second.delete();reopened.project.assets.forEach{io.audioFile(it).delete()}
+        }finally{bridge.close()}
+    }
+    @Test fun astraPreviewApplyUndoAndRejectStale(){
+        compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
+        click("Astra")
+        compose.onNodeWithTag("Astra prompt").performScrollTo().performTextReplacement("Create a rolling 138 BPM Psytrance bassline in F minor on track 6")
+        click("Astra offline")
+        compose.waitUntil(15000){compose.onAllNodesWithTag("Astra apply").fetchSemanticsNodes().isNotEmpty()}
+        compose.onNodeWithTag("Astra apply").performScrollTo().assertIsEnabled()
+        shot("05-astra-preview")
+        click("Astra apply")
+        compose.waitUntil(10000){compose.onAllNodes(hasTestTag("Astra status") and hasText("Applied. One Undo restores the whole proposal.")).fetchSemanticsNodes().isNotEmpty()}
+        click("Astra undo")
+        click("Astra offline")
+        compose.waitUntil(10000){compose.onAllNodes(hasTestTag("Astra apply") and isEnabled()).fetchSemanticsNodes().isNotEmpty()}
+        click("Close panel");click("Redo");click("Astra")
+        compose.onNodeWithTag("Astra stale").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("Astra apply").assertIsNotEnabled()
+        click("Astra dismiss")
+        click("Astra settings")
+        compose.onNodeWithTag("Astra key status").performScrollTo().assertTextContains("No key saved",substring=true)
+        shot("06-astra-settings")
+        click("Astra settings")
+        compose.onNodeWithTag("Astra prompt").performScrollTo().performTextReplacement("Listen to the bass")
+        click("Astra Gemini")
+        compose.waitUntil(10000){compose.onAllNodes(hasTestTag("Astra status") and hasText("Open Gemini settings and add your Google AI Studio free-tier key first.")).fetchSemanticsNodes().isNotEmpty()}
+        click("Close panel")
+    }
+    @Test fun astraNativeExportAndEncryptedCredential(){
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val store=GeminiKeyStore(context)
+        // A deliberately invalid provider credential fixture; no network call is made.
+        val fixture="astra-test-credential-0123456789"
+        try{store.save(fixture);assertTrue(store.present());assertEquals(fixture,GeminiKeyStore(context).read());assertFalse(File(context.noBackupFilesDir,"astra-gemini-key").readText().contains(fixture))}finally{store.clear()}
+        assertFalse(store.present())
+        val bridge=AudioBridge()
+        try{
+            val presets=SynthSchema.presets.indices.map(bridge::preset)
+            val base=StarterProject.create(presets).let{it.copy(project=Project(),patches=List(16){presets[0]})}
+            val json=AstraCommands.envelope("Native command render",listOf(cmd("tempo","bpm" to 145),cmd("preset","track" to 1,"preset" to "FM Alloy"),cmd("pattern","track" to 1,"scene" to 1,"style" to "riddim","root" to "F","bars" to 1),cmd("place","track" to 1,"scene" to 1,"beat" to 0)))
+            val result=AstraCommands.compile(json,base,presets)
+            val wave=File(context.cacheDir,"astra-command-render.wav")
+            try{assertEquals(0,bridge.export(wave,result.document,48000,.1f));val bytes=wave.readBytes();assertTrue(bytes.size>100000)
+                var peak=0
+                for(i in 44 until bytes.size-2 step 3){var sample=(bytes[i].toInt() and 255) or ((bytes[i+1].toInt() and 255) shl 8) or ((bytes[i+2].toInt() and 255) shl 16);if(sample and 0x800000!=0)sample-=0x1000000;peak=maxOf(peak,kotlin.math.abs(sample))}
+                assertTrue("Rendered signal must exceed the dither floor",peak>10000)
+            }finally{wave.delete()}
         }finally{bridge.close()}
     }
 }

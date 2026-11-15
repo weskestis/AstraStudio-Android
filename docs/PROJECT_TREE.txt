@@ -1,4 +1,4 @@
-Astra Studio Phase 4 — complete source inventory
+Astra Studio Phase 5 — complete source inventory
 
 .github/workflows/android.yml
 .gitignore
@@ -50,6 +50,13 @@ app/src/main/cpp/tests/ProjectTests.cpp
 app/src/main/cpp/tests/RenderPresets.cpp
 app/src/main/cpp/tests/SynthTests.cpp
 app/src/main/java/com/weskestis/astrastudio/MainActivity.kt
+app/src/main/java/com/weskestis/astrastudio/astra/AstraCommands.kt
+app/src/main/java/com/weskestis/astrastudio/astra/AstraPanel.kt
+app/src/main/java/com/weskestis/astrastudio/astra/GeminiClient.kt
+app/src/main/java/com/weskestis/astrastudio/astra/GeminiProtocol.kt
+app/src/main/java/com/weskestis/astrastudio/astra/OfflineCommands.kt
+app/src/main/java/com/weskestis/astrastudio/astra/PatternGenerator.kt
+app/src/main/java/com/weskestis/astrastudio/astra/StrictJson.kt
 app/src/main/java/com/weskestis/astrastudio/audio/AudioBridge.kt
 app/src/main/java/com/weskestis/astrastudio/audio/AudioService.kt
 app/src/main/java/com/weskestis/astrastudio/fx/EqResponse.kt
@@ -71,12 +78,14 @@ app/src/main/java/com/weskestis/astrastudio/workspace/TimelineViews.kt
 app/src/main/res/drawable/ic_astra.xml
 app/src/main/res/values/strings.xml
 app/src/main/res/values/themes.xml
+app/src/test/java/com/weskestis/astrastudio/astra/AstraTests.kt
 app/src/test/java/com/weskestis/astrastudio/fx/FxConfigTest.kt
 app/src/test/java/com/weskestis/astrastudio/midi/MidiDecoderTest.kt
 app/src/test/java/com/weskestis/astrastudio/project/ProjectTests.kt
 app/src/test/java/com/weskestis/astrastudio/synth/SynthPatchTest.kt
 build.gradle.kts
 docs/ARCHITECTURE.md
+docs/ASTRA.md
 docs/EFFECTS.md
 docs/PROJECT_TREE.txt
 docs/SYNTHESIS.md

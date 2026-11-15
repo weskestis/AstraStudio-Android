@@ -1,10 +1,22 @@
-# Astra Studio — Phase 4
+# Astra Studio — Phase 5
 
-Android 14+ native music workstation, built for **Sony Xperia 1 IV** first. Package `com.weskestis.astrastudio`, version **0.4.0-phase4**, green and black throughout. This is a development DAW, with implemented editing/playback features and explicit limits below; it is not yet a production-certified replacement for a desktop workstation.
+Android 14+ native music workstation, built for **Sony Xperia 1 IV** first. Package `com.weskestis.astrastudio`, version **0.5.0-phase5**, green and black throughout. This is a development DAW, with implemented editing/playback features and explicit limits below; it is not yet a production-certified replacement for a desktop workstation.
+
+## Astra commands and Gemini listening
+
+Tap **Astra** beside File. Type a request or use **Speak**; choose **Offline preview** for the supported examples, or **Ask Gemini** for flexible language and listening feedback. Every edit is previewed and applied as one Undo step. Occupied clips require explicit replacement, and a preview is rejected if the project changed meanwhile.
+
+- Offline examples generate riddim/psytrance/trance/house phrases, load patches, map LFOs and route sidechains without an account.
+- **Ask Gemini** uses your own Google AI Studio key, saved encrypted on the phone. The default `gemini-3.5-flash-lite` supports audio and has a free tier subject to Google's quotas and availability. Use a project without Cloud Billing to stay on the free tier; Astra cannot inspect your billing tier or prevent charges on a paid project. No shared key is included in this public repository or APK.
+- **Attach audio** adds a local file up to 8 MiB; it is sent to Google only when you choose Ask Gemini. MP3 is practical for longer songs. This listening attachment limit is separate from the DAW's 512 MiB decoded-audio project budget. There is no automatic live-engine listening.
+- **Copy for Gemini** lets you paste a prepared prompt into the Gemini app/website, attach audio there yourself, then paste its response into **Command JSON → Validate JSON**. This manual route needs no API key in Astra.
+- Google says free-tier submissions may be used to improve its products. Requests include your text, selected clip notes, track/patch names and mix summary, plus any attached audio. Audio files, API keys and network chat are not stored in `.astra` projects.
+
+Full workflow, command reference and limitations: [Astra Phase 5](docs/ASTRA.md). Live Gemini requests and Sony voice/audio hardware have not been tested here because no user Google key or physical phone is available.
 
 ## Install and make a track
 
-Install `AstraStudio_Phase4_0.4.0.apk` over Phase 1, 2 or 3. The development signing certificate is unchanged. GitHub fallback: **Actions → Android Phase 4 → a successful run → AstraStudio-Phase4-APK**.
+Install `AstraStudio_Phase5_0.5.0.apk` over Phase 1, 2, 3 or 4. The development signing certificate is unchanged. GitHub fallback: **Actions → Android Phase 5 → a successful run → AstraStudio-Phase5-APK**.
 
 1. **File → Load starter song** opens Green circuit: original, editable MIDI drums, bass and lead, two scenes and a 16-bar arrangement. Save your current project first.
 2. Tap **Start audio**, then **Play**. Session Play launches Scene 1; Arrangement Play begins at the white cursor. Clip/scene launch buttons follow the selected bar, quarter-note or eighth-note quantization.
@@ -74,6 +86,7 @@ The debug key in `signing/astra-development.keystore` is deliberately public (`a
 
 ## Source map
 
+- `app/src/main/java/com/weskestis/astrastudio/astra/`: command compiler, phrase algorithms, Gemini protocol/client, encrypted key storage and green/black command panel.
 - `app/src/main/cpp/project/`: validated immutable clip plans, sample playback, native sequencer and offline WAV renderer.
 - `app/src/main/java/com/weskestis/astrastudio/workspace/`: Session, Arrangement, piano roll, automation, audio trim, keyboard and device chain.
 - `app/src/main/java/com/weskestis/astrastudio/project/`: model, Undo/Redo, original starter song, JSON persistence and portable audio archives.
@@ -93,4 +106,4 @@ The debug key in `signing/astra-development.keystore` is deliberately public (`a
 - `docs/SYNTHESIS.md`: signal path, modulation units, memory/thread contract and DSP limits.
 - `docs/VALIDATION.md`: performed checks and remaining hardware validation.
 
-Phase 4 ends here. **Phase 5 is Astra's validated JSON command interface.** Advanced warping/time stretching, sampler/drum rack, microphone recording, importable wavetables, tempo-map editing, full MIDI expression and production certification remain future work.
+Phase 5 adds a working validated command interface, offline phrase commands, Gemini REST integration and explicit audio attachments. Advanced warping/time stretching, sampler/drum rack, microphone recording, importable wavetables, tempo-map editing, full MIDI expression and production certification remain future work.

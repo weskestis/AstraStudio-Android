@@ -17,6 +17,7 @@ import com.weskestis.astrastudio.audio.*
 import com.weskestis.astrastudio.fx.*
 import com.weskestis.astrastudio.synth.SynthEditor
 import com.weskestis.astrastudio.project.*
+import com.weskestis.astrastudio.astra.AstraPanel
 import java.util.Locale
 
 internal val Green=Color(0xFF55F27A)
@@ -52,6 +53,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,
     Column(Modifier.fillMaxSize().safeDrawingPadding().testTag("workspace")) {
         Row(Modifier.fillMaxWidth().padding(horizontal=12.dp).height(48.dp),verticalAlignment=Alignment.CenterVertically) {
             Column(Modifier.weight(1f)){Text("ASTRA / STUDIO",color=Green,fontSize=16.sp,fontWeight=FontWeight.Bold,letterSpacing=1.5.sp);Text(state.project.name,maxLines=1,overflow=TextOverflow.Ellipsis,color=Muted,fontSize=11.sp)}
+            TextButton({sheet="astra"},enabled=state.ready,modifier=Modifier.testTag("Astra")){Text("Astra")}
             Box {TextButton({fileMenu=true},enabled=state.ready&&!state.busy,modifier=Modifier.testTag("File")){Text("File")}
                 DropdownMenu(fileMenu,{fileMenu=false}){
                     fun act(action: ()->Unit){fileMenu=false;action()}
@@ -116,6 +118,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,
         Column(Modifier.fillMaxWidth().fillMaxHeight(.94f).verticalScroll(rememberScrollState()).padding(horizontal=12.dp)){
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text(when(sheet){"clip"->"CLIP / ${state.project.clip(slot)?.name?:"New MIDI"}";"keys"->"KEYBOARD / ${trackName(state,track)}";else->"${sheet.uppercase()} / ${trackName(state,track)}"},Modifier.weight(1f),color=Green,fontWeight=FontWeight.Bold,fontSize=13.sp);TextButton({service.releaseTouchNotes();sheet=""},Modifier.testTag("Close panel")){Text("Close ×")}}
             when(sheet){
+                "astra"->AstraPanel(state,service,slot)
                 "clip"->state.project.clip(slot)?.let{ClipEditor(it,state,service)}?:Text("Creating clip…")
                 "synth"->SynthEditor(track,state.patches[track],service,state.stats.running)
                 "effects"->FxEditor(track,state,service,fxUnit)
@@ -201,4 +204,4 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,
         }
     },confirmButton={TextButton({apply(rate,tail.toFloat())},enabled=p.regions.isNotEmpty()&&tail.toFloatOrNull()?.let{it in 0f..30f}==true){Text("Export")}},dismissButton={TextButton(close){Text("Cancel")}})
 }
-@Composable private fun HelpPanel(){Text("1. Start audio. Use File → Load starter song to explore a working session, or tap an empty Session slot to write a MIDI clip.\n\n2. Tap ▶ on clips or scenes to launch at the chosen quantization. Tap a clip body to select it; Edit clip opens its piano roll, velocity and automation lanes.\n\n3. Open Keys to play. Record MIDI writes the keyboard or USB controller into the selected clip after its launch boundary. Overdub adds notes; turn it off to replace the take.\n\n4. Select a clip, switch to Arrangement, tap the ruler for a cursor, then Place clip. Drag regions horizontally to move them. Split and duplicate build the song. Open Region for exact beat lengths or sample positions.\n\n5. The bottom rack opens synths and effects for the selected track. Mixer has volume, pan, arm, mute, solo and two effect sends.\n\n6. File → Import audio accepts WAV and formats supported by Android. Audio keeps its original pitch and speed; it is not time-stretched. You can trim and split at source-sample boundaries.\n\n7. Work autosaves locally. Save portable project carries all audio, notes, automation and sound settings to a .astra file. Export arrangement creates a 24-bit WAV.\n\nLimits: 16 tracks, 8 scenes, 256 notes per clip, 512 arrangement regions, 64 audio assets and 512 MiB of decoded stereo audio. This phase records MIDI, not microphone audio. Astra commands and advanced warping are still later work.",fontSize=14.sp,lineHeight=21.sp)}
+@Composable private fun HelpPanel(){Text("1. Start audio. Use File → Load starter song to explore a working session, or tap an empty Session slot to write a MIDI clip.\n\n2. Tap ▶ on clips or scenes to launch at the chosen quantization. Tap a clip body to select it; Edit clip opens its piano roll, velocity and automation lanes.\n\n3. Open Keys to play. Record MIDI writes the keyboard or USB controller into the selected clip after its launch boundary. Overdub adds notes; turn it off to replace the take.\n\n4. Select a clip, switch to Arrangement, tap the ruler for a cursor, then Place clip. Drag regions horizontally to move them. Split and duplicate build the song. Open Region for exact beat lengths or sample positions.\n\n5. The bottom rack opens synths and effects for the selected track. Mixer has volume, pan, arm, mute, solo and two effect sends.\n\n6. File → Import audio accepts WAV and formats supported by Android. Audio keeps its original pitch and speed; it is not time-stretched. You can trim and split at source-sample boundaries.\n\n7. Work autosaves locally. Save portable project carries all audio, notes, automation and sound settings to a .astra file. Export arrangement creates a 24-bit WAV.\n\nLimits: 16 tracks, 8 scenes, 256 notes per clip, 512 arrangement regions, 64 audio assets and 512 MiB of decoded stereo audio. This phase records MIDI, not microphone audio. Tap Astra beside File for command previews, Gemini listening and setup. Advanced warping remains later work.",fontSize=14.sp,lineHeight=21.sp)}

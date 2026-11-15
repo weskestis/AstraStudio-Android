@@ -32,7 +32,7 @@ WAV export always uses Arrangement, includes the same synths, effects, automatio
 
 16 tracks, 8 scenes, 128 shared voices, 512 nonoverlapping arrangement regions, 256 notes per clip, 64 audio assets and 512 MiB decoded stereo audio per project. Timeline ends at 65,536 quarter-note beats. Full-length tracks fit within the audio budget; there is no arbitrary 60-second import cutoff. Raw input/archives also have bounded size, and RIFF export is limited to 4 GiB. Actual polyphony, route latency and thermal limits require Xperia testing.
 
-Not implemented: microphone recording, simultaneous recording into multiple clips, arrangement overdub, MIDI file interchange, tempo maps, per-note expression, sampler/drum rack, plugin hosting, advanced time stretch, arbitrary automation targets, arrangement crossfades, per-region pitch envelopes or Astra commands. The original starter uses synthesized percussion, not a hidden drum sampler.
+Not implemented: microphone recording, simultaneous recording into multiple clips, arrangement overdub, MIDI file interchange, tempo maps, per-note expression, sampler/drum rack, plugin hosting, advanced time stretch, arbitrary automation targets, arrangement crossfades, per-region pitch envelopes or arbitrary Astra operations beyond the Phase 5 allowlist. The original starter uses synthesized percussion, not a hidden drum sampler. Astra commands and Gemini listening are described in [ASTRA.md](ASTRA.md).
 
 ## Wire contracts
 

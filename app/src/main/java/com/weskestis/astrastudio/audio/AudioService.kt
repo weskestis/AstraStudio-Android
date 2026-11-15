@@ -20,6 +20,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.net.Uri
 import com.weskestis.astrastudio.project.*
+import com.weskestis.astrastudio.astra.*
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -38,6 +39,8 @@ import kotlinx.coroutines.flow.asStateFlow
 
 data class TrackControls(val gain: Float = 0.8f, val pan: Float = 0f, val mute: Boolean = false, val solo: Boolean = false, val armed: Boolean = false, val sendA: Float = 0f, val sendB: Float = 0f, val name: String = "")
 data class StudioState(
+    val revision: Long = 0,
+    val astra: AstraState = AstraState(),
     val project: Project = Project(),
     val sequence: SequenceStats = SequenceStats(),
     val ready: Boolean = false,
@@ -91,6 +94,14 @@ class AudioService : Service() {
     private var fxPresets = emptyList<FxConfig>()
     private lateinit var files: ProjectFiles
     private val io = Executors.newSingleThreadExecutor()
+    private val astraWorker = Executors.newSingleThreadExecutor()
+    private lateinit var geminiKeys: GeminiKeyStore
+    private var astraJob = 0L
+    private var astraProposal = 0L
+    private var astraPrepared: Pair<Long,AstraPlan>? = null
+    private var astraAudio: AudioAttachment? = null
+    private var astraCall: GeminiClient? = null
+    private var lastGeminiRequest = -10000L
     private val cancelled = AtomicBoolean(false)
     private val history = ProjectHistory()
     @Volatile private var destroyed = false
@@ -107,7 +118,8 @@ class AudioService : Service() {
     private fun document() = mutableState.value.let { ProjectDocument(it.project,it.bpm,it.master,it.limiterDrive,it.limiterRelease,it.tracks,it.patches,it.effects) }
     private fun message(text: String) { mutableState.value=mutableState.value.copy(message=text) }
     private fun adopt(d: ProjectDocument) {
-        mutableState.value=mutableState.value.copy(project=d.project,bpm=d.bpm,master=d.master,limiterDrive=d.limiterDrive,limiterRelease=d.limiterRelease,
+        val changed=document()!=d
+        mutableState.value=mutableState.value.copy(revision=mutableState.value.revision+if(changed)1 else 0,project=d.project,bpm=d.bpm,master=d.master,limiterDrive=d.limiterDrive,limiterRelease=d.limiterRelease,
             tracks=d.tracks,patches=d.patches,effects=d.effects,canUndo=history.canUndo,canRedo=history.canRedo)
         control.removeCallbacks(saveProject);control.postDelayed(saveProject,500)
     }
@@ -136,6 +148,7 @@ class AudioService : Service() {
     override fun onCreate() {
         super.onCreate()
         files = ProjectFiles(this)
+        geminiKeys = GeminiKeyStore(this)
         thread = HandlerThread("AstraControl").also { it.start() }
         control = Handler(thread.looper)
         audioManager = getSystemService(AudioManager::class.java)
@@ -154,6 +167,7 @@ class AudioService : Service() {
         ContextCompat.registerReceiver(this, noisyReceiver, IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY),
             ContextCompat.RECEIVER_NOT_EXPORTED)
         control.post {
+            mutableState.value=mutableState.value.copy(astra=mutableState.value.astra.copy(keySaved=geminiKeys.present()))
             bridge = AudioBridge()
             presets = SynthSchema.presets.indices.map(bridge::preset)
             val saved = getSharedPreferences("synth-v1", MODE_PRIVATE)
@@ -190,7 +204,7 @@ class AudioService : Service() {
             }
             ACTION_WORK -> {
                 startForeground(NOTIFICATION, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or (if(wantsAudio) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK else 0))
-                if(!mutableState.value.busy&&!wantsAudio){stopForeground(STOP_FOREGROUND_REMOVE);stopSelf()}
+                if(!mutableState.value.busy&&!mutableState.value.astra.working&&!wantsAudio){stopForeground(STOP_FOREGROUND_REMOVE);stopSelf()}
             }
             ACTION_STOP -> control.post { stopAudio("Audio stopped.") }
         }
@@ -205,7 +219,7 @@ class AudioService : Service() {
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_astra)
             .setContentTitle("Astra Studio")
-            .setContentText(if(mutableState.value.busy)mutableState.value.work else "Audio engine active • tap to return")
+            .setContentText(if(mutableState.value.busy)mutableState.value.work else if(mutableState.value.astra.working)mutableState.value.astra.status else "Audio engine active • tap to return")
             .setContentIntent(open)
             .setCategory(Notification.CATEGORY_TRANSPORT)
             .setOngoing(true)
@@ -262,7 +276,7 @@ class AudioService : Service() {
         bridge.stop()
         audioManager.abandonAudioFocusRequest(focusRequest)
         mutableState.value = mutableState.value.copy(stats = AudioStats(), fxStats = FxStats(), message = message, midiDevices = 0)
-        if(mutableState.value.busy)startForeground(NOTIFICATION,notification(),ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        if(mutableState.value.busy||mutableState.value.astra.working)startForeground(NOTIFICATION,notification(),ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         else { stopForeground(STOP_FOREGROUND_REMOVE);stopSelf() }
     }
 
@@ -444,8 +458,7 @@ class AudioService : Service() {
                     mutableState.value=mutableState.value.copy(busy=false,work="",progress=0f)
                     if(error==null&&result!=null){if(resetHistory)history.clear()else history.commit(document(),result);adopt(result);sent=null;syncEngine()}
                     message(error?:done)
-                    if(wantsAudio)startForeground(NOTIFICATION,notification(),ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-                    else {stopForeground(STOP_FOREGROUND_REMOVE);stopSelf()}
+                    refreshForeground()
                 }}
             }
         }
@@ -475,9 +488,83 @@ class AudioService : Service() {
         }finally{file.delete()};null
     },"24-bit stereo WAV exported.")}
 
+    private fun astraState(edit: (AstraState)->AstraState) { mutableState.value=mutableState.value.copy(astra=edit(mutableState.value.astra)) }
+    private fun refreshForeground() {
+        val fileJob=mutableState.value.busy||mutableState.value.astra.working
+        val type=(if(fileJob)ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0) or (if(wantsAudio)ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK else 0)
+        if(type!=0)startForeground(NOTIFICATION,notification(),type)else{stopForeground(STOP_FOREGROUND_REMOVE);stopSelf()}
+    }
+    /** Only the control handler owns proposals; expensive parsing, network and encryption stay on its own worker. */
+    private fun <T> astraTask(label: String, action: ()->T, receive: (T)->Unit) {
+        if(!mutableState.value.ready||mutableState.value.astra.working||destroyed)return
+        val job=++astraJob
+        astraState{it.copy(working=true,status=label)}
+        ContextCompat.startForegroundService(this,Intent(this,AudioService::class.java).setAction(ACTION_WORK))
+        astraWorker.execute {
+            val result=runCatching(action)
+            control.post {
+                if(!destroyed && job==astraJob){
+                    astraCall=null;astraState{it.copy(working=false)}
+                    result.fold(onSuccess={receive(it)},onFailure={error->astraState{it.copy(status=(error.message?:"Astra could not complete that request.").take(600))}})
+                    refreshForeground()
+                }
+            }
+        }
+    }
+    fun astraRequest(prompt: String, selectedSlot: Int, gemini: Boolean) { control.post {
+        if(mutableState.value.astra.working||mutableState.value.busy||!mutableState.value.ready||selectedSlot !in 0..127)return@post
+        if(mutableState.value.recording>=0){astraState{it.copy(status="Finish MIDI recording before asking Astra to edit the project.")};return@post}
+        if(prompt.length>8000){astraState{it.copy(status="Keep requests under 8,000 characters; paste JSON in the JSON field.")};return@post}
+        if(gemini){
+            if(!geminiKeys.present()){astraState{it.copy(status="Open Gemini settings and add your Google AI Studio free-tier key first.")};return@post}
+            val now=android.os.SystemClock.elapsedRealtime()
+            if(now-lastGeminiRequest<5000){astraState{it.copy(status="Wait a few seconds before another Gemini request.")};return@post};lastGeminiRequest=now
+        }
+        val snapshot=document();val revision=mutableState.value.revision;val audio=if(gemini)astraAudio else null
+        astraPrepared=null;astraState{it.copy(proposal=0,summary="",changes=emptyList(),json="")}
+        val client=if(gemini)GeminiClient()else null;astraCall=client
+        astraTask(if(gemini)"Gemini is ${if(audio!=null)"listening and " else ""}preparing a proposal…" else "Preparing offline commands…",{
+            val json=if(client!=null)client.execute(geminiKeys.read(),GeminiProtocol.request(prompt,snapshot,selectedSlot,audio)) else OfflineCommands.compile(prompt,selectedSlot,snapshot)
+            AstraCommands.compile(json,snapshot,presets)
+        }){plan->prepareAstra(plan,revision,if(gemini)"Gemini" else "Offline")}
+    } }
+    fun astraJson(raw: String) { control.post {
+        if(mutableState.value.astra.working||mutableState.value.busy||!mutableState.value.ready)return@post
+        if(mutableState.value.recording>=0){astraState{it.copy(status="Finish MIDI recording before previewing commands.")};return@post}
+        val snapshot=document();val revision=mutableState.value.revision
+        astraPrepared=null;astraState{it.copy(proposal=0,summary="",changes=emptyList(),json="")}
+        astraTask("Validating command JSON…",{AstraCommands.compile(raw,snapshot,presets)}){plan->prepareAstra(plan,revision,"JSON")}
+    } }
+    private fun prepareAstra(plan: AstraPlan, revision: Long, origin: String) {
+        astraPrepared=revision to plan
+        astraState{it.copy(summary=plan.summary,changes=plan.changes,json=plan.json,proposal=++astraProposal,revision=revision,
+            status=if(plan.changes.isEmpty())"$origin feedback ready. No edits proposed." else "Review ${plan.changes.size} proposed edits. Nothing has changed yet.",
+            history=(listOf("$origin: ${plan.summary.take(240)}")+it.history).take(12))}
+    }
+    fun astraApply(id: Long) { control.post {
+        val s=mutableState.value;val prepared=astraPrepared
+        if(prepared==null||s.astra.proposal!=id||s.astra.working||s.busy||!s.ready)return@post
+        if(s.recording>=0){astraState{it.copy(status="Finish recording and generate a fresh proposal.")};return@post}
+        if(prepared.first!=s.revision){astraState{it.copy(status="The project changed after this preview. Generate a new proposal before applying.")};return@post}
+        val plan=prepared.second
+        if(plan.document!=document()){
+            history.end();history.commit(document(),plan.document);adopt(plan.document);syncEngine()
+            message("Astra applied ${plan.changes.size} edits. Undo restores the complete previous state.")
+        }
+        astraPrepared=null;astraState{it.copy(proposal=0,status="Applied. One Undo restores the whole proposal.")}
+    } }
+    fun astraDismiss(){control.post{astraPrepared=null;astraState{it.copy(proposal=0,summary="",changes=emptyList(),json="",status="Proposal dismissed.")}}}
+    fun astraCancel(){control.post{++astraJob;astraCall?.cancel();astraCall=null;astraState{it.copy(working=false,status="Cancelled. Nothing changed.")};refreshForeground()}}
+    fun astraSaveKey(value: String){control.post{astraTask("Saving Gemini key…",{geminiKeys.save(value)}){astraState{it.copy(keySaved=true,status="Gemini key saved on this phone. Use a project without billing for the free tier.")}}}}
+    fun astraRemoveKey(){control.post{astraTask("Removing Gemini key…",{geminiKeys.clear()}){astraState{it.copy(keySaved=false,status="Gemini key removed. Offline commands still work.")}}}}
+    fun astraAttach(uri: Uri){control.post{astraTask("Reading selected audio…",{GeminiClient.readAudio(this,uri)}){audio->astraAudio=audio;astraState{it.copy(audioName=audio.name,audioBytes=audio.bytes.size,status="Audio attached locally. Tap Ask Gemini to send it with your request.")}}}}
+    fun astraRemoveAudio(){control.post{if(!mutableState.value.astra.working){astraAudio=null;astraState{it.copy(audioName="",audioBytes=0,status="Audio attachment removed.")}}}}
+    fun astraNotice(text: String){control.post{astraState{it.copy(status=text.take(600))}}}
+
     override fun onDestroy() {
         destroyed=true;unregisterReceiver(noisyReceiver);control.removeCallbacksAndMessages(null)
         control.post {
+            ++astraJob;astraCall?.cancel();astraWorker.shutdownNow();astraAudio=null;astraPrepared=null
             finishRecording();midi?.close();cancelled.set(true)
             if(::bridge.isInitialized){bridge.cancelExport();bridge.stop()}
             audioManager.abandonAudioFocusRequest(focusRequest)

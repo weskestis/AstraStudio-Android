@@ -10,3 +10,5 @@ adb shell wm size 1080x2520
 adb shell wm density 420
 bash gradlew --no-daemon :app:connectedDebugAndroidTest
 adb shell test -s /sdcard/Pictures/AstraStudio/04-arrangement-landscape.png
+adb shell test -s /sdcard/Pictures/AstraStudio/05-astra-preview.png
+adb shell test -s /sdcard/Pictures/AstraStudio/06-astra-settings.png

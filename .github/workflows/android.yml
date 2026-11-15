@@ -1,4 +1,4 @@
-name: Android Phase 4
+name: Android Phase 5
 on:
   push:
     branches: [main]
@@ -50,14 +50,14 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: AstraStudio-Phase4-APK
+          name: AstraStudio-Phase5-APK
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Phase4-test-reports
+          name: Phase5-test-reports
           path: |
             app/build/reports/tests/
             app/build/reports/lint-results-debug.html
@@ -100,7 +100,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Phase4-interface-validation
+          name: Phase5-interface-validation
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/

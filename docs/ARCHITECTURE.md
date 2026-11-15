@@ -1,6 +1,6 @@
 # Engine and Android architecture — Phase 4
 
-The application combines the Phase 1 native audio foundation with Phase 2 wavetable/FM synthesis and a phone-oriented synth editor. It is not yet a completed DAW. See `SYNTHESIS.md` for the signal path, modulation and patch-publication contract. Phase 3 adds the effects engine described in `EFFECTS.md`; Phase 4 adds the sequencer, editing and persistence described in `WORKSPACE.md`. The AI interface remains Phase 5.
+The application combines the Phase 1 native audio foundation with Phase 2 wavetable/FM synthesis and a phone-oriented synth editor. It is not yet a completed DAW. See `SYNTHESIS.md` for the signal path, modulation and patch-publication contract. Phase 3 adds the effects engine described in `EFFECTS.md`; Phase 4 adds the sequencer, editing and persistence described in `WORKSPACE.md`. Phase 5 adds the reversible assistant and Gemini integration described in `ASTRA.md`.
 
 ## Ownership and threads
 
@@ -64,7 +64,7 @@ Undo/Redo stores 64 immutable project snapshots; continuous controls coalesce an
 
 AAudio low-latency/exclusive output is requested first. Shared mode is a fallback; the UI displays the actual negotiated mode. The stream uses its device's negotiated sample rate and float stereo output. Requested buffer sizes are multiples of the hardware burst, bounded by capacity. A route may reject tuning, and the UI reports that. `bufferMs` is software output-buffer duration, not measured end-to-end latency. DSP load is callback processing time divided by that callback's audio duration; it is not whole-device CPU utilization.
 
-The foreground service declares both required foreground permissions and the mediaPlayback service type, starts from a visible user action, displays a Stop action, and is not sticky after process death. Audio-focus loss and the becoming-noisy broadcast stop playback. A disconnected stream can reopen on the control thread with playback stopped. Repeated recovery failures stop the service. No microphone, Internet, broad storage or recording permission is requested by this build.
+The foreground service declares both required foreground permissions and the mediaPlayback service type, starts from a visible user action, displays a Stop action, and is not sticky after process death. Audio-focus loss and the becoming-noisy broadcast stop playback. A disconnected stream can reopen on the control thread with playback stopped. Repeated recovery failures stop the service. Phase 5 adds Internet permission for explicit Gemini requests. No microphone or broad storage permission is requested; the Speak button delegates to an installed Android recognition activity. User-started assistant network jobs use the existing dataSync foreground-service type.
 
 USB MIDI hot plug uses both Android transport registrations. When Android exposes a shared USB identity, UMP is preferred over the legacy sibling to avoid doubled input. MIDI 1 byte-stream parsing supports running status, real-time bytes between messages and fragmented messages. UMP supports MIDI 1 and MIDI 2 Note On/Off, 16-bit MIDI 2 velocity, group identity and channel-specific CC 120/123. Groups share the same 16 mixer tracks but retain distinct note IDs. Input-device disconnect releases that device's notes.
 
@@ -81,7 +81,7 @@ ARM64 is the primary physical-device target. The test screen uses density-indepe
 | 2 (implemented) | Dual wavetable oscillator, anti-aliasing/mips, sub/noise, warp modes, modulation, filters, four-operator FM, instrument presets |
 | 3 (implemented) | Ordered/routed effects graph, dynamics, multiband processing, sidechain routing, EQ/FFT, distortion, spatial FX, limiter, offline consistency |
 | 4 (implemented) | Session and arrangement workflows, piano roll, clip editing, automation, recording/import/export, project persistence and robust Undo |
-| 5 | Validated JSON command schema, reversible operations, natural-language/voice interface and the chosen AI integration |
+| 5 (implemented) | Strict JSON command compiler, one-step Undo, revision checks, offline phrase grammar, voice-input delegation, Gemini text/audio integration and manual Gemini handoff |
 
 The sampler, drum rack, granular engine and independent time-stretch algorithms will need explicit implementation within the later phases. Ableton's proprietary devices and “Complex Pro” algorithm are not available to copy; any equivalent mode must have an original or appropriately licensed implementation and an honest name. No absent module has a fake control, empty DSP method or placeholder implementation in this source.
 
@@ -95,3 +95,11 @@ The sampler, drum rack, granular engine and independent time-stretch algorithms 
 - AGP 8.9 compatibility: https://developer.android.com/build/releases/agp-8-9-0-release-notes
 - Android 16 KB page sizes: https://developer.android.com/guide/practices/page-sizes
 - Sony Xperia 1 IV specifications: https://www.sony.com/electronics/support/mobile-phones-tablets-mobile-phones/xperia-1-iv-512gb/specifications
+
+## Phase 5 command boundary
+
+Astra parses and compiles proposals on a dedicated worker, never on the audio callback. `StrictJson` supplies the same duplicate-key/coercion/depth checks on Android and JVM. `AstraCommands` builds a new immutable `ProjectDocument`; each complete batch is validated before the control handler can adopt it. No operation exposes arbitrary JNI buffers, native pointers, file paths, URLs or code execution. Native patch/effect/project validators remain in the existing JNI path. Applying is one history transaction, with a project revision check; previews cannot silently overwrite intervening edits. StateFlow still publishes through Main.
+
+The Gemini client uses a fixed HTTPS endpoint, no redirects, no URL query credentials, bounded input/output, explicit cancellation, timeouts, a five-second request gap and no automatic retries or model fallback. A user-owned API key is encrypted using Android Keystore AES-GCM and stored through AtomicFile in noBackupFilesDir. No key is embedded, included in saved state, printed in errors or exported with projects. This development build uses individual user keys; a distributed service using an owner-funded key needs a protected backend or Firebase architecture instead.
+
+The assistant worker uses the dataSync foreground service while processing a user request. Cancellation invalidates the job generation so late results cannot become new previews. Audio is held only for the current service session and leaves the device only after Ask Gemini. Audio feedback is model-generated qualitative advice, not an FFT/LUFS/true-peak measurement.
