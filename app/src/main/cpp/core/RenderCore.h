@@ -3,6 +3,7 @@
 #include "dsp/SynthVoice.h"
 #include "fx/FxRack.h"
 #include "fx/Spectrum.h"
+#include "project/Project.h"
 #include <array>
 #include <atomic>
 #include <cstddef>
@@ -18,7 +19,7 @@ inline constexpr std::size_t kScheduledCapacity = 8192;
 
 enum class CommandType : int32_t {
     NoteOn = 0, NoteOff = 1, MasterGain = 2, TrackGain = 3, TrackPan = 4,
-    TrackMute = 5, TrackSolo = 6, Tempo = 7, Transport = 8, Metronome = 9, PatchSnapshot = 10, FxSnapshot = 11, LimiterDrive = 12, LimiterRelease = 13, MeterTrack = 14
+    TrackMute = 5, TrackSolo = 6, Tempo = 7, Transport = 8, Metronome = 9, PatchSnapshot = 10, FxSnapshot = 11, LimiterDrive = 12, LimiterRelease = 13, MeterTrack = 14, ProjectSnapshot = 15, LaunchClip = 16, LaunchScene = 17, Seek = 18, SendA = 19, SendB = 20
 };
 struct Command {
     CommandType type{};
@@ -61,6 +62,8 @@ public:
     bool enqueue(Command command) noexcept;
     bool setPatch(int track, const synth::Patch& patch) noexcept;
     bool setEffects(int track, const fx::Config& config) noexcept;
+    bool setProject(std::span<const double> data,const project::Samples& samples) noexcept;
+    project::Snapshot sequenceSnapshot() const noexcept;
     FxSnapshot effectsSnapshot() noexcept;
     int outputLatencyFrames() const noexcept { return fx::Rack::latency + limiter_.latency(); }
     void panic() noexcept { panic_.store(true, std::memory_order_release); }
@@ -85,7 +88,10 @@ private:
         float right{0.565685425f};
         bool mute{};
         bool solo{};
-        synth::Patch patch;
+        synth::Patch patch,renderPatch;
+        fx::Config fxConfig;
+        std::array<float,4> autoValues{};std::array<bool,4> automated{};
+        float sendA{},sendB{},targetSendA{},targetSendB{};
         fx::Rack effects;
         std::array<double, 4> freePhases{}, lfoSteps{};
     };
@@ -99,6 +105,9 @@ private:
     void consumeCommands() noexcept;
     void apply(const Command& command) noexcept;
     void noteOn(const Command& command) noexcept;
+    static void sequenceNote(void*,int,int,float,uint32_t,bool) noexcept;
+    static void sequenceAutomation(void*,int,int,float,bool) noexcept;
+    void refreshAutomation(int track) noexcept;
     void releaseVoice(Voice& voice) noexcept;
     void resetSound() noexcept;
     void recyclePatch(const Command& command) noexcept;
@@ -118,6 +127,11 @@ private:
     std::array<PatchSlot, 64> patchSlots_{};
     struct FxSlot { fx::Config config; std::atomic<bool> busy{false}; };
     std::array<FxSlot,32> fxSlots_{};
+    struct PlanSlot {std::unique_ptr<project::Plan> plan;std::atomic<bool> busy{false};};
+    std::array<PlanSlot,3> planSlots_;int activePlan_{-1};project::Sequencer sequence_;
+    std::array<std::atomic<int>,16> publishedClips_{},publishedQueued_{};
+    std::array<std::atomic<float>,16> publishedPhase_{};std::atomic<int> publishedMode_{};
+    fx::Reverb returnA_;fx::PingPong returnB_;fx::Config returnConfig_;
     fx::LookaheadLimiter limiter_;
     fx::FixedDelay<fx::Rack::latency> clickDelay_;
     fx::Spectrum analyzer_;

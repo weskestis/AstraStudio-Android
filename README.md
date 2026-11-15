@@ -1,23 +1,21 @@
-# Astra Studio — Phase 3
+# Astra Studio — Phase 4
 
-Native Android 14+ music workstation in development, with **Sony Xperia 1 IV** as the first physical-device target. Package `com.weskestis.astrastudio`; version **0.3.0-phase3**.
+Android 14+ native music workstation, built for **Sony Xperia 1 IV** first. Package `com.weskestis.astrastudio`, version **0.4.0-phase4**, green and black throughout. This is a development DAW, with implemented editing/playback features and explicit limits below; it is not yet a production-certified replacement for a desktop workstation.
 
-Phase 3 adds **per-track effects, external sidechain routing, EQ/spectrum analysis and a lookahead master limiter**, with a **green-and-black** phone interface. Wavetable and four-operator FM synthesis from Phase 2 remain included. This is a development synth/effects lab; Session/Arrangement editing, recording/export and Astra AI remain later phases.
+## Install and make a track
 
-## Install and play on your Xperia
+Install `AstraStudio_Phase4_0.4.0.apk` over Phase 1, 2 or 3. The development signing certificate is unchanged. GitHub fallback: **Actions → Android Phase 4 → a successful run → AstraStudio-Phase4-APK**.
 
-Install `AstraStudio_Phase3_0.3.0.apk` over Phase 1 or 2. It uses the same development signing certificate. Alternatively, open this repository's **Actions → Android Phase 3**, choose a successful run, and download the **AstraStudio-Phase3-APK** artifact (a ZIP containing the APK).
+1. **File → Load starter song** opens Green circuit: original, editable MIDI drums, bass and lead, two scenes and a 16-bar arrangement. Save your current project first.
+2. Tap **Start audio**, then **Play**. Session Play launches Scene 1; Arrangement Play begins at the white cursor. Clip/scene launch buttons follow the selected bar, quarter-note or eighth-note quantization.
+3. Tap a clip body to select it, then **Edit clip**. Draw notes, drag to move, drag their right edge to resize, edit velocity, quantize, use legato or draw automation.
+4. **Keys** opens a multitouch piano. **Record MIDI** records the on-screen keyboard or USB MIDI into the selected clip after its launch boundary. Overdub adds; disabling it replaces the take. One take is one Undo step.
+5. In **Arrangement**, tap the ruler to set the cursor, then **Place clip**. Drag regions, duplicate, split or edit exact lengths with **Region**. Audio splits can use individual source samples.
+6. The bottom **device chain** opens the track mixer, synth and effects. Mixer includes arm, mute, solo, pan and post-fader reverb/echo sends.
+7. **File → Import audio** accepts PCM WAV directly and other mono/stereo formats supported by Android's codecs. **Save portable project** creates a `.astra` ZIP with all used audio, notes, automation, mix, synth and effect settings. Work also autosaves privately on the phone.
+8. **Export arrangement WAV** renders 24-bit stereo at 44.1 or 48 kHz through the same DSP, with optional effect tails. Export ignores playback looping.
 
-1. Tap **Start audio**. Use wired headphones for the first latency test.
-2. Track 1 starts with **Liquid Riddim**, Track 2 with **Trance Prism**, and Track 3 with **FM Alloy**. Other tracks start with Init Sine. Saved edits take precedence on subsequent launches.
-3. Hold the F-minor pads, tap **Play phrase**, or use **Hold F1 to edit** in the synth panel. The held note lets you adjust controls without keeping a finger on a pad. Tap Release F1 to stop it.
-4. Choose a factory preset, then explore **Oscillators**, **Filters**, **Envelopes**, **LFOs**, and **Modulation**. Edits affect held notes and save automatically on this phone.
-5. Open **Effects** and select Clean, Riddim Pressure, Trance Space or Pumping House. Reorder units, choose serial/parallel routing, and assign macros. See [Effects guide](docs/EFFECTS.md) for sidechain and freeze instructions.
-6. In LFOs, choose LFO 1–4, enable tempo sync or use Hz, and draw across the graph. In Modulation, pick one of 16 slots and assign a source, destination and signed depth. Shape presets provide an alternative to drawing.
-7. Compare **Balanced** (3 hardware bursts) with Fast/Stable if xruns increase. The displayed buffer time is not measured end-to-end latency.
-8. **Panic** stops voices, scheduled notes and all effect tails; accepted edits are retained. **Stop audio** closes the stream and background service.
-
-The test phrase is two bars scheduled using the BPM at launch. Tempo changes update LFOs and the transport clock, but do not retime already-scheduled phrase notes. It is not yet an arranger or clip sequencer.
+Detailed controls, limits and file format: [Phase 4 workflow](docs/WORKSPACE.md). Build/verification evidence: [Validation](docs/VALIDATION.md).
 
 ## Included effects
 
@@ -76,6 +74,11 @@ The debug key in `signing/astra-development.keystore` is deliberately public (`a
 
 ## Source map
 
+- `app/src/main/cpp/project/`: validated immutable clip plans, sample playback, native sequencer and offline WAV renderer.
+- `app/src/main/java/com/weskestis/astrastudio/workspace/`: Session, Arrangement, piano roll, automation, audio trim, keyboard and device chain.
+- `app/src/main/java/com/weskestis/astrastudio/project/`: model, Undo/Redo, original starter song, JSON persistence and portable audio archives.
+- `app/src/androidTest/`: Android interface gestures/rotation, screenshots, archive and JNI export checks.
+
 - `app/src/main/cpp/fx/`: complete effects, rack routing, limiter and off-callback FFT.
 - `app/src/main/java/com/weskestis/astrastudio/fx/`: green/black effects editor, immutable rack state, EQ response overlay and schema.
 - `tools/fx-schema.json`: effects wire definition; regenerate with `python3 tools/generate_fx_schema.py`.
@@ -90,4 +93,4 @@ The debug key in `signing/astra-development.keystore` is deliberately public (`a
 - `docs/SYNTHESIS.md`: signal path, modulation units, memory/thread contract and DSP limits.
 - `docs/VALIDATION.md`: performed checks and remaining hardware validation.
 
-Phase 3 ends here. **Phase 4 is the Session/Arrangement workflow and Compose UI.** Full Session/Arrangement UI is Phase 4; Astra's validated command interface is Phase 5. Sampler, drum rack, importable wavetables and time stretching remain explicit future work.
+Phase 4 ends here. **Phase 5 is Astra's validated JSON command interface.** Advanced warping/time stretching, sampler/drum rack, microphone recording, importable wavetables, tempo-map editing, full MIDI expression and production certification remain future work.

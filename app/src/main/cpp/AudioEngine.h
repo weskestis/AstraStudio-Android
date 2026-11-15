@@ -29,6 +29,10 @@ public:
     bool enqueue(Command command) noexcept;
     bool setPatch(int track, const synth::Patch& patch) noexcept;
     bool setEffects(int track, const fx::Config& config) noexcept;
+    bool setProject(std::span<const double> data) noexcept;
+    project::Snapshot sequenceSnapshot() const noexcept;
+    project::Samples samples;
+    std::array<std::string,64> samplePaths;
     FxSnapshot effectsSnapshot() noexcept;
     void panic() noexcept;
     int32_t setBufferBursts(int32_t bursts) noexcept;

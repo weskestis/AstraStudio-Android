@@ -77,6 +77,8 @@ bool AudioEngine::setPatch(int track, const synth::Patch& patch) noexcept {
 bool AudioEngine::setEffects(int track,const fx::Config& config) noexcept {
     return stream_ && callback_ && callback_->error.load(std::memory_order_acquire)==0 && callback_->core.setEffects(track,config);
 }
+bool AudioEngine::setProject(std::span<const double> data) noexcept {return stream_&&callback_&&callback_->error.load(std::memory_order_acquire)==0&&callback_->core.setProject(data,samples);}
+project::Snapshot AudioEngine::sequenceSnapshot()const noexcept{return callback_?callback_->core.sequenceSnapshot():project::Snapshot{};}
 FxSnapshot AudioEngine::effectsSnapshot() noexcept { return callback_?callback_->core.effectsSnapshot():FxSnapshot{}; }
 void AudioEngine::panic() noexcept {
     if (callback_) callback_->core.panic();

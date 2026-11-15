@@ -4,6 +4,8 @@
 
 thread_local bool inRender = false;
 std::atomic<int> realtimeAllocations{0};
+std::atomic<int> realtimeDeallocations{0};
+void trackedFree(void* p) noexcept { if(p&&inRender)realtimeDeallocations.fetch_add(1);std::free(p); }
 
 void* operator new(std::size_t size) {
     if (inRender) realtimeAllocations.fetch_add(1);
@@ -19,14 +21,14 @@ void* operator new(std::size_t size, std::align_val_t alignment) {
     throw std::bad_alloc();
 }
 void* operator new[](std::size_t size, std::align_val_t alignment) { return ::operator new(size, alignment); }
-void operator delete(void* p) noexcept { std::free(p); }
-void operator delete[](void* p) noexcept { std::free(p); }
-void operator delete(void* p, std::size_t) noexcept { std::free(p); }
-void operator delete[](void* p, std::size_t) noexcept { std::free(p); }
-void operator delete(void* p, std::align_val_t) noexcept { std::free(p); }
-void operator delete[](void* p, std::align_val_t) noexcept { std::free(p); }
-void operator delete(void* p, std::size_t, std::align_val_t) noexcept { std::free(p); }
-void operator delete[](void* p, std::size_t, std::align_val_t) noexcept { std::free(p); }
+void operator delete(void* p) noexcept { trackedFree(p); }
+void operator delete[](void* p) noexcept { trackedFree(p); }
+void operator delete(void* p, std::size_t) noexcept { trackedFree(p); }
+void operator delete[](void* p, std::size_t) noexcept { trackedFree(p); }
+void operator delete(void* p, std::align_val_t) noexcept { trackedFree(p); }
+void operator delete[](void* p, std::align_val_t) noexcept { trackedFree(p); }
+void operator delete(void* p, std::size_t, std::align_val_t) noexcept { trackedFree(p); }
+void operator delete[](void* p, std::size_t, std::align_val_t) noexcept { trackedFree(p); }
 
 // Delay storage uses nothrow allocation during preparation. Keep every allocation
 // family in this tracker so ASan sees matching malloc/free, including failures.
@@ -39,7 +41,7 @@ void* operator new(std::size_t size, std::align_val_t alignment, const std::noth
     try { return ::operator new(size, alignment); } catch (const std::bad_alloc&) { return nullptr; }
 }
 void* operator new[](std::size_t size, std::align_val_t alignment, const std::nothrow_t& tag) noexcept { return ::operator new(size, alignment, tag); }
-void operator delete(void* p, const std::nothrow_t&) noexcept { std::free(p); }
-void operator delete[](void* p, const std::nothrow_t&) noexcept { std::free(p); }
-void operator delete(void* p, std::align_val_t, const std::nothrow_t&) noexcept { std::free(p); }
-void operator delete[](void* p, std::align_val_t, const std::nothrow_t&) noexcept { std::free(p); }
+void operator delete(void* p, const std::nothrow_t&) noexcept { trackedFree(p); }
+void operator delete[](void* p, const std::nothrow_t&) noexcept { trackedFree(p); }
+void operator delete(void* p, std::align_val_t, const std::nothrow_t&) noexcept { trackedFree(p); }
+void operator delete[](void* p, std::align_val_t, const std::nothrow_t&) noexcept { trackedFree(p); }

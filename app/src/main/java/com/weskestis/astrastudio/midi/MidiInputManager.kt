@@ -18,6 +18,7 @@ import java.util.concurrent.Executor
  * use exact frame positions. Per-note MIDI 2 expression is not implemented here.
  */
 class MidiInputManager(context: Context, private val control: Handler, private val bridge: AudioBridge,
+                       private val observed: (Int,Int,Float,Int,Boolean) -> Unit,
                        private val countChanged: (Int) -> Unit) : AutoCloseable {
     private val manager = context.getSystemService(MidiManager::class.java)
     private data class Connection(val device: MidiDevice, val ports: List<MidiOutputPort>, val gates: List<Gate>)
@@ -107,21 +108,21 @@ class MidiInputManager(context: Context, private val control: Handler, private v
         private val held = mutableMapOf<Int, Int>()
         fun event(group: Int, channel: Int, key: Int, velocity: Float, on: Boolean) {
             val address = group * 2048 + channel * 128 + key
-            held.remove(address)?.let { bridge.noteOff(channel, it) }
+            held.remove(address)?.let { bridge.noteOff(channel, it); observed(channel,key,0f,it,false) }
             if (on) {
                 // IDs occupy a separate range from touch notes and the demo.
-                if (nextNoteId == Int.MAX_VALUE) nextNoteId = 1_000_000
+                if (nextNoteId >= 0x40000000) nextNoteId = 1_000_000
                 val id = nextNoteId++
-                if (bridge.noteOn(channel, key, velocity.coerceIn(0f, 1f), id)) held[address] = id
+                if (bridge.noteOn(channel, key, velocity.coerceIn(0f, 1f), id)) { held[address] = id; observed(channel,key,velocity,id,true) }
             }
         }
         fun releaseChannel(group: Int, channel: Int) {
             val prefix = group * 2048 + channel * 128
             val keys = held.keys.filter { it in prefix until prefix + 128 }
-            keys.forEach { held.remove(it)?.let { id -> bridge.noteOff(channel, id) } }
+            keys.forEach { held.remove(it)?.let { id -> bridge.noteOff(channel, id); observed(channel,it%128,0f,id,false) } }
         }
         fun releaseAll() {
-            held.forEach { (address, id) -> bridge.noteOff((address / 128) % 16, id) }
+            held.forEach { (address, id) -> bridge.noteOff((address / 128) % 16, id); observed((address / 128)%16,address%128,0f,id,false) }
             held.clear()
         }
     }

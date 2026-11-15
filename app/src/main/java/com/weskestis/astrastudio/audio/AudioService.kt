@@ -17,8 +17,13 @@ import android.os.Binder
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
+import android.net.Uri
+import com.weskestis.astrastudio.project.*
+import java.io.File
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.*
 import androidx.core.content.ContextCompat
-import androidx.core.content.edit
 import com.weskestis.astrastudio.MainActivity
 import com.weskestis.astrastudio.R
 import com.weskestis.astrastudio.fx.FxConfig
@@ -30,8 +35,18 @@ import com.weskestis.astrastudio.midi.MidiInputManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-data class TrackControls(val gain: Float = 0.8f, val pan: Float = 0f, val mute: Boolean = false, val solo: Boolean = false)
+data class TrackControls(val gain: Float = 0.8f, val pan: Float = 0f, val mute: Boolean = false, val solo: Boolean = false, val armed: Boolean = false, val sendA: Float = 0f, val sendB: Float = 0f, val name: String = "")
 data class StudioState(
+    val project: Project = Project(),
+    val sequence: SequenceStats = SequenceStats(),
+    val ready: Boolean = false,
+    val busy: Boolean = false,
+    val work: String = "",
+    val progress: Float = 0f,
+    val canUndo: Boolean = false,
+    val canRedo: Boolean = false,
+    val recording: Int = -1,
+    val overdub: Boolean = true,
     val stats: AudioStats = AudioStats(),
     val message: String = "Start audio to play your synth patches.",
     val bpm: Float = 145f,
@@ -61,19 +76,35 @@ class AudioService : Service() {
     private var midi: MidiInputManager? = null
     private var presets = emptyList<SynthPatch>()
     private var fxPresets = emptyList<FxConfig>()
-    private val saveEffects = Runnable {
-        getSharedPreferences("fx-v1", MODE_PRIVATE).edit {
-            state.value.effects.forEachIndexed { i, config -> putString("track-$i", config.encode()) }
-            putFloat("limiter-drive", state.value.limiterDrive)
-            putFloat("limiter-release", state.value.limiterRelease)
-        }
+    private lateinit var files: ProjectFiles
+    private val io = Executors.newSingleThreadExecutor()
+    private val cancelled = AtomicBoolean(false)
+    private val history = ProjectHistory()
+    @Volatile private var destroyed = false
+    private var playingIntent = false
+    private var sent: ProjectDocument? = null
+    private var pendingLaunch: Triple<Int,Int,Boolean>? = null
+    private val heldTouch = mutableMapOf<Long,Pair<Int,Int>>()
+    private data class Recorded(val track: Int,val pitch: Int,val velocity: Float,val absolute: Double,val local: Double)
+    private val recorded = mutableMapOf<Long,Recorded>()
+    private val saveProject = Runnable {
+        val document = document()
+        io.execute { try { files.save(document) } catch (e: Exception) { control.post { message("Could not autosave: ${e.message}") } } }
     }
-    private val savePatches = Runnable {
-        getSharedPreferences("synth-v1", MODE_PRIVATE).edit {
-            state.value.patches.forEachIndexed { i, patch -> putString("track-$i", patch.encode()) }
-        }
+    private fun document() = state.value.let { ProjectDocument(it.project,it.bpm,it.master,it.limiterDrive,it.limiterRelease,it.tracks,it.patches,it.effects) }
+    private fun message(text: String) { mutableState.value=state.value.copy(message=text) }
+    private fun adopt(d: ProjectDocument) {
+        mutableState.value=state.value.copy(project=d.project,bpm=d.bpm,master=d.master,limiterDrive=d.limiterDrive,limiterRelease=d.limiterRelease,
+            tracks=d.tracks,patches=d.patches,effects=d.effects,canUndo=history.canUndo,canRedo=history.canRedo)
+        control.removeCallbacks(saveProject);control.postDelayed(saveProject,500)
     }
-    private var wantsAudio = false
+    private fun commit(key: String="", edit: (ProjectDocument)->ProjectDocument) {
+        if(!state.value.ready||state.value.busy)return
+        try { val old=document();val next=edit(old);require(next.valid()){ "That edit exceeds the project limits or overlaps a region." }
+            history.commit(old,next,key);adopt(next);syncEngine()
+        } catch(e: Exception) { message(e.message?:"Could not apply edit.") }
+    }
+    @Volatile private var wantsAudio = false
     private var reconnectAttempts = 0
     private var nextReconnectAt = 0L
     private var stablePolls = 0
@@ -91,6 +122,7 @@ class AudioService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        files = ProjectFiles(this)
         thread = HandlerThread("AstraControl").also { it.start() }
         control = Handler(thread.looper)
         audioManager = getSystemService(AudioManager::class.java)
@@ -122,7 +154,16 @@ class AudioService : Service() {
                 limiterDrive = savedFx.getFloat("limiter-drive", 0f).takeIf { it.isFinite() }?.coerceIn(0f,24f) ?: 0f,
                 limiterRelease = savedFx.getFloat("limiter-release", 80f).takeIf { it.isFinite() }?.coerceIn(20f,500f) ?: 80f,
             )
-            control.post(poll)
+            mutableState.value=state.value.copy(busy=true,work="Opening project")
+            val fallback=document()
+            io.execute {
+                var restored: ProjectDocument?=null;var error: String?=null
+                try { restored=files.load();if(restored!=null)loadAssets(restored) } catch(e: Exception){restored=null;error=e.message;runCatching{files.preserveFailedAutosave()};bridge.loadAssets(emptyList())}
+                control.post { if(!destroyed){if(restored!=null)adopt(restored);else adopt(fallback)
+                    mutableState.value=state.value.copy(ready=true,busy=false,work="",message=error?.let{"Could not restore project: $it"}?:"Ready. Start audio, then launch a clip or build an arrangement.")
+                    control.post(poll)
+                } }
+            }
         }
     }
 
@@ -133,6 +174,10 @@ class AudioService : Service() {
             ACTION_START -> {
                 startForeground(NOTIFICATION, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
                 control.post { startAudio() }
+            }
+            ACTION_WORK -> {
+                startForeground(NOTIFICATION, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or (if(wantsAudio) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK else 0))
+                if(!state.value.busy&&!wantsAudio){stopForeground(STOP_FOREGROUND_REMOVE);stopSelf()}
             }
             ACTION_STOP -> control.post { stopAudio("Audio stopped.") }
         }
@@ -147,7 +192,7 @@ class AudioService : Service() {
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_astra)
             .setContentTitle("Astra Studio")
-            .setContentText("Audio engine active • tap to return")
+            .setContentText(if(state.value.busy)state.value.work else "Audio engine active • tap to return")
             .setContentIntent(open)
             .setCategory(Notification.CATEGORY_TRANSPORT)
             .setOngoing(true)
@@ -167,46 +212,58 @@ class AudioService : Service() {
         if (result != 0) { stopAudio("Could not open audio: $result"); return }
         applyMix()
         if (midi == null) {
-            midi = MidiInputManager(this, control, bridge) { count ->
+            midi = MidiInputManager(this, control, bridge, { track,key,velocity,id,on -> recordEvent(track,key,velocity,id,on) }) { count ->
                 mutableState.value = state.value.copy(midiDevices = count)
             }.also { it.start() }
         }
-        mutableState.value = state.value.copy(message = "Engine ready. Hold a pad or play the timing demo.")
+        mutableState.value = state.value.copy(message = "Engine ready. Launch clips, record MIDI, or play the arrangement.")
     }
 
-    private fun applyMix() {
-        val s = state.value
-        bridge.masterGain(s.master)
-        bridge.tempo(s.bpm)
-        bridge.metronome(s.metronome)
-        bridge.limiterDrive(s.limiterDrive)
-        bridge.limiterRelease(s.limiterRelease)
-        bridge.meterTrack(s.meterTrack)
-        s.effects.forEachIndexed { index, config -> bridge.effects(index, config) }
-        s.patches.forEachIndexed { index, patch -> bridge.patch(index, patch) }
-        s.tracks.forEachIndexed { index, track ->
-            bridge.trackGain(index, track.gain)
-            bridge.trackPan(index, track.pan)
-            bridge.trackMute(index, track.mute)
-            bridge.trackSolo(index, track.solo)
+    private fun applyMix() { sent=null;syncEngine();bridge.metronome(state.value.metronome);bridge.meterTrack(state.value.meterTrack) }
+    private fun syncEngine(): Boolean {
+        if(!wantsAudio)return true
+        val next=document();val previous=sent;var ok=true
+        fun accepted(value: Boolean) { if(!value)ok=false }
+        if(previous?.bpm!=next.bpm)accepted(bridge.tempo(next.bpm))
+        if(previous?.master!=next.master)accepted(bridge.masterGain(next.master))
+        if(previous?.limiterDrive!=next.limiterDrive)accepted(bridge.limiterDrive(next.limiterDrive))
+        if(previous?.limiterRelease!=next.limiterRelease)accepted(bridge.limiterRelease(next.limiterRelease))
+        for(t in 0..15){
+            if(previous?.patches?.get(t)!=next.patches[t])accepted(bridge.patch(t,next.patches[t]))
+            if(previous?.effects?.get(t)!=next.effects[t])accepted(bridge.effects(t,next.effects[t]))
+            if(previous?.tracks?.get(t)!=next.tracks[t]){val v=next.tracks[t]
+                accepted(bridge.trackGain(t,v.gain));accepted(bridge.trackPan(t,v.pan));accepted(bridge.trackMute(t,v.mute));accepted(bridge.trackSolo(t,v.solo));accepted(bridge.sendA(t,v.sendA));accepted(bridge.sendB(t,v.sendB))
+            }
         }
+        if(previous?.project!=next.project)accepted(bridge.project(next.project))
+        if(ok)sent=next
+        return ok
     }
 
     private fun stopAudio(message: String) {
+        finishRecording()
         wantsAudio = false
+        playingIntent=false;pendingLaunch=null;sent=null
         midi?.close()
         midi = null
         bridge.stop()
         audioManager.abandonAudioFocusRequest(focusRequest)
         mutableState.value = state.value.copy(stats = AudioStats(), fxStats = FxStats(), message = message, midiDevices = 0)
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        if(state.value.busy)startForeground(NOTIFICATION,notification(),ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        else { stopForeground(STOP_FOREGROUND_REMOVE);stopSelf() }
     }
 
     private val poll = object : Runnable {
         override fun run() {
+            if(wantsAudio&&state.value.ready) {
+                val synced=syncEngine()
+                if(synced&&pendingLaunch!=null){val (track,scene,all)=pendingLaunch!!;pendingLaunch=null
+                    if(!playingIntent){bridge.transport(true);playingIntent=true}
+                    if(all)bridge.scene(scene,state.value.project.launchBeats.toFloat()) else bridge.launch(track,scene,state.value.project.launchBeats.toFloat())
+                }
+            }
             val stats = bridge.stats()
-            mutableState.value = state.value.copy(stats = stats, fxStats = if (stats.running) bridge.fxStats() else FxStats())
+            mutableState.value = state.value.copy(stats = stats, fxStats = if (stats.running) bridge.fxStats() else FxStats(), sequence=if(stats.running)bridge.sequence() else SequenceStats(), progress=if(state.value.work=="Rendering WAV")bridge.exportProgress() else state.value.progress)
             if (wantsAudio && stats.running) {
                 if (++stablePolls >= 100) reconnectAttempts = 0
             } else stablePolls = 0
@@ -217,6 +274,7 @@ class AudioService : Service() {
                     else {
                         reconnectAttempts++
                         nextReconnectAt = now + 1000L
+                        finishRecording();playingIntent=false;pendingLaunch=null
                         bridge.stop()
                         val result = bridge.start(state.value.bufferBursts)
                         if (result == 0) {
@@ -231,26 +289,30 @@ class AudioService : Service() {
     }
 
     fun stopFromUi() { control.post { stopAudio("Audio stopped.") } }
-    fun panic() { control.post { bridge.panic(); mutableState.value = state.value.copy(message = "All notes and scheduled events cleared.") } }
-    fun audition(track: Int, enabled: Boolean) { control.post {
-        if (enabled && wantsAudio) bridge.noteOn(track, 29, 0.8f, 20000 + track) else bridge.noteOff(track, 20000 + track)
+    fun panic() { control.post { finishRecording();bridge.panic();playingIntent=false;pendingLaunch=null;message("All notes and effect tails cleared.") } }
+    fun audition(track: Int, enabled: Boolean) { control.post { if(enabled&&wantsAudio)bridge.noteOn(track,29,.8f,20000+track)else bridge.noteOff(track,20000+track) } }
+    fun noteOn(track: Int,note: Int,id: Int,velocity: Float=.85f) { control.post {
+        if(wantsAudio&&bridge.noteOn(track,note,velocity,id)){heldTouch[(track.toLong() shl 32)+id]=track to id;recordEvent(track,note,velocity,id,true)}
     } }
-    fun noteOn(track: Int, note: Int, id: Int) { control.post { bridge.noteOn(track, note, 0.85f, id) } }
-    fun noteOff(track: Int, id: Int) { control.post { bridge.noteOff(track, id) } }
-    fun releaseTouchNotes() { control.post { for (t in 0 until AudioBridge.TRACK_COUNT) {
-        for (key in 0..7) bridge.noteOff(t, 1 + t * 8 + key)
-        bridge.noteOff(t, 20000 + t)
-    } } }
-    fun transport() { control.post { bridge.transport(!bridge.stats().playing) } }
-    fun master(value: Float) { control.post {
-        mutableState.value = state.value.copy(master = value.coerceIn(0f, 1f))
-        bridge.masterGain(state.value.master)
-    } }
-    fun tempo(value: Float) { control.post { setTempo(value) } }
-    private fun setTempo(value: Float) {
-        mutableState.value = state.value.copy(bpm = value.coerceIn(30f, 300f))
-        bridge.tempo(state.value.bpm)
+    fun noteOff(track: Int,id: Int) { control.post {heldTouch.remove((track.toLong() shl 32)+id);recordEvent(track,0,0f,id,false);bridge.noteOff(track,id)} }
+    fun releaseTouchNotes() { control.post { heldTouch.values.toList().forEach{(track,id)->recordEvent(track,0,0f,id,false);bridge.noteOff(track,id)};heldTouch.clear();for(t in 0..15)bridge.noteOff(t,20000+t) } }
+    fun transport() { control.post { if(playingIntent)stopTransport()else playNow(state.value.project.mode,0.0) } }
+    private fun stopTransport(){finishRecording();bridge.transport(false);playingIntent=false;pendingLaunch=null}
+    fun stopTransportFromUi(){control.post{stopTransport()}}
+    fun play(mode: Int,beat: Double=0.0){control.post{if(wantsAudio&&!state.value.busy)playNow(mode,beat)}}
+    private fun playNow(mode: Int,beat: Double){
+        finishRecording();commit{it.copy(project=it.project.copy(mode=mode))}
+        if(!syncEngine()){message("Playback is updating; try Play again.");return}
+        bridge.transport(true);playingIntent=true
+        if(mode==1)bridge.seek(beat)else bridge.scene(0,0f)
     }
+    fun launch(slot: Int){control.post{if(!wantsAudio||state.value.busy)return@post;finishRecording();commit{it.copy(project=it.project.copy(mode=0))};pendingLaunch=Triple(slot%16,slot/16,false)}}
+    fun launchScene(scene: Int){control.post{if(!wantsAudio||state.value.busy)return@post;finishRecording();commit{it.copy(project=it.project.copy(mode=0))};pendingLaunch=Triple(0,scene,true)}}
+    fun stopTrack(track: Int){control.post{if(wantsAudio)bridge.launch(track,-1,state.value.project.launchBeats.toFloat())}}
+    fun seek(beat: Double){control.post{if(beat.isFinite()&&beat in 0.0..65536.0)bridge.seek(beat)}}
+    fun master(value: Float){control.post{if(value.isFinite())commit("master"){it.copy(master=value.coerceIn(0f,1f))}}}
+    fun tempo(value: Float){control.post{setTempo(value)}}
+    private fun setTempo(value: Float){if(value.isFinite())commit("tempo"){it.copy(bpm=value.coerceIn(30f,300f))}}
     fun tapTempo() { control.post {
         val now = android.os.SystemClock.elapsedRealtime()
         val gap = now - nextTapTime
@@ -273,27 +335,8 @@ class AudioService : Service() {
             if (wantsAudio && result < 0) mutableState.value = state.value.copy(message = "This output route did not accept a buffer change ($result).")
         }
     } }
-    fun track(index: Int, value: TrackControls) { control.post {
-        if (index !in state.value.tracks.indices) return@post
-        val safe = value.copy(gain = value.gain.coerceIn(0f, 2f), pan = value.pan.coerceIn(-1f, 1f))
-        mutableState.value = state.value.copy(tracks = state.value.tracks.toMutableList().also { it[index] = safe })
-        bridge.trackGain(index, safe.gain)
-        bridge.trackPan(index, safe.pan)
-        bridge.trackMute(index, safe.mute)
-        bridge.trackSolo(index, safe.solo)
-    } }
-
-    private fun editPatch(track: Int, transform: (SynthPatch) -> SynthPatch) {
-        if (track !in state.value.patches.indices) return
-        val patch = transform(state.value.patches[track])
-        if (wantsAudio && !bridge.patch(track, patch)) {
-            mutableState.value = state.value.copy(message = "Synth update busy. Try the control again.")
-            return
-        }
-        mutableState.value = state.value.copy(patches = state.value.patches.toMutableList().also { it[track] = patch })
-        control.removeCallbacks(savePatches)
-        control.postDelayed(savePatches, 500)
-    }
+    fun track(index: Int,value: TrackControls){control.post{if(index in 0..15)commit("track-$index"){it.copy(tracks=it.tracks.toMutableList().also{list->list[index]=value})}}}
+    private fun editPatch(track: Int,transform: (SynthPatch)->SynthPatch){if(track in 0..15)commit("patch-$track"){it.copy(patches=it.patches.toMutableList().also{p->p[track]=transform(p[track])})}}
     fun preset(track: Int, index: Int) { control.post {
         if (index in presets.indices) editPatch(track) { presets[index] }
     } }
@@ -304,16 +347,7 @@ class AudioService : Service() {
         control.post { editPatch(track) { it.paint(lfo, from, fromValue, to, toValue) } }
     }
 
-    private fun editEffects(track: Int, transform: (FxConfig) -> FxConfig) {
-        if (track !in state.value.effects.indices) return
-        val config = transform(state.value.effects[track])
-        if (wantsAudio && !bridge.effects(track, config)) {
-            mutableState.value = state.value.copy(message = "Effects update busy. Try the control again.")
-            return
-        }
-        mutableState.value = state.value.copy(effects = state.value.effects.toMutableList().also { it[track] = config })
-        control.removeCallbacks(saveEffects); control.postDelayed(saveEffects, 500)
-    }
+    private fun editEffects(track: Int,transform: (FxConfig)->FxConfig){if(track in 0..15)commit("fx-$track"){it.copy(effects=it.effects.toMutableList().also{p->p[track]=transform(p[track])})}}
     fun fxPreset(track: Int, index: Int) { control.post { if (index in fxPresets.indices) editEffects(track) { fxPresets[index] } } }
     fun fxParameter(track: Int, id: Int, value: Float) { control.post { editEffects(track) { it.parameter(id, value) } } }
     fun fxMove(track: Int, unit: Int, direction: Int) { control.post { editEffects(track) { it.move(unit, direction) } } }
@@ -322,26 +356,15 @@ class AudioService : Service() {
     fun meterTrack(track: Int) { control.post {
         if (track in 0..16) { mutableState.value = state.value.copy(meterTrack = track); bridge.meterTrack(track) }
     } }
-    fun limiterDrive(value: Float) { control.post {
-        if (!value.isFinite()) return@post
-        val safe = value.coerceIn(0f,24f); if (wantsAudio && !bridge.limiterDrive(safe)) return@post
-        mutableState.value = state.value.copy(limiterDrive = safe)
-        control.removeCallbacks(saveEffects); control.postDelayed(saveEffects,500)
-    } }
-    fun limiterRelease(value: Float) { control.post {
-        if (!value.isFinite()) return@post
-        val safe = value.coerceIn(20f,500f); if (wantsAudio && !bridge.limiterRelease(safe)) return@post
-        mutableState.value = state.value.copy(limiterRelease = safe)
-        control.removeCallbacks(saveEffects); control.postDelayed(saveEffects,500)
-    } }
+    fun limiterDrive(value: Float){control.post{if(value.isFinite())commit("limiter-drive"){it.copy(limiterDrive=value.coerceIn(0f,24f))}}}
+    fun limiterRelease(value: Float){control.post{if(value.isFinite())commit("limiter-release"){it.copy(limiterRelease=value.coerceIn(20f,500f))}}}
 
     /** Two sample-scheduled bars using the selected track's current synth. */
     fun demo(track: Int) { control.post {
         if (track !in state.value.tracks.indices) return@post
         val stats = bridge.stats()
         if (!stats.running) return@post
-        bridge.transport(false)
-        bridge.transport(true)
+        finishRecording();bridge.transport(false);playingIntent=false;pendingLaunch=null
         val base = stats.frame + stats.sampleRate / 5
         val step = stats.sampleRate * 60.0 / state.value.bpm / 2.0
         val notes = intArrayOf(29, 29, 36, 29, 32, 29, 39, 36, 29, 41, 36, 32, 29, 36, 39, 29)
@@ -354,24 +377,108 @@ class AudioService : Service() {
         mutableState.value = state.value.copy(message = "Two-bar F-minor phrase • Track ${track + 1} • ${state.value.patches[track].name}")
     } }
 
-    override fun onDestroy() {
-        unregisterReceiver(noisyReceiver)
-        control.removeCallbacksAndMessages(null)
+    fun projectEdit(key: String="",edit: (Project)->Project){control.post{commit(key){it.copy(project=edit(it.project))}}}
+    fun clipEdit(slot: Int,key: String="",edit: (Clip)->Clip){projectEdit(key){p->val clip=p.clip(slot)?:error("Choose a clip.");p.put(edit(clip))}}
+    fun newClip(slot: Int){projectEdit{p->require(p.clip(slot)==null){"That slot already has a clip."};p.put(Clip(slot,"MIDI ${slot/16+1}",p.barBeats*4))}}
+    fun undo(){control.post{if(state.value.busy)return@post;finishRecording();history.undo(document())?.let{adopt(it);syncEngine()}}}
+    fun redo(){control.post{if(state.value.busy)return@post;finishRecording();history.redo(document())?.let{adopt(it);syncEngine()}}}
+    fun overdub(value: Boolean){control.post{mutableState.value=state.value.copy(overdub=value)}}
+    fun record(slot: Int){control.post{
+        if(state.value.recording>=0){finishRecording();return@post}
+        if(!wantsAudio||state.value.busy)return@post
+        val c=state.value.project.clip(slot)
+        if(c?.isAudio==true){message("Choose a MIDI clip to record keyboard or USB notes.");return@post}
+        history.begin(document())
+        commit{d->val clip=c?:Clip(slot,"Recorded MIDI",d.project.barBeats*4)
+            d.copy(project=d.project.copy(mode=0).put(if(state.value.overdub)clip else clip.copy(notes=emptyList())),tracks=d.tracks.toMutableList().also{it[slot%16]=it[slot%16].copy(armed=true)})}
+        mutableState.value=state.value.copy(recording=slot)
+        pendingLaunch=Triple(slot%16,slot/16,false);message("MIDI recording starts at the launch boundary. Play the keyboard or USB controller.")
+    }}
+    private fun recordEvent(track: Int,key: Int,velocity: Float,id: Int,on: Boolean){
+        val address=(track.toLong() shl 32)+(id.toLong() and 0xffffffffL)
+        if(!on){recorded.remove(address)?.let{finishNote(it)};return}
+        val slot=state.value.recording;if(slot<0||slot%16!=track||!state.value.tracks[track].armed)return
+        val seq=bridge.sequence();val c=state.value.project.clip(slot)?:return
+        if(seq.active[track]!=slot)return
+        recorded[address]=Recorded(track,key,velocity,bridge.stats().beat,seq.phase[track]*c.length)
+    }
+    private fun finishNote(note: Recorded){
+        val slot=state.value.recording;if(slot<0)return
+        val c=state.value.project.clip(slot)?:return
+        val duration=(bridge.stats().beat-note.absolute).coerceIn(1.0/960,c.length)
+        commit { d->var clip=d.project.clip(slot)?:return@commit d
+            val start=note.local.coerceIn(0.0,clip.length-1.0/960);val first=min(duration,clip.length-start)
+            if(clip.notes.size<256&&first>=1.0/960)clip=clip.add(start,note.pitch,first,note.velocity)
+            if(duration-first>=1.0/960&&clip.notes.size<256)clip=clip.add(0.0,note.pitch,duration-first,note.velocity)
+            d.copy(project=d.project.put(clip))
+        }
+    }
+    private fun finishRecording(){if(state.value.recording<0)return;recorded.values.toList().forEach{finishNote(it)};recorded.clear();history.end();mutableState.value=state.value.copy(recording=-1,canUndo=history.canUndo,canRedo=history.canRedo)}
+    private fun loadAssets(d: ProjectDocument){
+        check(bridge.loadAssets(d.project.assets.map{it.id to files.audioFile(it)})){"Audio is missing, unsupported, or exceeds the 512 MiB decoded audio budget."}
+        for(a in d.project.assets){val info=requireNotNull(bridge.assetInfo(a.id));require(info[0].toInt()==a.rate&&info[1].toLong()==a.frames){"Audio file does not match its project metadata."}}
+    }
+    private fun work(title: String,task: (ProjectDocument)->ProjectDocument?,done: String,resetHistory: Boolean=false){
         control.post {
-            savePatches.run()
-            saveEffects.run()
-            midi?.close()
-            if (::bridge.isInitialized) bridge.close()
+            if(!state.value.ready||state.value.busy)return@post
+            finishRecording();val snapshot=document();cancelled.set(false)
+            mutableState.value=state.value.copy(busy=true,work=title,progress=0f)
+            ContextCompat.startForegroundService(this,Intent(this,AudioService::class.java).setAction(ACTION_WORK))
+            io.execute {
+                var result: ProjectDocument?=null;var error: String?=null
+                try{result=task(snapshot);check(!cancelled.get()){ "Cancelled." }}catch(e: Exception){error=e.message?:"File operation failed.";runCatching{loadAssets(snapshot)}}
+                control.post {if(!destroyed){
+                    mutableState.value=state.value.copy(busy=false,work="",progress=0f)
+                    if(error==null&&result!=null){if(resetHistory)history.clear()else history.commit(document(),result);adopt(result);sent=null;syncEngine()}
+                    message(error?:done)
+                    if(wantsAudio)startForeground(NOTIFICATION,notification(),ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+                    else {stopForeground(STOP_FOREGROUND_REMOVE);stopSelf()}
+                }}
+            }
+        }
+    }
+    fun cancelWork(){cancelled.set(true);if(::bridge.isInitialized)bridge.cancelExport()}
+    fun importAudio(uri: Uri,slot: Int){work("Importing audio",{d->
+        val target=if(d.project.clip(slot)==null)slot else d.project.emptySlot(slot%16)?:error("This track has no empty clip slots.")
+        val id=(0..63).firstOrNull{i->d.project.asset(i)==null}?:error("The project holds up to 64 audio files.")
+        val (name,file)=files.importAudio(uri,cancelled)
+        try{
+            check(bridge.loadAssets(d.project.assets.map{it.id to files.audioFile(it)}+(id to file))){"Unsupported WAV or decoded audio budget exceeded (512 MiB)."}
+            val info=requireNotNull(bridge.assetInfo(id));val asset=AudioAsset(id,name,file.name,info[0].toInt(),info[1].toLong(),info.drop(2).map{it.toFloat()})
+            val length=asset.frames.toDouble()/asset.rate*d.bpm/60
+            val project=d.project.copy(assets=d.project.assets+asset).put(Clip(target,name.take(64).ifBlank{"Audio"},length.coerceAtLeast(.0625),asset=id,last=asset.frames))
+            d.copy(project=project).also{require(it.valid()){ "Audio exceeds the supported timeline or memory limits." }}
+        }catch(e: Exception){file.delete();throw e}
+    },"Audio imported into the selected track. Select its clip to edit the waveform.")}
+    fun saveProject(uri: Uri){work("Saving project",{files.saveArchive(it,uri,cancelled);null},"Project saved with synths, effects and audio.")}
+    fun openProject(uri: Uri){control.post{if(!state.value.busy)stopAudio("Opening project…")};work("Opening project",{val d=files.openArchive(uri,cancelled);loadAssets(d);d},"Project opened. Start audio to play.",true)}
+    fun starter(){control.post{if(!state.value.ready||state.value.busy)return@post;stopTransport();commit{old->StarterProject.create(presets).let{it.copy(project=it.project.copy(assets=old.project.assets))}};message("Green circuit loaded. Start audio and press Play, or launch individual clips.")}}
+    fun newProject(){control.post{if(state.value.busy)return@post;stopTransport();history.clear();adopt(document().copy(project=Project(),tracks=List(16){TrackControls()}));syncEngine();message("New project. Your synth patches and effects are retained.")}}
+    fun exportWave(uri: Uri,rate: Int=48000,tail: Float=4f){work("Rendering WAV",{d->
+        require(d.project.regions.isNotEmpty()){ "Place clips in Arrangement before exporting." }
+        val file=File(cacheDir,"export-${System.nanoTime()}.wav")
+        try{val result=bridge.export(file,d,rate,tail);check(result==0){when(result){2->"Could not write the WAV file.";3->"Cancelled.";else->"Could not render this arrangement."}}
+            files.publishWave(file,uri,cancelled)
+        }finally{file.delete()};null
+    },"24-bit stereo WAV exported.")}
+
+    override fun onDestroy() {
+        destroyed=true;unregisterReceiver(noisyReceiver);control.removeCallbacksAndMessages(null)
+        control.post {
+            finishRecording();midi?.close();cancelled.set(true)
+            if(::bridge.isInitialized){bridge.cancelExport();bridge.stop()}
             audioManager.abandonAudioFocusRequest(focusRequest)
-            thread.quitSafely()
+            val d=document()
+            io.execute {runCatching{files.save(d)};control.post{if(::bridge.isInitialized)bridge.close();thread.quitSafely()}}
+            io.shutdown()
         }
         super.onDestroy()
     }
-
     companion object {
-        const val ACTION_START = "com.weskestis.astrastudio.START"
-        const val ACTION_STOP = "com.weskestis.astrastudio.STOP"
-        private const val CHANNEL = "astra_audio"
-        private const val NOTIFICATION = 41
+        const val ACTION_START="com.weskestis.astrastudio.START"
+        const val ACTION_STOP="com.weskestis.astrastudio.STOP"
+        private const val ACTION_WORK="com.weskestis.astrastudio.WORK"
+        private const val CHANNEL="astra_audio"
+        private const val NOTIFICATION=41
     }
 }

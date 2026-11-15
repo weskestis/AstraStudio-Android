@@ -5,6 +5,8 @@ import com.weskestis.astrastudio.synth.SynthSchema
 import com.weskestis.astrastudio.fx.FxConfig
 import com.weskestis.astrastudio.fx.FxSchema
 import com.weskestis.astrastudio.fx.FxStats
+import com.weskestis.astrastudio.project.*
+import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -41,6 +43,8 @@ class AudioBridge : AutoCloseable {
     private val statsBuffer = ByteBuffer.allocateDirect(20 * Double.SIZE_BYTES).order(ByteOrder.nativeOrder())
 
     private val fxBuffer = ByteBuffer.allocateDirect(133 * Float.SIZE_BYTES).order(ByteOrder.nativeOrder())
+
+    private val sequenceBuffer = ByteBuffer.allocateDirect(49 * Float.SIZE_BYTES).order(ByteOrder.nativeOrder())
 
     @Synchronized fun start(bufferBursts: Int = 3): Int {
         require(bufferBursts in 2..8)
@@ -86,6 +90,38 @@ class AudioBridge : AutoCloseable {
         fun v(i: Int) = fxBuffer.getFloat(i * Float.SIZE_BYTES)
         return FxStats(List(16){v(it)}, List(48){v(16+it)}, v(64), v(65).toInt(), List(64){v(66+it)}, v(130), v(131).toInt(), v(132).toLong())
     }
+
+    @Synchronized fun project(project: Project): Boolean = handle != 0L && nativeSetProject(handle, project.nativeWire())
+    @Synchronized fun launch(track: Int, scene: Int, quantum: Float) = send(16, track, scene, value = quantum)
+    @Synchronized fun scene(scene: Int, quantum: Float) = send(17, note = scene, value = quantum)
+    @Synchronized fun seek(beat: Double) = send(18, value = beat.toFloat())
+    @Synchronized fun sendA(track: Int, amount: Float) = send(19, track, value = amount)
+    @Synchronized fun sendB(track: Int, amount: Float) = send(20, track, value = amount)
+    @Synchronized fun sequence(): SequenceStats {
+        if(handle==0L||!nativeReadSequence(handle,sequenceBuffer))return SequenceStats()
+        fun v(i: Int)=sequenceBuffer.getFloat(i*4)
+        return SequenceStats(List(16){v(it).toInt()},List(16){v(16+it).toInt()},List(16){v(32+it)},v(48).toInt())
+    }
+    // These worker calls hold the Kotlin monitor only while copying the opaque
+    // handle. Native code snapshots shared sample ownership before long I/O/DSP.
+    fun loadAssets(assets: List<Pair<Int,File>>): Boolean {
+        val h=synchronized(this){handle}
+        return h!=0L&&nativeLoadAssets(h,assets.map{it.first}.toIntArray(),assets.map{it.second.absolutePath}.toTypedArray())
+    }
+    fun assetInfo(id: Int): DoubleArray? {val h=synchronized(this){handle};return if(h==0L)null else nativeAssetInfo(h,id)}
+    fun export(file: File,document: ProjectDocument,rate: Int,tail: Float): Int {
+        val h=synchronized(this){handle}
+        return nativeExport(h,file.absolutePath,document.project.nativeWire(),document.patches.flatMap{it.wire}.toFloatArray(),document.effects.flatMap{it.wire}.toFloatArray(),document.mixWire(),rate,tail)
+    }
+    fun cancelExport()=nativeCancelExport()
+    fun exportProgress()=nativeExportProgress()
+    private external fun nativeSetProject(handle: Long, data: DoubleArray): Boolean
+    private external fun nativeReadSequence(handle: Long, buffer: ByteBuffer): Boolean
+    private external fun nativeLoadAssets(handle: Long, ids: IntArray, paths: Array<String>): Boolean
+    private external fun nativeAssetInfo(handle: Long, id: Int): DoubleArray?
+    private external fun nativeExport(handle: Long, path: String, data: DoubleArray, patches: FloatArray, effects: FloatArray, mix: FloatArray, rate: Int, tail: Float): Int
+    private external fun nativeCancelExport()
+    private external fun nativeExportProgress(): Float
 
     private fun send(type: Int, track: Int = 0, note: Int = 0, noteId: Int = 0, value: Float, frame: Long = IMMEDIATE): Boolean {
         if (handle == 0L || !value.isFinite() || frame < -1) return false

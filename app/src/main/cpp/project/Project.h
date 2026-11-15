@@ -1,0 +1,60 @@
+#pragma once
+#include "fx/FxPrimitives.h"
+#include <atomic>
+#include <span>
+#include <string>
+#include <vector>
+namespace astra::project {
+constexpr int kTracks=16,kScenes=8,kClips=128,kAssets=64,kMaxRegions=512,kMaxNotes=256,kMaxPoints=64;
+constexpr uint32_t kSequenceId=0x40000000U;
+constexpr std::size_t kSampleBudget=512ULL*1024*1024;
+struct Sample { int rate{};std::vector<float> stereo;int64_t frames()const noexcept{return static_cast<int64_t>(stereo.size()/2);} };
+using Samples=std::array<std::shared_ptr<const Sample>,kAssets>;
+std::shared_ptr<const Sample> readSample(const char* path,std::size_t remainingBytes);
+struct Note {double start{},length{};int pitch{};float velocity{};};
+struct Event {double beat{};int note{};bool on{};};
+struct Point {double beat{};float value{};};
+struct Clip {
+    bool present{};double length{4};int asset{-1};int64_t first{},last{};uint64_t hash{};
+    std::vector<Note> notes;std::vector<Event> events;std::array<std::vector<Point>,4> lanes;
+};
+struct Region {int id{},slot{};double start{},length{},offset{};int64_t audioOffset{};bool operator==(const Region&)const=default;};
+struct Plan {
+    int mode{},numerator{4},denominator{4};bool loop{};double loopStart{},loopEnd{16};
+    std::array<Clip,kClips> clips;std::array<std::vector<Region>,kTracks> regions;Samples samples;
+    bool decode(std::span<const double> data,const Samples& audio);
+    double barBeats()const noexcept{return numerator*4.0/denominator;}
+    double endBeat()const noexcept;
+};
+std::unique_ptr<Plan> decodePlan(std::span<const double>,const Samples&) noexcept;
+struct Snapshot {std::array<int,16> active{},queued{};std::array<float,16> phase{};int mode{};};
+// Callbacks are plain function pointers into RenderCore. No ownership or allocation
+// crosses the render boundary; immutable Plan slots retire on the control thread.
+class Sequencer {
+public:
+    using NoteFn=void(*)(void*,int,int,float,uint32_t,bool) noexcept;
+    using AutoFn=void(*)(void*,int,int,float,bool) noexcept;
+    void bind(void* owner,NoteFn note,AutoFn automation)noexcept{owner_=owner;note_=note;automation_=automation;}
+    void prepare(double rate)noexcept{rate_=rate;}
+    void activate(const Plan* next)noexcept;
+    void stop(bool clearLaunches=false)noexcept;
+    void rewind()noexcept{stop();for(auto& t:tracks_){t.launchBeat=0;t.queued=-2;}}
+    void launch(int track,int scene,double beat,double quantum)noexcept;
+    void scene(int scene,double beat,double quantum)noexcept;
+    void tick(double beat,float bpm,std::array<fx::Stereo,16>& audio)noexcept;
+    bool loop(double& beat)const noexcept;
+    double beatUnit()const noexcept{return plan_?4.0/plan_->denominator:1;}
+    double barBeats()const noexcept{return plan_?plan_->barBeats():4;}
+    Snapshot snapshot()const noexcept;
+private:
+    struct Track {int scene{-1},queued{-2};double launchBeat{},due{},previous{-1};int slot{-1},region{-1};uint64_t hash{};
+        std::size_t cursor{};std::array<uint32_t,kMaxNotes> held{};double audioPosition{};float phase{};
+        std::array<float,4> automation{};std::array<bool,4> automated{};};
+    void release(int track)noexcept;void clearAutomation(int track)noexcept;
+    void enter(int track,int slot,int region,double phase,double audioOffset,float bpm)noexcept;
+    void event(int track,const Clip& clip,const Event& e)noexcept;
+    uint32_t nextId()noexcept;
+    const Plan* plan_{};std::array<Track,16> tracks_{};double rate_{48000},previousBeat_{-1};uint32_t id_{kSequenceId};int automationClock_{};
+    void* owner_{};NoteFn note_{};AutoFn automation_{};
+};
+} // namespace astra::project

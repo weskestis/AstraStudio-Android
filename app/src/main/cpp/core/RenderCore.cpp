@@ -14,6 +14,8 @@ RenderCore::RenderCore() noexcept {
     for (std::size_t i = 0; i < sine_.size(); ++i) {
         sine_[i] = static_cast<float>(std::sin(2.0 * std::numbers::pi * static_cast<double>(i) / 2048.0));
     }
+    sequence_.bind(this,sequenceNote,sequenceAutomation);
+    for(int i=0;i<16;++i){publishedClips_[i]=-1;publishedQueued_[i]=-2;}
     prepare(48000.0);
 }
 
@@ -22,6 +24,11 @@ bool RenderCore::prepare(double sampleRate) noexcept {
     for (auto& track : tracks_) if (!track.effects.prepare(sampleRate)) return false;
     if (!limiter_.prepare(sampleRate)) return false;
     clickDelay_.reset();
+    sequence_.prepare(sampleRate);
+    if(!returnA_.prepare(static_cast<float>(sampleRate))||!returnB_.prepare(static_cast<float>(sampleRate)))return false;
+    returnConfig_[fx::ReverbMix]=1;returnConfig_[fx::DelayMix]=1;
+    returnA_.set(returnConfig_.values,static_cast<float>(sampleRate));returnA_.reset();
+    returnB_.set(returnConfig_.values,static_cast<float>(sampleRate),bpm_);returnB_.reset();
     sampleRate_ = sampleRate;
     updateLfoSteps();
     smoothing_ = static_cast<float>(1.0 - std::exp(-1.0 / (0.005 * sampleRate_)));
@@ -47,6 +54,10 @@ bool RenderCore::valid(const Command& c) noexcept {
         case CommandType::LimiterDrive: return c.value >= 0 && c.value <= 24;
         case CommandType::LimiterRelease: return c.value >= 20 && c.value <= 500;
         case CommandType::MeterTrack: return c.value >= 0 && c.value <= 16 && c.value == std::floor(c.value);
+        case CommandType::ProjectSnapshot: return c.note>=0&&c.note<3&&c.frame==kImmediate;
+        case CommandType::LaunchClip: case CommandType::LaunchScene: return c.note>=-1&&c.note<8&&c.value>=0&&c.value<=24;
+        case CommandType::Seek: return c.value>=0&&c.value<=65536;
+        case CommandType::SendA: case CommandType::SendB: return c.value>=0&&c.value<=1;
     }
     return false;
 }
@@ -73,6 +84,30 @@ bool RenderCore::setEffects(int track, const fx::Config& config) noexcept {
         if(enqueue({CommandType::FxSnapshot,track,static_cast<int32_t>(i),0,0}))return true;
         fxSlots_[i].busy.store(false,std::memory_order_release);return false;}
     return false;
+}
+bool RenderCore::setProject(std::span<const double> data,const project::Samples& samples) noexcept {
+    for(int i=0;i<3;++i){bool expected=false;if(!planSlots_[i].busy.compare_exchange_strong(expected,true,std::memory_order_acquire))continue;
+        auto plan=project::decodePlan(data,samples);if(!plan){planSlots_[i].busy.store(false,std::memory_order_release);return false;}
+        planSlots_[i].plan=std::move(plan);
+        if(enqueue({CommandType::ProjectSnapshot,0,i,0,0}))return true;
+        planSlots_[i].busy.store(false,std::memory_order_release);return false;
+    }return false;
+}
+void RenderCore::sequenceNote(void* owner,int track,int key,float velocity,uint32_t id,bool on) noexcept {
+    auto& core=*static_cast<RenderCore*>(owner);
+    if(on)core.noteOn({CommandType::NoteOn,track,key,id,velocity});
+    else for(auto& v:core.voices_)if(v.active&&v.track==track&&v.id==id)core.releaseVoice(v);
+}
+void RenderCore::sequenceAutomation(void* owner,int track,int lane,float value,bool enabled) noexcept {
+    auto& core=*static_cast<RenderCore*>(owner);auto& t=core.tracks_[track];t.autoValues[lane]=value;t.automated[lane]=enabled;
+    if(lane<2)core.updateTrackTargets();
+    else if(lane==2){t.renderPatch=t.patch;if(enabled)t.renderPatch[synth::Filter1Cutoff]=value;}
+    else core.refreshAutomation(track);
+}
+void RenderCore::refreshAutomation(int index) noexcept {
+    auto& t=tracks_[index];t.renderPatch=t.patch;
+    if(t.automated[2])t.renderPatch[synth::Filter1Cutoff]=t.autoValues[2];
+    auto effect=t.fxConfig;if(t.automated[3])effect.macros[0].value=t.autoValues[3];t.effects.configure(effect);
 }
 void RenderCore::recyclePatch(const Command& c) noexcept {
     if (c.type == CommandType::PatchSnapshot) patchSlots_[c.note].busy.store(false, std::memory_order_release);
@@ -105,6 +140,7 @@ Command RenderCore::popScheduled() noexcept {
 }
 
 void RenderCore::resetSound() noexcept {
+    sequence_.stop(true);
     for (auto& voice : voices_) { voice.active = false; voice.synth.silence(); }
     // Pop in submission/frame order: several accepted edits may target one track.
     while (scheduledSize_ != 0) {
@@ -114,6 +150,7 @@ void RenderCore::resetSound() noexcept {
     clickEnvelope_ = 0.0f;
     for (auto& track : tracks_) track.effects.reset();
     limiter_.reset();
+    returnA_.reset();returnB_.reset();
     clickDelay_.reset();
 }
 
@@ -148,8 +185,8 @@ void RenderCore::updateTrackTargets() noexcept {
     bool anySolo = false;
     for (const auto& track : tracks_) anySolo |= track.solo;
     for (auto& track : tracks_) {
-        const float gain = track.mute || (anySolo && !track.solo) ? 0.0f : track.gain;
-        const float angle = (track.pan + 1.0f) * std::numbers::pi_v<float> * 0.25f;
+        const float gain = track.mute || (anySolo && !track.solo) ? 0.0f : (track.automated[0]?track.autoValues[0]:track.gain);
+        const float angle = ((track.automated[1]?track.autoValues[1]:track.pan) + 1.0f) * std::numbers::pi_v<float> * 0.25f;
         track.targetLeft = gain * std::cos(angle);
         track.targetRight = gain * std::sin(angle);
     }
@@ -182,7 +219,7 @@ void RenderCore::noteOn(const Command& c) noexcept {
     selected->track = c.track;
     selected->note = c.note;
     const auto& track = tracks_[c.track];
-    selected->synth.start(c.note, c.value, c.noteId * 2654435761U, track.patch, sampleRate_, track.freePhases, bpm_);
+    selected->synth.start(c.note, c.value, c.noteId * 2654435761U, track.renderPatch, sampleRate_, track.freePhases, bpm_);
     selected->active = true;
     selected->age = voiceAge_++;
 }
@@ -204,29 +241,43 @@ void RenderCore::apply(const Command& c) noexcept {
         case CommandType::Tempo:
             bpm_ = c.value; updateLfoSteps();
             for (auto& t : tracks_) t.effects.tempo(bpm_);
+            returnB_.set(returnConfig_.values,static_cast<float>(sampleRate_),bpm_);
             break;
         case CommandType::FxSnapshot:
-            track.effects.configure(fxSlots_[c.note].config);
+            track.fxConfig=fxSlots_[c.note].config;
+            refreshAutomation(c.track);
             fxSlots_[c.note].busy.store(false,std::memory_order_release);
             break;
         case CommandType::LimiterDrive: targetLimiterDrive_=fx::dbGain(c.value); break;
         case CommandType::LimiterRelease: limiter_.setRelease(c.value); break;
         case CommandType::MeterTrack: meterTrack_=static_cast<int>(c.value); break;
+        case CommandType::ProjectSnapshot: {
+            sequence_.activate(planSlots_[c.note].plan.get());const int old=activePlan_;activePlan_=c.note;
+            if(old>=0)planSlots_[old].busy.store(false,std::memory_order_release);
+            break;
+        }
+        case CommandType::LaunchClip: sequence_.launch(c.track,c.note,beat_,c.value);break;
+        case CommandType::LaunchScene: sequence_.scene(c.note,beat_,c.value);break;
+        case CommandType::Seek: beat_=c.value;nextClickBeat_=std::ceil(beat_/sequence_.beatUnit())*sequence_.beatUnit();sequence_.stop();break;
+        case CommandType::SendA: track.targetSendA=c.value;break;
+        case CommandType::SendB: track.targetSendB=c.value;break;
         case CommandType::PatchSnapshot:
             track.patch = patchSlots_[c.note].patch;
+            refreshAutomation(c.track);
             recyclePatch(c);
             updateLfoSteps();
             break;
         case CommandType::Transport:
             playing_ = c.value != 0.0f;
             if (playing_) {
-                beat_ = 0.0; nextClickBeat_ = 0.0;
+                beat_ = 0.0; nextClickBeat_ = 0.0;sequence_.rewind();
                 for (auto& t : tracks_) for (int l = 0; l < 4; ++l)
                     if (t.patch[synth::Lfo1Sync + l * 4] != 0) t.freePhases[l] = 0;
             }
             else {
                 // Cancel notes submitted BEFORE Stop, while preserving a new
                 // pattern submitted after it in the same control batch.
+                sequence_.stop();
                 minNoteOrder_ = c.order + 1;
                 auto end = std::remove_if(scheduled_.begin(), scheduled_.begin() + static_cast<std::ptrdiff_t>(scheduledSize_),
                     [this](const Command& event) {
@@ -263,13 +314,18 @@ void RenderCore::render(float* output, int32_t frames) noexcept {
             apply(command);
             ++events;
         }
+        std::array<fx::Stereo,kTrackCount> clipAudio{};
+        if(playing_){if(sequence_.loop(beat_))nextClickBeat_=beat_;sequence_.tick(beat_,bpm_,clipAudio);}
         std::array<float, kTrackCount> mono{};
         for (auto& voice : voices_) {
             if (!voice.active) continue;
             auto& t = tracks_[static_cast<std::size_t>(voice.track)];
-            mono[static_cast<std::size_t>(voice.track)] += voice.synth.render(t.patch, wavetables_, t.freePhases, bpm_);
+            mono[static_cast<std::size_t>(voice.track)] += voice.synth.render(t.renderPatch, wavetables_, t.freePhases, bpm_);
             voice.active = voice.synth.active();
         }
+        std::array<fx::Stereo,kTrackCount> dry{};
+        for(int t=0;t<kTrackCount;++t)dry[t]=clipAudio[t]+fx::Stereo{mono[t],mono[t]};
+        fx::Stereo sendA{},sendB{};
         float left = 0.0f;
         float right = 0.0f;
         for (std::size_t t = 0; t < tracks_.size(); ++t) {
@@ -278,16 +334,19 @@ void RenderCore::render(float* output, int32_t frames) noexcept {
             track.left += smoothing_ * (track.targetLeft - track.left);
             track.right += smoothing_ * (track.targetRight - track.right);
             const int detectorTrack=track.effects.detectorTrack();
-            const float detector=detectorTrack>=0?mono[static_cast<std::size_t>(detectorTrack)]:mono[t];
-            const auto effected=track.effects.tick({mono[t],mono[t]},{detector,detector});
+            const auto detector=detectorTrack>=0?dry[static_cast<std::size_t>(detectorTrack)]:dry[t];
+            const auto effected=track.effects.tick(dry[t],detector);
             const fx::Stereo mixed{effected.l*track.left,effected.r*track.right};
             left += mixed.l; right += mixed.r;
+            track.sendA+=smoothing_*(track.targetSendA-track.sendA);track.sendB+=smoothing_*(track.targetSendB-track.sendB);
+            sendA=sendA+mixed*track.sendA;sendB=sendB+mixed*track.sendB;
             if(meterTrack_==static_cast<int>(t))analyzer_.push(mixed,meterTrack_);
         }
+        const auto returns=returnA_.tick(sendA)+returnB_.tick(sendB);left+=returns.l;right+=returns.r;
         if (playing_) {
             if (beat_ >= nextClickBeat_) {
                 if (metronome_) { clickEnvelope_ = 0.16f; clickPhase_ = 0.0; }
-                nextClickBeat_ = std::floor(beat_) + 1.0;
+                nextClickBeat_ = (std::floor(beat_/sequence_.beatUnit())+1)*sequence_.beatUnit();
             }
             beat_ += static_cast<double>(bpm_) / (60.0 * sampleRate_);
         }
@@ -327,6 +386,8 @@ void RenderCore::publish(float left, float right) noexcept {
         const auto bands=tracks_[t].effects.bandMeters();
         for(int b=0;b<3;++b)publishedBands_[t*3+b].store(bands[b],std::memory_order_relaxed);}
     publishedLimiter_.store(limiter_.reduction(),std::memory_order_relaxed);
+    const auto seq=sequence_.snapshot();publishedMode_.store(seq.mode,std::memory_order_relaxed);
+    for(int t=0;t<16;++t){publishedClips_[t].store(seq.active[t],std::memory_order_relaxed);publishedQueued_[t].store(seq.queued[t],std::memory_order_relaxed);publishedPhase_[t].store(seq.phase[t],std::memory_order_relaxed);}
     uint32_t count = 0;
     for (const auto& voice : voices_) if (voice.active) ++count;
     publishedFrame_.store(frame_, std::memory_order_relaxed);
@@ -340,6 +401,9 @@ void RenderCore::publish(float left, float right) noexcept {
     publishedPlaying_.store(playing_, std::memory_order_relaxed);
 }
 
+project::Snapshot RenderCore::sequenceSnapshot()const noexcept {
+    project::Snapshot s;s.mode=publishedMode_.load(std::memory_order_relaxed);for(int t=0;t<16;++t){s.active[t]=publishedClips_[t].load(std::memory_order_relaxed);s.queued[t]=publishedQueued_[t].load(std::memory_order_relaxed);s.phase[t]=publishedPhase_[t].load(std::memory_order_relaxed);}return s;
+}
 FxSnapshot RenderCore::effectsSnapshot() noexcept {
     FxSnapshot result;
     for(int t=0;t<16;++t)result.sidechain[t]=publishedReduction_[t].load(std::memory_order_relaxed);
