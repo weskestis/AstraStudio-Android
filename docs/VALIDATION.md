@@ -1,6 +1,24 @@
-# Phase 8 validation in progress
+# Phase 8 validation
 
-Version 0.8.0-phase8 / versionCode 8. Added microphone capture, disk-backed Sample Lab, pitch/spectrum analysis and exact sample extraction. Local tests and Android CI results will be recorded when complete; no physical Xperia microphone or USB input fidelity measurements have been performed.
+Development **0.8.0-phase8 / versionCode 8**, Android 14+.
+
+Verified executable/source commit: `258c83f5c8d5bdf14f9f365f885b479499c203a4`.
+[Successful build and Android run](https://github.com/weskestis/AstraStudio-Android/actions/runs/43759779293).
+
+- **124 Kotlin unit tests passed**, including 21 new recording/file/analysis tests: unchanged float extraction, mono/stereo handling, recovery of interrupted writes, truncated/invalid data rejection, optional fades, cancellation cleanup, a 700 MiB file read through a small window, bass pitch at multiple rates, antiphase stereo, harmonic bass, silence/noise rejection and bounded analysis duration.
+- All **six native suites passed** in Release and with AddressSanitizer/UndefinedBehaviorSanitizer. The existing live DSP and callback allocation checks remain green; this phase adds no processing or file work to the Oboe callback.
+- All **10 Android instrumentation tests passed**, 0 failures/errors/skips, **167.319 seconds**, on API 34 x86_64 at 1080 × 2520. The new tests check frame-entry/zoom, a measured A1/55 Hz fixture, rotation, sampler root assignment, exact extracted and directly saved WAV values, retained originals, Undo/Redo, clip insertion, and actual platform AudioRecord capture continuing through panel Back and rotation before finalizing a readable WAV. Emulator input is not a physical microphone fidelity test.
+- Assembly and lint passed. Lint has **0 errors**, with advisory warnings including the requested SDK baseline and conservative free-storage checks.
+- Phone and landscape screenshots were reviewed. Sample Lab controls wrap vertically; dialogs avoid the keyboard. Input meters update in their own subtree. Earlier validation caught an Apply control behind the keyboard and a nested horizontal row that left an action outside the visible area after rotation; these are fixed in the verified build.
+
+## Verified APK
+
+- File: `AstraStudio_Phase8_0.8.0.apk` — **28,283,074 bytes**.
+- SHA-256: `d425822d0b00d922705d0d4212b350ff020f04ab7c8456153ec2c14f0cac60fd`.
+- Certificate SHA-256: `1bff24ae64d74c99d9540a1ecc5acccc8479367f44772b305144d2c10ce4bd45`.
+- Package `com.weskestis.astrastudio`; minimum/target API 34; ARM64 and x86_64. Signature verification and 16 KiB ZIP alignment passed. Install over Phase 7 using the same development certificate.
+
+Physical Sony input quality, stereo/USB routing, long-duration endurance, thermal behavior and acoustic bass response remain unmeasured. Float storage cannot improve the hardware input resolution. [Recording controls and limits](RECORDING.md). Full multitrack disk streaming and automatic tempo-following warp are not included; existing track/sample budgets and schema-v3 project format remain unchanged.
 
 ---
 
