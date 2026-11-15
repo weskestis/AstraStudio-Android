@@ -21,6 +21,9 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import com.weskestis.astrastudio.MainActivity
 import com.weskestis.astrastudio.R
+import com.weskestis.astrastudio.fx.FxConfig
+import com.weskestis.astrastudio.fx.FxStats
+import com.weskestis.astrastudio.fx.FxSchema
 import com.weskestis.astrastudio.synth.SynthPatch
 import com.weskestis.astrastudio.synth.SynthSchema
 import com.weskestis.astrastudio.midi.MidiInputManager
@@ -37,6 +40,11 @@ data class StudioState(
     val metronome: Boolean = false,
     val tracks: List<TrackControls> = List(AudioBridge.TRACK_COUNT) { TrackControls() },
     val midiDevices: Int = 0,
+    val effects: List<FxConfig> = List(AudioBridge.TRACK_COUNT) { FxConfig.initial() },
+    val fxStats: FxStats = FxStats(),
+    val limiterDrive: Float = 0f,
+    val limiterRelease: Float = 80f,
+    val meterTrack: Int = 16,
     val patches: List<SynthPatch> = List(AudioBridge.TRACK_COUNT) { SynthPatch.initial() },
 )
 
@@ -52,6 +60,14 @@ class AudioService : Service() {
     private lateinit var focusRequest: AudioFocusRequest
     private var midi: MidiInputManager? = null
     private var presets = emptyList<SynthPatch>()
+    private var fxPresets = emptyList<FxConfig>()
+    private val saveEffects = Runnable {
+        getSharedPreferences("fx-v1", MODE_PRIVATE).edit {
+            state.value.effects.forEachIndexed { i, config -> putString("track-$i", config.encode()) }
+            putFloat("limiter-drive", state.value.limiterDrive)
+            putFloat("limiter-release", state.value.limiterRelease)
+        }
+    }
     private val savePatches = Runnable {
         getSharedPreferences("synth-v1", MODE_PRIVATE).edit {
             state.value.patches.forEachIndexed { i, patch -> putString("track-$i", patch.encode()) }
@@ -99,6 +115,13 @@ class AudioService : Service() {
             mutableState.value = state.value.copy(patches = List(AudioBridge.TRACK_COUNT) { index ->
                 SynthPatch.decode(saved.getString("track-$index", null)) ?: presets[when (index) { 0 -> 1; 1 -> 3; 2 -> 5; else -> 0 }]
             })
+            fxPresets = FxSchema.presets.indices.map(bridge::fxPreset)
+            val savedFx = getSharedPreferences("fx-v1", MODE_PRIVATE)
+            mutableState.value = state.value.copy(
+                effects = List(AudioBridge.TRACK_COUNT) { index -> FxConfig.decode(savedFx.getString("track-$index", null)) ?: fxPresets[0] },
+                limiterDrive = savedFx.getFloat("limiter-drive", 0f).takeIf { it.isFinite() }?.coerceIn(0f,24f) ?: 0f,
+                limiterRelease = savedFx.getFloat("limiter-release", 80f).takeIf { it.isFinite() }?.coerceIn(20f,500f) ?: 80f,
+            )
             control.post(poll)
         }
     }
@@ -156,6 +179,10 @@ class AudioService : Service() {
         bridge.masterGain(s.master)
         bridge.tempo(s.bpm)
         bridge.metronome(s.metronome)
+        bridge.limiterDrive(s.limiterDrive)
+        bridge.limiterRelease(s.limiterRelease)
+        bridge.meterTrack(s.meterTrack)
+        s.effects.forEachIndexed { index, config -> bridge.effects(index, config) }
         s.patches.forEachIndexed { index, patch -> bridge.patch(index, patch) }
         s.tracks.forEachIndexed { index, track ->
             bridge.trackGain(index, track.gain)
@@ -171,7 +198,7 @@ class AudioService : Service() {
         midi = null
         bridge.stop()
         audioManager.abandonAudioFocusRequest(focusRequest)
-        mutableState.value = state.value.copy(stats = AudioStats(), message = message, midiDevices = 0)
+        mutableState.value = state.value.copy(stats = AudioStats(), fxStats = FxStats(), message = message, midiDevices = 0)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -179,7 +206,7 @@ class AudioService : Service() {
     private val poll = object : Runnable {
         override fun run() {
             val stats = bridge.stats()
-            mutableState.value = state.value.copy(stats = stats)
+            mutableState.value = state.value.copy(stats = stats, fxStats = if (stats.running) bridge.fxStats() else FxStats())
             if (wantsAudio && stats.running) {
                 if (++stablePolls >= 100) reconnectAttempts = 0
             } else stablePolls = 0
@@ -277,6 +304,37 @@ class AudioService : Service() {
         control.post { editPatch(track) { it.paint(lfo, from, fromValue, to, toValue) } }
     }
 
+    private fun editEffects(track: Int, transform: (FxConfig) -> FxConfig) {
+        if (track !in state.value.effects.indices) return
+        val config = transform(state.value.effects[track])
+        if (wantsAudio && !bridge.effects(track, config)) {
+            mutableState.value = state.value.copy(message = "Effects update busy. Try the control again.")
+            return
+        }
+        mutableState.value = state.value.copy(effects = state.value.effects.toMutableList().also { it[track] = config })
+        control.removeCallbacks(saveEffects); control.postDelayed(saveEffects, 500)
+    }
+    fun fxPreset(track: Int, index: Int) { control.post { if (index in fxPresets.indices) editEffects(track) { fxPresets[index] } } }
+    fun fxParameter(track: Int, id: Int, value: Float) { control.post { editEffects(track) { it.parameter(id, value) } } }
+    fun fxMove(track: Int, unit: Int, direction: Int) { control.post { editEffects(track) { it.move(unit, direction) } } }
+    fun fxLane(track: Int, unit: Int, lane: Int) { control.post { editEffects(track) { it.lane(unit, lane) } } }
+    fun fxMacro(track: Int, macro: Int, field: Int, value: Float) { control.post { editEffects(track) { it.macro(macro, field, value) } } }
+    fun meterTrack(track: Int) { control.post {
+        if (track in 0..16) { mutableState.value = state.value.copy(meterTrack = track); bridge.meterTrack(track) }
+    } }
+    fun limiterDrive(value: Float) { control.post {
+        if (!value.isFinite()) return@post
+        val safe = value.coerceIn(0f,24f); if (wantsAudio && !bridge.limiterDrive(safe)) return@post
+        mutableState.value = state.value.copy(limiterDrive = safe)
+        control.removeCallbacks(saveEffects); control.postDelayed(saveEffects,500)
+    } }
+    fun limiterRelease(value: Float) { control.post {
+        if (!value.isFinite()) return@post
+        val safe = value.coerceIn(20f,500f); if (wantsAudio && !bridge.limiterRelease(safe)) return@post
+        mutableState.value = state.value.copy(limiterRelease = safe)
+        control.removeCallbacks(saveEffects); control.postDelayed(saveEffects,500)
+    } }
+
     /** Two sample-scheduled bars using the selected track's current synth. */
     fun demo(track: Int) { control.post {
         if (track !in state.value.tracks.indices) return@post
@@ -301,6 +359,7 @@ class AudioService : Service() {
         control.removeCallbacksAndMessages(null)
         control.post {
             savePatches.run()
+            saveEffects.run()
             midi?.close()
             if (::bridge.isInitialized) bridge.close()
             audioManager.abandonAudioFocusRequest(focusRequest)

@@ -28,6 +28,8 @@ public:
     void stop() noexcept;
     bool enqueue(Command command) noexcept;
     bool setPatch(int track, const synth::Patch& patch) noexcept;
+    bool setEffects(int track, const fx::Config& config) noexcept;
+    FxSnapshot effectsSnapshot() noexcept;
     void panic() noexcept;
     int32_t setBufferBursts(int32_t bursts) noexcept;
     EngineSnapshot snapshot() const noexcept;

@@ -2,6 +2,9 @@ package com.weskestis.astrastudio.audio
 
 import com.weskestis.astrastudio.synth.SynthPatch
 import com.weskestis.astrastudio.synth.SynthSchema
+import com.weskestis.astrastudio.fx.FxConfig
+import com.weskestis.astrastudio.fx.FxSchema
+import com.weskestis.astrastudio.fx.FxStats
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -37,6 +40,8 @@ class AudioBridge : AutoCloseable {
     private var handle = nativeCreate().also { check(it != 0L) { "Unable to allocate audio engine" } }
     private val statsBuffer = ByteBuffer.allocateDirect(20 * Double.SIZE_BYTES).order(ByteOrder.nativeOrder())
 
+    private val fxBuffer = ByteBuffer.allocateDirect(133 * Float.SIZE_BYTES).order(ByteOrder.nativeOrder())
+
     @Synchronized fun start(bufferBursts: Int = 3): Int {
         require(bufferBursts in 2..8)
         return if (handle != 0L) nativeStart(handle, bufferBursts) else -10000
@@ -67,6 +72,21 @@ class AudioBridge : AutoCloseable {
     @Synchronized fun patch(track: Int, patch: SynthPatch): Boolean =
         handle != 0L && nativeSetPatch(handle, track, patch.wire.toFloatArray())
 
+    @Synchronized fun fxPreset(index: Int): FxConfig {
+        require(index in FxSchema.presets.indices)
+        return FxConfig(FxSchema.presets[index], checkNotNull(nativeFxPreset(index)).toList())
+    }
+    @Synchronized fun effects(track: Int, config: FxConfig): Boolean =
+        handle != 0L && nativeSetEffects(handle, track, config.wire.toFloatArray())
+    @Synchronized fun limiterDrive(db: Float): Boolean = send(12, value = db)
+    @Synchronized fun limiterRelease(ms: Float): Boolean = send(13, value = ms)
+    @Synchronized fun meterTrack(track: Int): Boolean = send(14, value = track.toFloat())
+    @Synchronized fun fxStats(): FxStats {
+        if (handle == 0L || !nativeReadFxStats(handle, fxBuffer)) return FxStats()
+        fun v(i: Int) = fxBuffer.getFloat(i * Float.SIZE_BYTES)
+        return FxStats(List(16){v(it)}, List(48){v(16+it)}, v(64), v(65).toInt(), List(64){v(66+it)}, v(130), v(131).toInt(), v(132).toLong())
+    }
+
     private fun send(type: Int, track: Int = 0, note: Int = 0, noteId: Int = 0, value: Float, frame: Long = IMMEDIATE): Boolean {
         if (handle == 0L || !value.isFinite() || frame < -1) return false
         return nativeSend(handle, type, track, note, noteId, value, frame)
@@ -86,6 +106,9 @@ class AudioBridge : AutoCloseable {
             handle = 0
         }
     }
+    private external fun nativeFxPreset(index: Int): FloatArray?
+    private external fun nativeSetEffects(handle: Long, track: Int, data: FloatArray): Boolean
+    private external fun nativeReadFxStats(handle: Long, buffer: ByteBuffer): Boolean
     private external fun nativePreset(index: Int): FloatArray?
     private external fun nativeSetPatch(handle: Long, track: Int, values: FloatArray): Boolean
     private external fun nativeCreate(): Long

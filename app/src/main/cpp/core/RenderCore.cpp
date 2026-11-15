@@ -5,7 +5,7 @@
 
 namespace astra {
 namespace {
-constexpr float kCeiling = 0.988553095f; // -0.1 dBFS sample clamp; NOT a mastering limiter.
+constexpr float kCeiling = fx::LookaheadLimiter::ceiling;
 constexpr int kCommandsPerCallback = 256;
 constexpr int kEventsPerCallback = 512;
 }
@@ -19,6 +19,9 @@ RenderCore::RenderCore() noexcept {
 
 bool RenderCore::prepare(double sampleRate) noexcept {
     if (!std::isfinite(sampleRate) || sampleRate < 8000.0 || sampleRate > 384000.0) return false;
+    for (auto& track : tracks_) if (!track.effects.prepare(sampleRate)) return false;
+    if (!limiter_.prepare(sampleRate)) return false;
+    clickDelay_.reset();
     sampleRate_ = sampleRate;
     updateLfoSteps();
     smoothing_ = static_cast<float>(1.0 - std::exp(-1.0 / (0.005 * sampleRate_)));
@@ -40,6 +43,10 @@ bool RenderCore::valid(const Command& c) noexcept {
         case CommandType::Metronome: return c.value == 0.0f || c.value == 1.0f;
         case CommandType::Tempo: return c.value >= 30.0f && c.value <= 300.0f;
         case CommandType::PatchSnapshot: return c.note >= 0 && c.note < 64 && c.frame == kImmediate;
+        case CommandType::FxSnapshot: return c.note >= 0 && c.note < 32 && c.frame == kImmediate;
+        case CommandType::LimiterDrive: return c.value >= 0 && c.value <= 24;
+        case CommandType::LimiterRelease: return c.value >= 20 && c.value <= 500;
+        case CommandType::MeterTrack: return c.value >= 0 && c.value <= 16 && c.value == std::floor(c.value);
     }
     return false;
 }
@@ -56,6 +63,15 @@ bool RenderCore::setPatch(int track, const synth::Patch& patch) noexcept {
         return false;
     }
     // Backpressure: the producer keeps its old patch and may try again.
+    return false;
+}
+bool RenderCore::setEffects(int track, const fx::Config& config) noexcept {
+    if(track<0||track>=kTrackCount||!config.valid())return false;
+    for(std::size_t i=0;i<fxSlots_.size();++i){bool expected=false;
+        if(!fxSlots_[i].busy.compare_exchange_strong(expected,true,std::memory_order_acquire))continue;
+        fxSlots_[i].config=config;
+        if(enqueue({CommandType::FxSnapshot,track,static_cast<int32_t>(i),0,0}))return true;
+        fxSlots_[i].busy.store(false,std::memory_order_release);return false;}
     return false;
 }
 void RenderCore::recyclePatch(const Command& c) noexcept {
@@ -93,9 +109,12 @@ void RenderCore::resetSound() noexcept {
     // Pop in submission/frame order: several accepted edits may target one track.
     while (scheduledSize_ != 0) {
         const auto event = popScheduled();
-        if (event.type == CommandType::PatchSnapshot) apply(event);
+        if (event.type != CommandType::NoteOn && event.type != CommandType::NoteOff && event.type != CommandType::Transport) apply(event);
     }
     clickEnvelope_ = 0.0f;
+    for (auto& track : tracks_) track.effects.reset();
+    limiter_.reset();
+    clickDelay_.reset();
 }
 
 void RenderCore::consumeCommands() noexcept {
@@ -106,7 +125,7 @@ void RenderCore::consumeCommands() noexcept {
         // Bounded drain, even if the producer is continuously active.
         for (std::size_t i = 0; i < kQueueCapacity && commands_.pop(command); ++i) {
             // Panic stops notes, but an accepted patch must still match the UI.
-            if (command.type == CommandType::PatchSnapshot) apply(command);
+            if (command.type != CommandType::NoteOn && command.type != CommandType::NoteOff && command.type != CommandType::Transport) apply(command);
         }
         return;
     }
@@ -116,7 +135,7 @@ void RenderCore::consumeCommands() noexcept {
         if (!schedule(command)) {
             dropped_.fetch_add(1, std::memory_order_relaxed);
             resetSound();
-            if (command.type == CommandType::PatchSnapshot) apply(command);
+            if (command.type != CommandType::NoteOn && command.type != CommandType::NoteOff && command.type != CommandType::Transport) apply(command);
             playing_ = false;
             // Flush the pending queue next callback as a second safety boundary.
             panic();
@@ -182,7 +201,17 @@ void RenderCore::apply(const Command& c) noexcept {
         case CommandType::TrackPan: track.pan = c.value; updateTrackTargets(); break;
         case CommandType::TrackMute: track.mute = c.value != 0.0f; updateTrackTargets(); break;
         case CommandType::TrackSolo: track.solo = c.value != 0.0f; updateTrackTargets(); break;
-        case CommandType::Tempo: bpm_ = c.value; updateLfoSteps(); break;
+        case CommandType::Tempo:
+            bpm_ = c.value; updateLfoSteps();
+            for (auto& t : tracks_) t.effects.tempo(bpm_);
+            break;
+        case CommandType::FxSnapshot:
+            track.effects.configure(fxSlots_[c.note].config);
+            fxSlots_[c.note].busy.store(false,std::memory_order_release);
+            break;
+        case CommandType::LimiterDrive: targetLimiterDrive_=fx::dbGain(c.value); break;
+        case CommandType::LimiterRelease: limiter_.setRelease(c.value); break;
+        case CommandType::MeterTrack: meterTrack_=static_cast<int>(c.value); break;
         case CommandType::PatchSnapshot:
             track.patch = patchSlots_[c.note].patch;
             recyclePatch(c);
@@ -248,8 +277,12 @@ void RenderCore::render(float* output, int32_t frames) noexcept {
             for (int l = 0; l < 4; ++l) track.freePhases[l] = synth::wrap(track.freePhases[l] + track.lfoSteps[l]);
             track.left += smoothing_ * (track.targetLeft - track.left);
             track.right += smoothing_ * (track.targetRight - track.right);
-            left += mono[t] * track.left;
-            right += mono[t] * track.right;
+            const int detectorTrack=track.effects.detectorTrack();
+            const float detector=detectorTrack>=0?mono[static_cast<std::size_t>(detectorTrack)]:mono[t];
+            const auto effected=track.effects.tick({mono[t],mono[t]},{detector,detector});
+            const fx::Stereo mixed{effected.l*track.left,effected.r*track.right};
+            left += mixed.l; right += mixed.r;
+            if(meterTrack_==static_cast<int>(t))analyzer_.push(mixed,meterTrack_);
         }
         if (playing_) {
             if (beat_ >= nextClickBeat_) {
@@ -258,20 +291,22 @@ void RenderCore::render(float* output, int32_t frames) noexcept {
             }
             beat_ += static_cast<double>(bpm_) / (60.0 * sampleRate_);
         }
+        fx::Stereo clickSample{};
         if (clickEnvelope_ > 0.00001f) {
             const float click = oscillator(clickPhase_) * clickEnvelope_;
-            left += click;
-            right += click;
+            clickSample={click,click};
             clickPhase_ += 1500.0 / sampleRate_;
             if (clickPhase_ >= 1.0) clickPhase_ -= 1.0;
             clickEnvelope_ *= 0.994f;
         } else clickEnvelope_ = 0.0f;
+        clickSample=clickDelay_.tick(clickSample);left+=clickSample.l;right+=clickSample.r;
         master_ += smoothing_ * (targetMaster_ - master_);
-        left *= master_;
-        right *= master_;
+        limiterDrive_ += smoothing_ * (targetLimiterDrive_ - limiterDrive_);
+        left *= master_*limiterDrive_;
+        right *= master_*limiterDrive_;
         if (std::abs(left) > kCeiling || std::abs(right) > kCeiling) ++clipped_;
-        left = std::clamp(left, -kCeiling, kCeiling);
-        right = std::clamp(right, -kCeiling, kCeiling);
+        const auto limited=limiter_.tick({left,right});left=limited.l;right=limited.r;
+        if(meterTrack_==16)analyzer_.push(limited,16);
         output[2 * i] = left;
         output[2 * i + 1] = right;
         peakL = std::max(peakL, std::abs(left));
@@ -288,6 +323,10 @@ void RenderCore::publish(float left, float right) noexcept {
         if (track.targetRight == 0.0f && std::abs(track.right) < 1e-12f) track.right = 0.0f;
     }
     if (targetMaster_ == 0.0f && std::abs(master_) < 1e-12f) master_ = 0.0f;
+    for(int t=0;t<kTrackCount;++t){publishedReduction_[t].store(tracks_[t].effects.reduction(),std::memory_order_relaxed);
+        const auto bands=tracks_[t].effects.bandMeters();
+        for(int b=0;b<3;++b)publishedBands_[t*3+b].store(bands[b],std::memory_order_relaxed);}
+    publishedLimiter_.store(limiter_.reduction(),std::memory_order_relaxed);
     uint32_t count = 0;
     for (const auto& voice : voices_) if (voice.active) ++count;
     publishedFrame_.store(frame_, std::memory_order_relaxed);
@@ -299,6 +338,15 @@ void RenderCore::publish(float left, float right) noexcept {
     publishedRight_.store(right, std::memory_order_relaxed);
     publishedBpm_.store(bpm_, std::memory_order_relaxed);
     publishedPlaying_.store(playing_, std::memory_order_relaxed);
+}
+
+FxSnapshot RenderCore::effectsSnapshot() noexcept {
+    FxSnapshot result;
+    for(int t=0;t<16;++t)result.sidechain[t]=publishedReduction_[t].load(std::memory_order_relaxed);
+    for(int b=0;b<48;++b)result.bands[b]=publishedBands_[b].load(std::memory_order_relaxed);
+    result.limiterReduction=publishedLimiter_.load(std::memory_order_relaxed);
+    result.latency=static_cast<float>(outputLatencyFrames());result.sampleRate=static_cast<float>(sampleRate_);
+    result.spectrum=analyzer_.analyze(result.sampleRate);result.meterTrack=analyzer_.track();result.analyzerDrops=analyzer_.dropped();return result;
 }
 
 CoreSnapshot RenderCore::snapshot() const noexcept {

@@ -78,7 +78,9 @@ int main() {
         check(core->enqueue({CommandType::NoteOff, 0, 0, 1, 0, 500}), "schedule release");
         render(*core, buffer.data(), 4096);
         check(energy(buffer.data(), buffer.data() + 200) == 0, "no note before exact frame");
-        check(buffer[202] != 0, "note starts at sample boundary");
+        const int latency=core->outputLatencyFrames();
+        check(energy(buffer.data(),buffer.data()+2*(100+latency))==0,"known FX/limiter latency precedes note");
+        check(buffer[2*(101+latency)] != 0, "note starts at scheduled boundary plus fixed processing latency");
         check(energy(buffer.data() + 204, buffer.data() + 900) > 0.001, "voice produces sound");
         check(energy(buffer.data() + 6000, buffer.data() + 8192) == 0, "release finishes");
         check(core->snapshot().activeVoices == 0, "note off retires voice");

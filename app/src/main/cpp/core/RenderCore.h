@@ -1,6 +1,8 @@
 #pragma once
 #include "SpscRing.h"
 #include "dsp/SynthVoice.h"
+#include "fx/FxRack.h"
+#include "fx/Spectrum.h"
 #include <array>
 #include <atomic>
 #include <cstddef>
@@ -16,7 +18,7 @@ inline constexpr std::size_t kScheduledCapacity = 8192;
 
 enum class CommandType : int32_t {
     NoteOn = 0, NoteOff = 1, MasterGain = 2, TrackGain = 3, TrackPan = 4,
-    TrackMute = 5, TrackSolo = 6, Tempo = 7, Transport = 8, Metronome = 9, PatchSnapshot = 10
+    TrackMute = 5, TrackSolo = 6, Tempo = 7, Transport = 8, Metronome = 9, PatchSnapshot = 10, FxSnapshot = 11, LimiterDrive = 12, LimiterRelease = 13, MeterTrack = 14
 };
 struct Command {
     CommandType type{};
@@ -41,6 +43,14 @@ struct CoreSnapshot {
     bool playing{};
 };
 
+struct FxSnapshot {
+    std::array<float,16> sidechain{};
+    std::array<float,48> bands{};
+    float limiterReduction{},latency{},sampleRate{};
+    std::array<float,64> spectrum{};
+    int meterTrack{-1};uint32_t analyzerDrops{};
+};
+
 // Control thread: constructor, prepare, enqueue, panic, snapshot.
 // Audio thread only: render and every private DSP method.
 // prepare must run before callbacks begin. No resize/prepare while streaming.
@@ -50,6 +60,9 @@ public:
     bool prepare(double sampleRate) noexcept;
     bool enqueue(Command command) noexcept;
     bool setPatch(int track, const synth::Patch& patch) noexcept;
+    bool setEffects(int track, const fx::Config& config) noexcept;
+    FxSnapshot effectsSnapshot() noexcept;
+    int outputLatencyFrames() const noexcept { return fx::Rack::latency + limiter_.latency(); }
     void panic() noexcept { panic_.store(true, std::memory_order_release); }
     void render(float* interleavedStereo, int32_t frames) noexcept;
     CoreSnapshot snapshot() const noexcept;
@@ -73,6 +86,7 @@ private:
         bool mute{};
         bool solo{};
         synth::Patch patch;
+        fx::Rack effects;
         std::array<double, 4> freePhases{}, lfoSteps{};
     };
     struct Later {
@@ -102,6 +116,16 @@ private:
     synth::WavetableBank wavetables_;
     struct PatchSlot { synth::Patch patch; std::atomic<bool> busy{false}; };
     std::array<PatchSlot, 64> patchSlots_{};
+    struct FxSlot { fx::Config config; std::atomic<bool> busy{false}; };
+    std::array<FxSlot,32> fxSlots_{};
+    fx::LookaheadLimiter limiter_;
+    fx::FixedDelay<fx::Rack::latency> clickDelay_;
+    fx::Spectrum analyzer_;
+    int meterTrack_{16};
+    float limiterDrive_{1},targetLimiterDrive_{1};
+    std::array<std::atomic<float>,16> publishedReduction_{};
+    std::array<std::atomic<float>,48> publishedBands_{};
+    std::atomic<float> publishedLimiter_{0};
     uint64_t nextOrder_{}; // Single, serialized control producer.
     uint64_t frame_{};
     uint64_t voiceAge_{};

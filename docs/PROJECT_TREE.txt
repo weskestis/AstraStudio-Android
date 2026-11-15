@@ -1,4 +1,4 @@
-AstraStudio — complete Phase 2 source inventory
+AstraStudio — complete Phase 3 source inventory
 
 .github/workflows/android.yml
 .gitignore
@@ -26,14 +26,30 @@ app/src/main/cpp/dsp/SynthVoice.cpp
 app/src/main/cpp/dsp/SynthVoice.h
 app/src/main/cpp/dsp/WavetableBank.cpp
 app/src/main/cpp/dsp/WavetableBank.h
+app/src/main/cpp/fx/FxConfig.cpp
+app/src/main/cpp/fx/FxConfig.h
+app/src/main/cpp/fx/FxIds.h
+app/src/main/cpp/fx/FxModules.cpp
+app/src/main/cpp/fx/FxModules.h
+app/src/main/cpp/fx/FxPrimitives.cpp
+app/src/main/cpp/fx/FxPrimitives.h
+app/src/main/cpp/fx/FxRack.cpp
+app/src/main/cpp/fx/FxRack.h
+app/src/main/cpp/fx/Spectrum.cpp
+app/src/main/cpp/fx/Spectrum.h
 app/src/main/cpp/native-lib.cpp
 app/src/main/cpp/tests/AllocationTracker.cpp
 app/src/main/cpp/tests/CoreTests.cpp
+app/src/main/cpp/tests/FxTests.cpp
 app/src/main/cpp/tests/RenderPresets.cpp
 app/src/main/cpp/tests/SynthTests.cpp
 app/src/main/java/com/weskestis/astrastudio/MainActivity.kt
 app/src/main/java/com/weskestis/astrastudio/audio/AudioBridge.kt
 app/src/main/java/com/weskestis/astrastudio/audio/AudioService.kt
+app/src/main/java/com/weskestis/astrastudio/fx/EqResponse.kt
+app/src/main/java/com/weskestis/astrastudio/fx/FxConfig.kt
+app/src/main/java/com/weskestis/astrastudio/fx/FxEditor.kt
+app/src/main/java/com/weskestis/astrastudio/fx/FxSchema.kt
 app/src/main/java/com/weskestis/astrastudio/midi/MidiDecoder.kt
 app/src/main/java/com/weskestis/astrastudio/midi/MidiInputManager.kt
 app/src/main/java/com/weskestis/astrastudio/synth/SynthEditor.kt
@@ -42,10 +58,12 @@ app/src/main/java/com/weskestis/astrastudio/synth/SynthSchema.kt
 app/src/main/res/drawable/ic_astra.xml
 app/src/main/res/values/strings.xml
 app/src/main/res/values/themes.xml
+app/src/test/java/com/weskestis/astrastudio/fx/FxConfigTest.kt
 app/src/test/java/com/weskestis/astrastudio/midi/MidiDecoderTest.kt
 app/src/test/java/com/weskestis/astrastudio/synth/SynthPatchTest.kt
 build.gradle.kts
 docs/ARCHITECTURE.md
+docs/EFFECTS.md
 docs/PROJECT_TREE.txt
 docs/SYNTHESIS.md
 docs/VALIDATION.md
@@ -57,5 +75,7 @@ gradlew.bat
 scripts/test-native.sh
 settings.gradle.kts
 signing/astra-development.keystore
+tools/fx-schema.json
+tools/generate_fx_schema.py
 tools/generate_synth_schema.py
 tools/synth-schema.json

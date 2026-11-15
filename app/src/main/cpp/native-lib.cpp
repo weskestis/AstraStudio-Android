@@ -60,7 +60,7 @@ Java_com_weskestis_astrastudio_audio_AudioBridge_nativeSend(
         JNIEnv*, jobject, jlong handle, jint type, jint track, jint note, jint noteId, jfloat value, jlong frame) {
     std::lock_guard guard(registryMutex);
     auto* engine = findEngine(handle);
-    if (!engine || frame < -1 || noteId < 0 || type < 0 || type > 9) return JNI_FALSE;
+    if (!engine || frame < -1 || noteId < 0 || type < 0 || type > 14 || type == 10 || type == 11) return JNI_FALSE;
     const astra::Command command{static_cast<astra::CommandType>(type), track, note,
         static_cast<uint32_t>(noteId), value, frame == -1 ? astra::kImmediate : static_cast<uint64_t>(frame), 0};
     return engine->enqueue(command) ? JNI_TRUE : JNI_FALSE;
@@ -125,4 +125,35 @@ Java_com_weskestis_astrastudio_audio_AudioBridge_nativeSetPatch(JNIEnv* env, job
     std::lock_guard guard(registryMutex);
     auto* engine = findEngine(handle);
     return engine && engine->setPatch(track, patch) ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_com_weskestis_astrastudio_audio_AudioBridge_nativeFxPreset(JNIEnv* env,jobject,jint index) {
+    if(index<0||index>=4)return nullptr;
+    std::array<float,astra::fx::kWireCount> values{};astra::fx::preset(index).encode(values);
+    auto result=env->NewFloatArray(astra::fx::kWireCount);
+    if(result)env->SetFloatArrayRegion(result,0,astra::fx::kWireCount,values.data());
+    return result;
+}
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_weskestis_astrastudio_audio_AudioBridge_nativeSetEffects(JNIEnv* env,jobject,jlong handle,jint track,jfloatArray data) {
+    if(!data||env->GetArrayLength(data)!=astra::fx::kWireCount)return JNI_FALSE;
+    std::array<float,astra::fx::kWireCount> values{};env->GetFloatArrayRegion(data,0,astra::fx::kWireCount,values.data());
+    if(env->ExceptionCheck())return JNI_FALSE;
+    astra::fx::Config config;if(!config.decode(values))return JNI_FALSE;
+    std::lock_guard guard(registryMutex);auto* engine=findEngine(handle);return engine&&engine->setEffects(track,config)?JNI_TRUE:JNI_FALSE;
+}
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_weskestis_astrastudio_audio_AudioBridge_nativeReadFxStats(JNIEnv* env,jobject,jlong handle,jobject buffer) {
+    if(!buffer)return JNI_FALSE;
+    auto* address=env->GetDirectBufferAddress(buffer);
+    if(!address||env->GetDirectBufferCapacity(buffer)<133*static_cast<jlong>(sizeof(float)))return JNI_FALSE;
+    std::lock_guard guard(registryMutex);auto* engine=findEngine(handle);if(!engine)return JNI_FALSE;
+    const auto s=engine->effectsSnapshot();std::array<float,133> values{};int at=0;
+    for(float v:s.sidechain)values[at++]=v;
+    for(float v:s.bands)values[at++]=v;
+    values[at++]=s.limiterReduction;values[at++]=s.latency;
+    for(float v:s.spectrum)values[at++]=v;
+    values[at++]=s.sampleRate;values[at++]=static_cast<float>(s.meterTrack);values[at]=static_cast<float>(s.analyzerDrops);
+    std::memcpy(address,values.data(),sizeof(values));return JNI_TRUE;
 }

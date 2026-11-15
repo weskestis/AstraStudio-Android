@@ -1,6 +1,6 @@
-# Engine and Android architecture — Phase 2
+# Engine and Android architecture — Phase 3
 
-The application combines the Phase 1 native audio foundation with Phase 2 wavetable/FM synthesis and a phone-oriented synth editor. It is not yet a completed DAW. See `SYNTHESIS.md` for the signal path, modulation and patch-publication contract. Effects, clip editing and the AI interface remain later phases.
+The application combines the Phase 1 native audio foundation with Phase 2 wavetable/FM synthesis and a phone-oriented synth editor. It is not yet a completed DAW. See `SYNTHESIS.md` for the signal path, modulation and patch-publication contract. Phase 3 adds the effects engine described in `EFFECTS.md`; clip editing and the AI interface remain later phases.
 
 ## Ownership and threads
 
@@ -27,6 +27,7 @@ All capacities are allocated before starting a stream:
 - 8,192 slots in a fixed binary event heap, ordered by frame then submission order.
 - Maximum 256 commands accepted from the queue and 512 scheduled events dispatched per callback.
 - One metronome sine table, shared immutable wavetable banks, 64 patch-transfer slots and fixed per-voice filter/FIR/operator state. All are constructed off the callback.
+- 32 effects mailbox slots, preallocated delay storage for all 16 racks, fixed limiter/compensation buffers and a 32,768-frame analyzer queue. FFT runs on the control thread.
 - A fixed 16-float stack accumulator per sample. No callback-sized scratch allocation.
 
 Supported ABIs are `arm64-v8a` (Xperia 1 IV and other modern phones) and `x86_64` (emulators). Compile-time assertions enforce lock-free atomics on these targets. This phase deliberately does not claim 32-bit support.
@@ -35,7 +36,7 @@ When a queue write fails, the caller gets `false`, the dropped counter increment
 
 The voice renderer now supports dual wavetable and four-operator FM synthesis, shared per-track patches, envelopes, modulation, filters and short voice-steal fades. Quiet/releasing voices are preferred for stealing, with stable oldest-voice tie-breaking. See `SYNTHESIS.md` for details.
 
-Track volume, equal-power pan, mute/solo and master gain are smoothed over about 5 ms. The mixer ends in a -0.1 dBFS **sample clamp**, with a clipping counter. This is intentionally labelled a safety clamp: it is not the Phase 3 lookahead/true-peak limiter, and overloading it produces distortion.
+Track volume, equal-power pan, mute/solo and master gain are smoothed over about 5 ms. Every track passes through a compensated effects rack. The mixer ends in a −0.1 dBFS sample-peak limiter with 5 ms lookahead; its over-ceiling counter counts pre-limiter frames. This is not a certified true-peak limiter. See `EFFECTS.md` for routing, delay compensation and meter-buffer contracts.
 
 ## Timing and transport
 
@@ -66,7 +67,7 @@ ARM64 is the primary physical-device target. The test screen uses density-indepe
 | Phase | Implementation scope |
 | --- | --- |
 | 2 (implemented) | Dual wavetable oscillator, anti-aliasing/mips, sub/noise, warp modes, modulation, filters, four-operator FM, instrument presets |
-| 3 | Ordered/routed effects graph, dynamics, multiband processing, sidechain routing, EQ/FFT, distortion, spatial FX, limiter, offline consistency |
+| 3 (implemented) | Ordered/routed effects graph, dynamics, multiband processing, sidechain routing, EQ/FFT, distortion, spatial FX, limiter, offline consistency |
 | 4 | Session and arrangement workflows, piano roll, clip editing, automation, recording/import/export, project persistence and robust Undo |
 | 5 | Validated JSON command schema, reversible operations, natural-language/voice interface and the chosen AI integration |
 

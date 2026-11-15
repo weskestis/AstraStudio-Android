@@ -42,6 +42,8 @@ import com.weskestis.astrastudio.audio.AudioService
 import com.weskestis.astrastudio.audio.AudioStats
 import com.weskestis.astrastudio.audio.StudioState
 import com.weskestis.astrastudio.synth.SynthEditor
+import com.weskestis.astrastudio.fx.FxEditor
+import com.weskestis.astrastudio.fx.ValueSlider
 import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -62,10 +64,17 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme(colorScheme = darkColorScheme(
-                primary = Color(0xFF76E1BC), onPrimary = Color(0xFF09271F),
-                background = Color(0xFF11151C), surface = Color(0xFF1C222C),
-                secondary = Color(0xFFB5B0FF))) {
-                Surface(Modifier.fillMaxSize()) {
+                primary = Color(0xFF55F27A), onPrimary = Color(0xFF001606),
+                background = Color(0xFF000000), surface = Color(0xFF0B120D),
+                secondary = Color(0xFFB6F56B), onSecondary = Color.Black,
+                tertiary = Color(0xFF85E494), onTertiary = Color.Black,
+                primaryContainer = Color(0xFF12371C), onPrimaryContainer = Color(0xFF97F7AC),
+                secondaryContainer = Color(0xFF1A2B10), onSecondaryContainer = Color(0xFFBCF287),
+                tertiaryContainer = Color(0xFF0D3216), onTertiaryContainer = Color(0xFFA7F5B8),
+                onBackground = Color(0xFFE7F5E9), onSurface = Color(0xFFE7F5E9),
+                surfaceVariant = Color(0xFF102016), onSurfaceVariant = Color(0xFFA2BAA7),
+                surfaceTint = Color(0xFF55F27A), outline = Color(0xFF487052), outlineVariant = Color(0xFF26472E))) {
+                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     val service = audioService
                     if (service == null) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("Opening Astra Studio…")
@@ -106,7 +115,7 @@ private fun StudioScreen(state: StudioState, service: AudioService, start: () ->
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Column {
                 Text("ASTRA / STUDIO", fontWeight = FontWeight.Bold, fontSize = 24.sp, letterSpacing = 2.sp)
-                Text("02   SYNTH LAB", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp, letterSpacing = 2.sp)
+                Text("03   EFFECTS LAB", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp, letterSpacing = 2.sp)
             }
             Text("ANDROID 14+", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
         }
@@ -121,7 +130,7 @@ private fun StudioScreen(state: StudioState, service: AudioService, start: () ->
             OutlinedButton(onClick = service::panic, enabled = state.stats.running) { Text("Panic") }
         }
         Text(state.message, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Card(Modifier.fillMaxWidth()) {
+        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("TEMPO  ${state.bpm.toInt()}", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
@@ -145,7 +154,7 @@ private fun StudioScreen(state: StudioState, service: AudioService, start: () ->
                     label = { Text("Track ${index + 1}") })
             }
         }
-        Card(Modifier.fillMaxWidth()) {
+        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("TRACK ${selectedTrack + 1}  /  ${state.patches[selectedTrack].name.uppercase(Locale.US)}", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 Text("Hold pads to play • F minor • selected synth patch", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -174,7 +183,8 @@ private fun StudioScreen(state: StudioState, service: AudioService, start: () ->
             }
         }
         SynthEditor(selectedTrack, state.patches[selectedTrack], service, state.stats.running)
-        Card(Modifier.fillMaxWidth()) {
+        FxEditor(selectedTrack, state, service)
+        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("MASTER / ENGINE", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 Slider(state.master, service::master, valueRange = 0f..1f,
@@ -184,16 +194,20 @@ private fun StudioScreen(state: StudioState, service: AudioService, start: () ->
                         FilterChip(state.bufferBursts == bursts, { service.buffer(bursts) }, label = { Text("$label · $bursts") })
                     }
                 }
+                Text("LOOKAHEAD LIMITER · −0.1 dBFS", color = MaterialTheme.colorScheme.primary)
+                ValueSlider("Limiter drive dB", state.limiterDrive, 0f..24f, change = service::limiterDrive)
+                ValueSlider("Limiter release ms", state.limiterRelease, 20f..500f, true, service::limiterRelease)
+                Text(String.format(Locale.US, "Reduction %.1f dB · processing delay %.2f ms", state.fxStats.limiterReduction, state.fxStats.latencyFrames * 1000 / state.fxStats.sampleRate), fontSize = 12.sp)
                 val s = state.stats
                 Text("${s.sampleRate} Hz  ·  ${if (s.exclusive) "Exclusive" else "Shared / idle"}  ·  ${s.activeVoices}/128 voices", fontSize = 12.sp)
                 Text(String.format(Locale.US, "DSP %.1f%%  ·  buffer %.1f ms  ·  xruns %d", s.cpuLoad * 100, s.bufferMs, s.xruns), fontSize = 12.sp)
-                Text("Queue drops ${s.droppedCommands}  ·  late events ${s.lateCommands}  ·  clips ${s.clippedSamples}", fontSize = 12.sp)
+                Text("Queue drops ${s.droppedCommands}  ·  late events ${s.lateCommands}  ·  over ceiling ${s.clippedSamples}", fontSize = 12.sp)
                 Text("MIDI inputs ${state.midiDevices}  ·  channel 1–16 → track 1–16", fontSize = 12.sp)
                 Text("Buffer duration is not total latency. Use wired audio when testing live play.", fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        Text("Phase 2: wavetable + FM synthesis. Effects, Session/Arrangement editing and Astra commands follow in later phases.",
+        Text("Phase 3: synthesis and effects. Session/Arrangement editing and Astra commands follow in later phases.",
             fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
@@ -205,7 +219,7 @@ private fun NotePad(label: String, track: Int, key: Int, enabled: Boolean, down:
     val currentUp by rememberUpdatedState(up)
     val scope = rememberCoroutineScope()
     Box(Modifier.size(64.dp, 88.dp)
-        .background(if (pressed) MaterialTheme.colorScheme.primary else Color(0xFF303846), RoundedCornerShape(8.dp))
+        .background(if (pressed) MaterialTheme.colorScheme.primary else Color(0xFF14251A), RoundedCornerShape(8.dp))
         .semantics {
             contentDescription = "Play $label on track ${track + 1}"
             role = Role.Button
@@ -228,7 +242,7 @@ private fun NotePad(label: String, track: Int, key: Int, enabled: Boolean, down:
                 }
             })
         }, contentAlignment = Alignment.Center) {
-        Text(label, color = if (pressed) Color(0xFF09271F) else Color.White, fontWeight = FontWeight.Bold)
+        Text(label, color = if (pressed) Color(0xFF001606) else Color.White, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -236,8 +250,8 @@ private fun NotePad(label: String, track: Int, key: Int, enabled: Boolean, down:
 private fun LevelMeter(stats: AudioStats) {
     Canvas(Modifier.fillMaxWidth().height(18.dp).semantics { contentDescription = "Stereo output peak meter" }) {
         val h = (size.height - 4.dp.toPx()) / 2
-        drawRect(Color(0xFF303846), size = size)
-        drawRect(Color(0xFF76E1BC), Offset.Zero, Size(size.width * stats.peakLeft.coerceIn(0f, 1f), h))
-        drawRect(Color(0xFFB5B0FF), Offset(0f, h + 4.dp.toPx()), Size(size.width * stats.peakRight.coerceIn(0f, 1f), h))
+        drawRect(Color(0xFF14251A), size = size)
+        drawRect(Color(0xFF55F27A), Offset.Zero, Size(size.width * stats.peakLeft.coerceIn(0f, 1f), h))
+        drawRect(Color(0xFFB6F56B), Offset(0f, h + 4.dp.toPx()), Size(size.width * stats.peakRight.coerceIn(0f, 1f), h))
     }
 }

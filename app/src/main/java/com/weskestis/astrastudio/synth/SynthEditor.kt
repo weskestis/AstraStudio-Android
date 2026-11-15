@@ -27,11 +27,12 @@ import kotlin.math.roundToInt
 
 @Composable
 fun SynthEditor(track: Int, patch: SynthPatch, service: AudioService, running: Boolean) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
     var page by rememberSaveable { mutableIntStateOf(0) }
     var audition by remember(track) { mutableStateOf(false) }
     DisposableEffect(track) { onDispose { service.audition(track, false) } }
     LaunchedEffect(running) { if (!running) audition = false }
-    Card(Modifier.fillMaxWidth()) {
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("SYNTH / TRACK ${track + 1}", fontSize = 13.sp, fontWeight = FontWeight.Bold)
             Text(patch.name, color = MaterialTheme.colorScheme.primary)
@@ -46,6 +47,8 @@ fun SynthEditor(track: Int, patch: SynthPatch, service: AudioService, running: B
                 }
                 OutlinedButton(enabled = running, onClick = { service.demo(track) }) { Text("Play phrase") }
             }
+            OutlinedButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Hide synth controls" else "Show synth controls") }
+            if (expanded) {
             Choice("Instrument", patch[SynthSchema.Instrument].toInt(), listOf("Wavetable", "4-operator FM")) {
                 service.synthParameter(track, SynthSchema.Instrument, it.toFloat())
             }
@@ -62,6 +65,7 @@ fun SynthEditor(track: Int, patch: SynthPatch, service: AudioService, running: B
                 2 -> EnvelopeControls(patch, set)
                 3 -> LfoControls(track, patch, service, set)
                 4 -> ModulationControls(track, patch, service)
+            }
             }
             Text("Changes are saved on this phone. Patch output feeds the track mixer.", fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -156,15 +160,15 @@ private fun LfoCanvas(track: Int, lfo: Int, points: List<Float>, paint: (Int, Fl
                 currentPaint(previous, value, i, v); previous = i; value = v
             })
         }) {
-        drawRect(Color(0xFF10171F))
-        for (i in 0..4) drawLine(Color(0xFF33434D), Offset(size.width*i/4, 0f), Offset(size.width*i/4, size.height))
-        drawLine(Color(0xFF52626C), Offset(0f,size.height/2), Offset(size.width,size.height/2))
+        drawRect(Color(0xFF030805))
+        for (i in 0..4) drawLine(Color(0xFF173F23), Offset(size.width*i/4, 0f), Offset(size.width*i/4, size.height))
+        drawLine(Color(0xFF3B6547), Offset(0f,size.height/2), Offset(size.width,size.height/2))
         val path = Path()
         points.forEachIndexed { i, value ->
             val x = size.width * i / 31; val y = size.height * (1-value) / 2
             if (i == 0) path.moveTo(x,y) else path.lineTo(x,y)
         }
-        drawPath(path, Color(0xFF76E1BC), style = Stroke(3.dp.toPx()))
+        drawPath(path, Color(0xFF55F27A), style = Stroke(3.dp.toPx()))
     }
 }
 

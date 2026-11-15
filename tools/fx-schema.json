@@ -1,0 +1,1028 @@
+{
+  "version": 1,
+  "parameters": [
+    [
+      "RackMode",
+      "Routing",
+      0,
+      1,
+      0,
+      true,
+      false
+    ],
+    [
+      "RackBalance",
+      "A / B balance",
+      0,
+      1,
+      0.5,
+      false,
+      false
+    ],
+    [
+      "RackMix",
+      "Rack wet",
+      0,
+      1,
+      1,
+      false,
+      false
+    ],
+    [
+      "RackOutput",
+      "Rack output dB",
+      -24,
+      12,
+      0,
+      false,
+      false
+    ],
+    [
+      "EqOn",
+      "EQ enabled",
+      0,
+      1,
+      0,
+      true,
+      false
+    ],
+    [
+      "EqMs",
+      "Mid / Side",
+      0,
+      1,
+      0,
+      true,
+      false
+    ],
+    [
+      "Eq1On",
+      "Band 1 enabled",
+      0,
+      1,
+      1,
+      true,
+      false
+    ],
+    [
+      "Eq1Type",
+      "Band 1 type",
+      0,
+      5,
+      0,
+      true,
+      false
+    ],
+    [
+      "Eq1Frequency",
+      "Band 1 Hz",
+      20,
+      20000,
+      40,
+      false,
+      true
+    ],
+    [
+      "Eq1Gain",
+      "Band 1 dB",
+      -18,
+      18,
+      0,
+      false,
+      false
+    ],
+    [
+      "Eq1Q",
+      "Band 1 Q",
+      0.1,
+      12,
+      0.707,
+      false,
+      true
+    ],
+    [
+      "Eq1Channel",
+      "Band 1 channel",
+      0,
+      2,
+      0,
+      true,
+      false
+    ],
+    [
+      "Eq2On",
+      "Band 2 enabled",
+      0,
+      1,
+      1,
+      true,
+      false
+    ],
+    [
+      "Eq2Type",
+      "Band 2 type",
+      0,
+      5,
+      0,
+      true,
+      false
+    ],
+    [
+      "Eq2Frequency",
+      "Band 2 Hz",
+      20,
+      20000,
+      100,
+      false,
+      true
+    ],
+    [
+      "Eq2Gain",
+      "Band 2 dB",
+      -18,
+      18,
+      0,
+      false,
+      false
+    ],
+    [
+      "Eq2Q",
+      "Band 2 Q",
+      0.1,
+      12,
+      0.707,
+      false,
+      true
+    ],
+    [
+      "Eq2Channel",
+      "Band 2 channel",
+      0,
+      2,
+      0,
+      true,
+      false
+    ],
+    [
+      "Eq3On",
+      "Band 3 enabled",
+      0,
+      1,
+      1,
+      true,
+      false
+    ],
+    [
+      "Eq3Type",
+      "Band 3 type",
+      0,
+      5,
+      0,
+      true,
+      false
+    ],
+    [
+      "Eq3Frequency",
+      "Band 3 Hz",
+      20,
+      20000,
+      250,
+      false,
+      true
+    ],
+    [
+      "Eq3Gain",
+      "Band 3 dB",
+      -18,
+      18,
+      0,
+      false,
+      false
+    ],
+    [
+      "Eq3Q",
+      "Band 3 Q",
+      0.1,
+      12,
+      0.707,
+      false,
+      true
+    ],
+    [
+      "Eq3Channel",
+      "Band 3 channel",
+      0,
+      2,
+      0,
+      true,
+      false
+    ],
+    [
+      "Eq4On",
+      "Band 4 enabled",
+      0,
+      1,
+      1,
+      true,
+      false
+    ],
+    [
+      "Eq4Type",
+      "Band 4 type",
+      0,
+      5,
+      0,
+      true,
+      false
+    ],
+    [
+      "Eq4Frequency",
+      "Band 4 Hz",
+      20,
+      20000,
+      600,
+      false,
+      true
+    ],
+    [
+      "Eq4Gain",
+      "Band 4 dB",
+      -18,
+      18,
+      0,
+      false,
+      false
+    ],
+    [
+      "Eq4Q",
+      "Band 4 Q",
+      0.1,
+      12,
+      0.707,
+      false,
+      true
+    ],
+    [
+      "Eq4Channel",
+      "Band 4 channel",
+      0,
+      2,
+      0,
+      true,
+      false
+    ],
+    [
+      "Eq5On",
+      "Band 5 enabled",
+      0,
+      1,
+      1,
+      true,
+      false
+    ],
+    [
+      "Eq5Type",
+      "Band 5 type",
+      0,
+      5,
+      0,
+      true,
+      false
+    ],
+    [
+      "Eq5Frequency",
+      "Band 5 Hz",
+      20,
+      20000,
+      1500,
+      false,
+      true
+    ],
+    [
+      "Eq5Gain",
+      "Band 5 dB",
+      -18,
+      18,
+      0,
+      false,
+      false
+    ],
+    [
+      "Eq5Q",
+      "Band 5 Q",
+      0.1,
+      12,
+      0.707,
+      false,
+      true
+    ],
+    [
+      "Eq5Channel",
+      "Band 5 channel",
+      0,
+      2,
+      0,
+      true,
+      false
+    ],
+    [
+      "Eq6On",
+      "Band 6 enabled",
+      0,
+      1,
+      1,
+      true,
+      false
+    ],
+    [
+      "Eq6Type",
+      "Band 6 type",
+      0,
+      5,
+      0,
+      true,
+      false
+    ],
+    [
+      "Eq6Frequency",
+      "Band 6 Hz",
+      20,
+      20000,
+      3500,
+      false,
+      true
+    ],
+    [
+      "Eq6Gain",
+      "Band 6 dB",
+      -18,
+      18,
+      0,
+      false,
+      false
+    ],
+    [
+      "Eq6Q",
+      "Band 6 Q",
+      0.1,
+      12,
+      0.707,
+      false,
+      true
+    ],
+    [
+      "Eq6Channel",
+      "Band 6 channel",
+      0,
+      2,
+      0,
+      true,
+      false
+    ],
+    [
+      "Eq7On",
+      "Band 7 enabled",
+      0,
+      1,
+      1,
+      true,
+      false
+    ],
+    [
+      "Eq7Type",
+      "Band 7 type",
+      0,
+      5,
+      0,
+      true,
+      false
+    ],
+    [
+      "Eq7Frequency",
+      "Band 7 Hz",
+      20,
+      20000,
+      8000,
+      false,
+      true
+    ],
+    [
+      "Eq7Gain",
+      "Band 7 dB",
+      -18,
+      18,
+      0,
+      false,
+      false
+    ],
+    [
+      "Eq7Q",
+      "Band 7 Q",
+      0.1,
+      12,
+      0.707,
+      false,
+      true
+    ],
+    [
+      "Eq7Channel",
+      "Band 7 channel",
+      0,
+      2,
+      0,
+      true,
+      false
+    ],
+    [
+      "Eq8On",
+      "Band 8 enabled",
+      0,
+      1,
+      1,
+      true,
+      false
+    ],
+    [
+      "Eq8Type",
+      "Band 8 type",
+      0,
+      5,
+      0,
+      true,
+      false
+    ],
+    [
+      "Eq8Frequency",
+      "Band 8 Hz",
+      20,
+      20000,
+      14000,
+      false,
+      true
+    ],
+    [
+      "Eq8Gain",
+      "Band 8 dB",
+      -18,
+      18,
+      0,
+      false,
+      false
+    ],
+    [
+      "Eq8Q",
+      "Band 8 Q",
+      0.1,
+      12,
+      0.707,
+      false,
+      true
+    ],
+    [
+      "Eq8Channel",
+      "Band 8 channel",
+      0,
+      2,
+      0,
+      true,
+      false
+    ],
+    [
+      "OttOn",
+      "Multiband enabled",
+      0,
+      1,
+      0,
+      true,
+      false
+    ],
+    [
+      "OttDepth",
+      "Depth",
+      0,
+      1,
+      0.6,
+      false,
+      false
+    ],
+    [
+      "OttUp",
+      "Upward amount",
+      0,
+      1,
+      1,
+      false,
+      false
+    ],
+    [
+      "OttDown",
+      "Downward amount",
+      0,
+      1,
+      1,
+      false,
+      false
+    ],
+    [
+      "OttUpRatio",
+      "Upward ratio",
+      1,
+      8,
+      4,
+      false,
+      false
+    ],
+    [
+      "OttDownRatio",
+      "Downward ratio",
+      1,
+      20,
+      8,
+      false,
+      false
+    ],
+    [
+      "OttAttack",
+      "Attack ms",
+      0.1,
+      100,
+      3,
+      false,
+      true
+    ],
+    [
+      "OttRelease",
+      "Release ms",
+      10,
+      1000,
+      80,
+      false,
+      true
+    ],
+    [
+      "OttLow",
+      "Low crossover Hz",
+      80,
+      600,
+      180,
+      false,
+      true
+    ],
+    [
+      "OttHigh",
+      "High crossover Hz",
+      800,
+      6000,
+      2500,
+      false,
+      true
+    ],
+    [
+      "Ott1Lower",
+      "Band 1 upward threshold dB",
+      -72,
+      -12,
+      -36,
+      false,
+      false
+    ],
+    [
+      "Ott1Upper",
+      "Band 1 downward threshold dB",
+      -36,
+      0,
+      -12,
+      false,
+      false
+    ],
+    [
+      "Ott1Gain",
+      "Band 1 makeup dB",
+      -12,
+      12,
+      0,
+      false,
+      false
+    ],
+    [
+      "Ott2Lower",
+      "Band 2 upward threshold dB",
+      -72,
+      -12,
+      -40,
+      false,
+      false
+    ],
+    [
+      "Ott2Upper",
+      "Band 2 downward threshold dB",
+      -36,
+      0,
+      -15,
+      false,
+      false
+    ],
+    [
+      "Ott2Gain",
+      "Band 2 makeup dB",
+      -12,
+      12,
+      0,
+      false,
+      false
+    ],
+    [
+      "Ott3Lower",
+      "Band 3 upward threshold dB",
+      -72,
+      -12,
+      -44,
+      false,
+      false
+    ],
+    [
+      "Ott3Upper",
+      "Band 3 downward threshold dB",
+      -36,
+      0,
+      -18,
+      false,
+      false
+    ],
+    [
+      "Ott3Gain",
+      "Band 3 makeup dB",
+      -12,
+      12,
+      0,
+      false,
+      false
+    ],
+    [
+      "ShaperOn",
+      "Saturator enabled",
+      0,
+      1,
+      0,
+      true,
+      false
+    ],
+    [
+      "ShaperMode",
+      "Shape",
+      0,
+      3,
+      0,
+      true,
+      false
+    ],
+    [
+      "ShaperPre",
+      "Pre gain dB",
+      -12,
+      36,
+      6,
+      false,
+      false
+    ],
+    [
+      "ShaperPost",
+      "Post gain dB",
+      -24,
+      12,
+      -3,
+      false,
+      false
+    ],
+    [
+      "ShaperMix",
+      "Saturator wet",
+      0,
+      1,
+      1,
+      false,
+      false
+    ],
+    [
+      "ScOn",
+      "Compressor enabled",
+      0,
+      1,
+      0,
+      true,
+      false
+    ],
+    [
+      "ScSource",
+      "Detector track (-1 self)",
+      -1,
+      15,
+      -1,
+      true,
+      false
+    ],
+    [
+      "ScThreshold",
+      "Threshold dB",
+      -60,
+      0,
+      -28,
+      false,
+      false
+    ],
+    [
+      "ScRatio",
+      "Ratio",
+      1,
+      20,
+      6,
+      false,
+      false
+    ],
+    [
+      "ScAttack",
+      "Attack ms",
+      0.1,
+      100,
+      1,
+      false,
+      true
+    ],
+    [
+      "ScRelease",
+      "Release ms",
+      5,
+      2000,
+      100,
+      false,
+      true
+    ],
+    [
+      "ScKnee",
+      "Knee dB",
+      0,
+      24,
+      6,
+      false,
+      false
+    ],
+    [
+      "ScHighpass",
+      "Detector HP Hz",
+      20,
+      500,
+      20,
+      false,
+      true
+    ],
+    [
+      "ScMakeup",
+      "Makeup dB",
+      -12,
+      18,
+      0,
+      false,
+      false
+    ],
+    [
+      "ScMix",
+      "Compressor wet",
+      0,
+      1,
+      1,
+      false,
+      false
+    ],
+    [
+      "DelayOn",
+      "Delay enabled",
+      0,
+      1,
+      0,
+      true,
+      false
+    ],
+    [
+      "DelaySync",
+      "Tempo sync",
+      0,
+      1,
+      1,
+      true,
+      false
+    ],
+    [
+      "DelayMs",
+      "Delay ms",
+      10,
+      2000,
+      300,
+      false,
+      true
+    ],
+    [
+      "DelayBeats",
+      "Beats per echo",
+      0.125,
+      2,
+      0.5,
+      false,
+      true
+    ],
+    [
+      "DelayFeedback",
+      "Feedback",
+      0,
+      0.92,
+      0.35,
+      false,
+      false
+    ],
+    [
+      "DelayTone",
+      "Feedback low-pass Hz",
+      500,
+      16000,
+      6000,
+      false,
+      true
+    ],
+    [
+      "DelayMix",
+      "Delay wet",
+      0,
+      1,
+      0.25,
+      false,
+      false
+    ],
+    [
+      "ReverbOn",
+      "Reverb enabled",
+      0,
+      1,
+      0,
+      true,
+      false
+    ],
+    [
+      "ReverbSize",
+      "Room size",
+      0,
+      1,
+      0.5,
+      false,
+      false
+    ],
+    [
+      "ReverbDecay",
+      "Decay seconds",
+      0.2,
+      20,
+      3,
+      false,
+      true
+    ],
+    [
+      "ReverbDamping",
+      "Damping",
+      0,
+      1,
+      0.45,
+      false,
+      false
+    ],
+    [
+      "ReverbWash",
+      "Wash diffusion",
+      0,
+      1,
+      0.6,
+      false,
+      false
+    ],
+    [
+      "ReverbFreeze",
+      "Freeze",
+      0,
+      1,
+      0,
+      true,
+      false
+    ],
+    [
+      "ReverbMix",
+      "Reverb wet",
+      0,
+      1,
+      0.2,
+      false,
+      false
+    ],
+    [
+      "ChorusOn",
+      "Chorus enabled",
+      0,
+      1,
+      0,
+      true,
+      false
+    ],
+    [
+      "ChorusRate",
+      "Rate Hz",
+      0.05,
+      4,
+      0.45,
+      false,
+      true
+    ],
+    [
+      "ChorusDepth",
+      "Depth",
+      0,
+      1,
+      0.5,
+      false,
+      false
+    ],
+    [
+      "ChorusFeedback",
+      "Feedback",
+      0,
+      0.6,
+      0.1,
+      false,
+      false
+    ],
+    [
+      "ChorusMix",
+      "Chorus wet",
+      0,
+      1,
+      0.35,
+      false,
+      false
+    ],
+    [
+      "ModOn",
+      "Phaser / flanger enabled",
+      0,
+      1,
+      0,
+      true,
+      false
+    ],
+    [
+      "ModMode",
+      "Mode",
+      0,
+      1,
+      0,
+      true,
+      false
+    ],
+    [
+      "ModRate",
+      "Rate Hz",
+      0.05,
+      8,
+      0.25,
+      false,
+      true
+    ],
+    [
+      "ModDepth",
+      "Depth",
+      0,
+      1,
+      0.6,
+      false,
+      false
+    ],
+    [
+      "ModFeedback",
+      "Feedback",
+      -0.9,
+      0.9,
+      0.25,
+      false,
+      false
+    ],
+    [
+      "ModMix",
+      "Phaser / flanger wet",
+      0,
+      1,
+      0.5,
+      false,
+      false
+    ]
+  ],
+  "presets": [
+    "Clean",
+    "Riddim Pressure",
+    "Trance Space",
+    "Pumping House"
+  ]
+}

@@ -1,22 +1,27 @@
-# Astra Studio — Phase 2
+# Astra Studio — Phase 3
 
-Native Android 14+ music workstation in development, with **Sony Xperia 1 IV** as the first physical-device target. Package `com.weskestis.astrastudio`; version **0.2.0-phase2**.
+Native Android 14+ music workstation in development, with **Sony Xperia 1 IV** as the first physical-device target. Package `com.weskestis.astrastudio`; version **0.3.0-phase3**.
 
-Phase 2 adds playable **wavetable and four-operator FM synthesizers** to the Phase 1 Oboe engine. This is a synth lab and engineering build. Session/Arrangement editing, production effects, recording/export and Astra AI are later phases.
+Phase 3 adds **per-track effects, external sidechain routing, EQ/spectrum analysis and a lookahead master limiter**, with a **green-and-black** phone interface. Wavetable and four-operator FM synthesis from Phase 2 remain included. This is a development synth/effects lab; Session/Arrangement editing, recording/export and Astra AI remain later phases.
 
 ## Install and play on your Xperia
 
-Install `AstraStudio_Phase2_0.2.0.apk` over Phase 1. It uses the same development signing certificate. Alternatively, open this repository's **Actions → Android Phase 2**, choose a successful run, and download the **AstraStudio-Phase2-APK** artifact (a ZIP containing the APK).
+Install `AstraStudio_Phase3_0.3.0.apk` over Phase 1 or 2. It uses the same development signing certificate. Alternatively, open this repository's **Actions → Android Phase 3**, choose a successful run, and download the **AstraStudio-Phase3-APK** artifact (a ZIP containing the APK).
 
 1. Tap **Start audio**. Use wired headphones for the first latency test.
 2. Track 1 starts with **Liquid Riddim**, Track 2 with **Trance Prism**, and Track 3 with **FM Alloy**. Other tracks start with Init Sine. Saved edits take precedence on subsequent launches.
 3. Hold the F-minor pads, tap **Play phrase**, or use **Hold F1 to edit** in the synth panel. The held note lets you adjust controls without keeping a finger on a pad. Tap Release F1 to stop it.
 4. Choose a factory preset, then explore **Oscillators**, **Filters**, **Envelopes**, **LFOs**, and **Modulation**. Edits affect held notes and save automatically on this phone.
-5. In LFOs, choose LFO 1–4, enable tempo sync or use Hz, and draw across the graph. In Modulation, pick one of 16 slots and assign a source, destination and signed depth. Shape presets provide an alternative to drawing.
-6. Compare **Balanced** (3 hardware bursts) with Fast/Stable if xruns increase. The displayed buffer time is not measured end-to-end latency.
-7. **Panic** stops voices and scheduled notes; accepted synth edits are retained. **Stop audio** closes the stream and background service.
+5. Open **Effects** and select Clean, Riddim Pressure, Trance Space or Pumping House. Reorder units, choose serial/parallel routing, and assign macros. See [Effects guide](docs/EFFECTS.md) for sidechain and freeze instructions.
+6. In LFOs, choose LFO 1–4, enable tempo sync or use Hz, and draw across the graph. In Modulation, pick one of 16 slots and assign a source, destination and signed depth. Shape presets provide an alternative to drawing.
+7. Compare **Balanced** (3 hardware bursts) with Fast/Stable if xruns increase. The displayed buffer time is not measured end-to-end latency.
+8. **Panic** stops voices, scheduled notes and all effect tails; accepted edits are retained. **Stop audio** closes the stream and background service.
 
 The test phrase is two bars scheduled using the BPM at launch. Tempo changes update LFOs and the transport clock, but do not retime already-scheduled phrase notes. It is not yet an arranger or clip sequencer.
+
+## Included effects
+
+Eight reorderable units per track: EQ Eight with Mid/Side, three-band upward/downward dynamics, four-mode 2× saturator, sidechain compressor, ping-pong delay, freeze/wash reverb, chorus/ensemble and phaser/flanger. Serial or parallel A/B lanes, rack wet/output and four macros. The master has a −0.1 dBFS sample-peak limiter with 5 ms lookahead. EQ/spectrum and gain-reduction displays are live; settings persist on the phone. [Full DSP and routing details](docs/EFFECTS.md).
 
 ## Included synthesis
 
@@ -43,7 +48,7 @@ Factory patches: **Init Sine, Liquid Riddim, Metal Maw, Trance Prism, Sub Pressu
 - Android foreground media playback service, audio focus, headphone-disconnect handling and route recovery.
 - USB MIDI hot plug; basic MIDI 1/2 notes and CC 120/123. MIDI channel 1–16 maps to track 1–16. Full expression and MIDI-CI are later work.
 
-128 is a fixed capacity, not a measured Xperia performance guarantee. High FM/warp settings can still alias despite mitigation. The master uses the existing -0.1 dBFS sample safety clamp; a mastering limiter is Phase 3. Actual phone latency, thermal behavior, touch ergonomics and USB hardware still need physical testing.
+128 is a fixed capacity, not a measured Xperia performance guarantee. High FM/warp settings can still alias despite mitigation. The master limiter controls sample peaks, not certified true peaks. Aggressive dynamics can still distort; its ceiling is not a guarantee of transparent mastering. Actual phone latency, thermal behavior, touch ergonomics and USB hardware still need physical testing.
 
 ## Build
 
@@ -71,15 +76,18 @@ The debug key in `signing/astra-development.keystore` is deliberately public (`a
 
 ## Source map
 
+- `app/src/main/cpp/fx/`: complete effects, rack routing, limiter and off-callback FFT.
+- `app/src/main/java/com/weskestis/astrastudio/fx/`: green/black effects editor, immutable rack state, EQ response overlay and schema.
+- `tools/fx-schema.json`: effects wire definition; regenerate with `python3 tools/generate_fx_schema.py`.
 - `app/src/main/cpp/dsp/`: complete wavetable/FM, envelope, filter, patch and voice DSP.
 - `app/src/main/cpp/core/`: scheduling, allocation-free rendering, mixer and patch mailbox.
 - `app/src/main/cpp/AudioEngine.*`, `native-lib.cpp`: Oboe lifecycle and JNI.
 - `app/src/main/java/com/weskestis/astrastudio/synth/`: patch model, touch editor and generated parameter IDs.
 - `tools/synth-schema.json`: single parameter-wire specification. Run `python3 tools/generate_synth_schema.py` after editing it; CI checks generated C++ and Kotlin match.
-- `app/src/main/cpp/tests/`: engine/synth regressions, allocation interception and offline preset renderer.
-- `app/src/test/`: MIDI and patch-state tests.
+- `app/src/main/cpp/tests/`: engine/synth/effects regressions, allocation interception and offline preset renderer.
+- `app/src/test/`: MIDI, patch-state, effects persistence and EQ display tests.
 - `docs/PROJECT_TREE.txt`: exact source inventory.
 - `docs/SYNTHESIS.md`: signal path, modulation units, memory/thread contract and DSP limits.
 - `docs/VALIDATION.md`: performed checks and remaining hardware validation.
 
-Phase 2 ends here. **Phase 3 is the effects rack, OTT/multiband dynamics and sidechain DSP.** Full Session/Arrangement UI is Phase 4; Astra's validated command interface is Phase 5. Sampler, drum rack, importable wavetables and time stretching remain explicit future work.
+Phase 3 ends here. **Phase 4 is the Session/Arrangement workflow and Compose UI.** Full Session/Arrangement UI is Phase 4; Astra's validated command interface is Phase 5. Sampler, drum rack, importable wavetables and time stretching remain explicit future work.

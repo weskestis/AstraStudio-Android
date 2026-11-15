@@ -27,3 +27,19 @@ void operator delete(void* p, std::align_val_t) noexcept { std::free(p); }
 void operator delete[](void* p, std::align_val_t) noexcept { std::free(p); }
 void operator delete(void* p, std::size_t, std::align_val_t) noexcept { std::free(p); }
 void operator delete[](void* p, std::size_t, std::align_val_t) noexcept { std::free(p); }
+
+// Delay storage uses nothrow allocation during preparation. Keep every allocation
+// family in this tracker so ASan sees matching malloc/free, including failures.
+void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
+    if (inRender) realtimeAllocations.fetch_add(1);
+    return std::malloc(size ? size : 1);
+}
+void* operator new[](std::size_t size, const std::nothrow_t& tag) noexcept { return ::operator new(size, tag); }
+void* operator new(std::size_t size, std::align_val_t alignment, const std::nothrow_t&) noexcept {
+    try { return ::operator new(size, alignment); } catch (const std::bad_alloc&) { return nullptr; }
+}
+void* operator new[](std::size_t size, std::align_val_t alignment, const std::nothrow_t& tag) noexcept { return ::operator new(size, alignment, tag); }
+void operator delete(void* p, const std::nothrow_t&) noexcept { std::free(p); }
+void operator delete[](void* p, const std::nothrow_t&) noexcept { std::free(p); }
+void operator delete(void* p, std::align_val_t, const std::nothrow_t&) noexcept { std::free(p); }
+void operator delete[](void* p, std::align_val_t, const std::nothrow_t&) noexcept { std::free(p); }
