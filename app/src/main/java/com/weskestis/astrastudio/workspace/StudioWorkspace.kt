@@ -37,7 +37,7 @@ internal fun trackName(s: StudioState,t: Int)=s.tracks[t].name.ifBlank{"Track ${
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,importSamples: ()->Unit,importPack: ()->Unit,
+fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,recordAudio: (Boolean)->Unit,saveLab: (String,String,Long,Long)->Unit,importLab: ()->Unit,importSamples: ()->Unit,importPack: ()->Unit,
     importAudio: (Int)->Unit,openProject: ()->Unit,saveProject: (String)->Unit,exportWave: (String,Int,Float,Boolean)->Unit) {
     var view by rememberSaveable { mutableIntStateOf(0) }
     var slot by rememberSaveable { mutableIntStateOf(0) }
@@ -47,8 +47,8 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,imp
     var browserPad by rememberSaveable { mutableIntStateOf(-2) }
     val panelNavigation=remember(sheet){PanelNavigation()}
     val panelStates=rememberSaveableStateHolder()
-    fun closePanel(){service.releaseTouchNotes();sheet="";parentSheet=""}
-    fun backPanel(){service.releaseTouchNotes();if(!panelNavigation.back()){if(parentSheet.isNotEmpty()){sheet=parentSheet;parentSheet=""}else closePanel()}}
+    fun closePanel(){service.stopSelectionPreview();service.releaseTouchNotes();sheet="";parentSheet=""}
+    fun backPanel(){service.stopSelectionPreview();service.releaseTouchNotes();if(!panelNavigation.back()){if(parentSheet.isNotEmpty()){sheet=parentSheet;parentSheet=""}else closePanel()}}
     fun browse(pad: Int=-2){parentSheet=sheet;browserPad=pad;sheet="samples"}
     BackHandler(enabled=sheet.isNotEmpty()||view!=0){if(sheet.isNotEmpty())backPanel()else view=0}
     var fileMenu by remember { mutableStateOf(false) }
@@ -87,6 +87,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,imp
                     DropdownMenuItem({Text("Resample to audio")},{act{sheet="resample"}})
                     DropdownMenuItem({Text("Stretch audio")},{act{sheet="stretch"}})
                     DropdownMenuItem({Text("Arrangement tempo map")},{act{sheet="tempo"}})
+                    DropdownMenuItem({Text("Record & Sample Lab")},{act{sheet="record"}})
                     DropdownMenuItem({Text("How to use")},{act{sheet="help"}})
                 }
             }
@@ -119,6 +120,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,imp
                 FilterChip(state.metronome,{service.metronome(!state.metronome)},label={Text("Click")})
             }
             Action("Undo",state.canUndo){service.undo()};Action("Redo",state.canRedo){service.redo()}
+            Action("Record audio"){sheet="record"}
             Action("Keys"){sheet="keys"}
             Action("Samples"){browserPad=-2;sheet="samples"}
             Action("Resample"){sheet="resample"}
@@ -148,6 +150,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,imp
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=12.dp)){
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text(when(sheet){"clip"->"CLIP / ${state.project.clip(slot)?.name?:"New MIDI"}";"keys"->"KEYBOARD / ${trackName(state,track)}";else->"${sheet.uppercase()} / ${trackName(state,track)}"},Modifier.weight(1f),color=Green,fontWeight=FontWeight.Bold,fontSize=13.sp);TextButton({backPanel()},Modifier.testTag("Panel back")){Text("‹ Back")};TextButton({closePanel()},Modifier.testTag("Close panel")){Text("Close ×")}}
             when(sheet){
+                "record"->RecordingPanel(editorState,service,slot,recordAudio,importLab,saveLab)
                 "astra"->AstraPanel(editorState,service,slot)
                 "clip"->state.project.clip(slot)?.let{ClipEditor(it,editorState,service)}?:Text("Creating clip…")
                 "synth"->{Tools{Action("Use synth",state.project.instruments[track].mode!=0){service.instrument(track,0)};Action("Sampler / drums"){sheet="instrument"}};SynthEditor(track,state.patches[track],service,state.stats.running)}

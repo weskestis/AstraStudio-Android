@@ -1,3 +1,9 @@
+# Phase 8 validation in progress
+
+Version 0.8.0-phase8 / versionCode 8. Added microphone capture, disk-backed Sample Lab, pitch/spectrum analysis and exact sample extraction. Local tests and Android CI results will be recorded when complete; no physical Xperia microphone or USB input fidelity measurements have been performed.
+
+---
+
 # Phase 7 validation
 
 Development **0.7.0-phase7 / versionCode 7**, Android 14+.

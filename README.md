@@ -1,6 +1,14 @@
-# Astra Studio — Phase 7
+# Astra Studio — Phase 8
 
-Android 14+ native music workstation, built for **Sony Xperia 1 IV** first. Package `com.weskestis.astrastudio`, version **0.7.0-phase7**, green and black throughout. This is a development DAW, with implemented editing/playback features and explicit limits below; it is not yet a production-certified replacement for a desktop workstation.
+Android 14+ native music workstation, built for **Sony Xperia 1 IV** first. Package `com.weskestis.astrastudio`, version **0.8.0-phase8**, green and black throughout. This is a development DAW, with implemented editing/playback features and explicit limits below; it is not yet a production-certified replacement for a desktop workstation.
+
+## Record audio and find bass tones
+
+Open **Record audio** (or **File → Record & Sample Lab**). Allow microphone access, choose mono or stereo, then **Record microphone → Stop & save**. The input meter shows clipping and the actual input format/route. Back, rotation and backgrounding retain the foreground recording; the notification's Stop action saves it. Monitoring is off to avoid feedback.
+
+Choose a take or a project sample. Zoom, pan/pinch, drag a selection or enter exact source frames. **Analyze bass** shows an estimated fundamental, MIDI note/cents, periodicity, RMS/peak and a 20 Hz–2 kHz spectrum. **Use as sampler** maps the selection to the keyboard with an editable root note; **Add audio clip** puts it in the selected track's next free slot. Both preserve the original and support Undo. Optional 2 ms edge fades prevent hard-cut clicks; fades default off for unchanged samples.
+
+Recordings and **Open audio from storage** use disk-backed reading, preview and waveform windows. Each take/import supports up to 1 GiB of audio, while only extracted samples enter the unchanged **512 MiB / 64 asset project budget**. Full multitrack playback still uses decoded RAM, and automatic tempo-following warp is still pending. [Recording controls, fidelity and storage details](docs/RECORDING.md).
 
 ## Sampler, drum rack and resampling
 
@@ -32,7 +40,7 @@ Full workflow, command reference and limitations: [Astra Phase 5](docs/ASTRA.md)
 
 ## Install and make a track
 
-Install `AstraStudio_Phase7_0.7.0.apk` over Phase 1–6. The development signing certificate is unchanged. GitHub fallback: **Actions → Android Phase 7 → a successful run → AstraStudio-Phase7-APK**.
+Install `AstraStudio_Phase8_0.8.0.apk` over Phase 1–7. The development signing certificate is unchanged. GitHub fallback: **Actions → Android Phase 8 → a successful run → AstraStudio-Phase8-APK**.
 
 1. **File → Load starter song** opens Green circuit: original, editable MIDI drums, bass and lead, two scenes and a 16-bar arrangement. Save your current project first.
 2. Tap **Start audio**, then **Play**. Session Play launches Scene 1; Arrangement Play begins at the white cursor. Clip/scene launch buttons follow the selected bar, quarter-note or eighth-note quantization.

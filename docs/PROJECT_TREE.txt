@@ -1,5 +1,3 @@
-Astra Studio Phase 7 — complete source inventory
-
 .github/workflows/android.yml
 .gitignore
 README.md
@@ -92,12 +90,17 @@ app/src/main/java/com/weskestis/astrastudio/project/Resampling.kt
 app/src/main/java/com/weskestis/astrastudio/project/SampleInstrument.kt
 app/src/main/java/com/weskestis/astrastudio/project/StarterProject.kt
 app/src/main/java/com/weskestis/astrastudio/project/TempoMap.kt
+app/src/main/java/com/weskestis/astrastudio/recording/BassAnalysis.kt
+app/src/main/java/com/weskestis/astrastudio/recording/MicrophoneRecorder.kt
+app/src/main/java/com/weskestis/astrastudio/recording/SelectionPreview.kt
+app/src/main/java/com/weskestis/astrastudio/recording/WaveFile.kt
 app/src/main/java/com/weskestis/astrastudio/synth/SynthEditor.kt
 app/src/main/java/com/weskestis/astrastudio/synth/SynthPatch.kt
 app/src/main/java/com/weskestis/astrastudio/synth/SynthSchema.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/ClipEditor.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/PanelNavigation.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/QualityPanels.kt
+app/src/main/java/com/weskestis/astrastudio/workspace/RecordingPanel.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/SamplePanels.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/StudioWorkspace.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/TimelineViews.kt
@@ -110,6 +113,7 @@ app/src/test/java/com/weskestis/astrastudio/midi/MidiDecoderTest.kt
 app/src/test/java/com/weskestis/astrastudio/project/ProjectTests.kt
 app/src/test/java/com/weskestis/astrastudio/project/SamplerTests.kt
 app/src/test/java/com/weskestis/astrastudio/project/TempoQualityTests.kt
+app/src/test/java/com/weskestis/astrastudio/recording/RecordingTests.kt
 app/src/test/java/com/weskestis/astrastudio/synth/SynthPatchTest.kt
 build.gradle.kts
 docs/ARCHITECTURE.md
@@ -117,6 +121,7 @@ docs/ASTRA.md
 docs/EFFECTS.md
 docs/PROJECT_TREE.txt
 docs/QUALITY.md
+docs/RECORDING.md
 docs/SAMPLER.md
 docs/SYNTHESIS.md
 docs/VALIDATION.md

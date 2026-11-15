@@ -20,6 +20,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.net.Uri
 import com.weskestis.astrastudio.project.*
+import com.weskestis.astrastudio.recording.*
 import com.weskestis.astrastudio.astra.*
 import java.io.File
 import java.util.concurrent.Executors
@@ -100,6 +101,9 @@ class AudioService : Service() {
     private var presets = emptyList<SynthPatch>()
     private var fxPresets = emptyList<FxConfig>()
     private lateinit var files: ProjectFiles
+    lateinit var recorder: MicrophoneRecorder; private set
+    private val selectionPreview=SelectionPreview()
+    @Volatile private var captureForeground=false
     private val io = Executors.newSingleThreadExecutor()
     private val astraWorker = Executors.newSingleThreadExecutor()
     private lateinit var geminiKeys: GeminiKeyStore
@@ -160,6 +164,7 @@ class AudioService : Service() {
         geminiKeys = GeminiKeyStore(this)
         thread = HandlerThread("AstraControl").also { it.start() }
         control = Handler(thread.looper)
+        recorder=MicrophoneRecorder(this){control.post{captureForeground=false;if(!destroyed)refreshForeground()}}
         audioManager = getSystemService(AudioManager::class.java)
         focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
             .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
@@ -208,14 +213,26 @@ class AudioService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> {
-                startForeground(NOTIFICATION, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+                startForeground(NOTIFICATION, notification(), foregroundTypes(ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK))
                 control.post { startAudio() }
             }
             ACTION_WORK -> {
-                startForeground(NOTIFICATION, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or (if(wantsAudio) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK else 0))
-                if(!mutableState.value.busy&&!mutableState.value.astra.working&&!wantsAudio){stopForeground(STOP_FOREGROUND_REMOVE);stopSelf()}
+                startForeground(NOTIFICATION, notification(), foregroundTypes(ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC))
+                if(!mutableState.value.busy&&!mutableState.value.astra.working&&!wantsAudio&&!captureForeground){stopForeground(STOP_FOREGROUND_REMOVE);stopSelf()}
             }
-            ACTION_STOP -> control.post { stopAudio("Audio stopped.") }
+            ACTION_CAPTURE -> {
+                if(!captureForeground&&!recorder.state.value.active&&mutableState.value.ready&&!mutableState.value.busy){
+                    try {
+                        captureForeground=true
+                        startForeground(NOTIFICATION,notification(),foregroundTypes(ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE))
+                        control.post {
+                            stopTransport();releaseTouchNotes();selectionPreview.stop();bridge.stopPreview()
+                            if(!recorder.start(intent.getBooleanExtra("stereo",false))){captureForeground=false;refreshForeground()}
+                        }
+                    }catch(e: SecurityException){captureForeground=false;control.post{message("Microphone access was blocked. Open Astra and allow microphone permission, then retry.");refreshForeground()}}
+                }else if(!captureForeground&&!wantsAudio&&!mutableState.value.busy){stopForeground(STOP_FOREGROUND_REMOVE);stopSelf()}
+            }
+            ACTION_STOP -> control.post { recorder.stop();selectionPreview.stop();stopAudio("Audio stopped.") }
         }
         // Never unexpectedly restart playback after process death.
         return START_NOT_STICKY
@@ -228,7 +245,7 @@ class AudioService : Service() {
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_astra)
             .setContentTitle("Astra Studio")
-            .setContentText(if(mutableState.value.busy)mutableState.value.work else if(mutableState.value.astra.working)mutableState.value.astra.status else "Audio engine active • tap to return")
+            .setContentText(if(captureForeground)"Recording microphone • Stop audio saves the take" else if(mutableState.value.busy)mutableState.value.work else if(mutableState.value.astra.working)mutableState.value.astra.status else "Audio engine active • tap to return")
             .setContentIntent(open)
             .setCategory(Notification.CATEGORY_TRANSPORT)
             .setOngoing(true)
@@ -277,6 +294,7 @@ class AudioService : Service() {
     }
 
     private fun stopAudio(message: String) {
+        selectionPreview.stop()
         finishRecording()
         wantsAudio = false
         playingIntent=false;pendingLaunch=null;sent=null
@@ -285,8 +303,7 @@ class AudioService : Service() {
         bridge.stop()
         audioManager.abandonAudioFocusRequest(focusRequest)
         mutableState.value = mutableState.value.copy(stats = AudioStats(), fxStats = FxStats(), message = message, midiDevices = 0)
-        if(mutableState.value.busy||mutableState.value.astra.working)startForeground(NOTIFICATION,notification(),ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        else { stopForeground(STOP_FOREGROUND_REMOVE);stopSelf() }
+        refreshForeground()
     }
 
     private val poll = object : Runnable {
@@ -544,6 +561,53 @@ class AudioService : Service() {
             next.copy(project=next.project.put(Clip(target,name,beats,asset=asset.id,last=asset.frames)))
         }catch(e: Exception){file.delete();throw e}
     },"Stretched audio added as a new clip and in Samples → Stretched. Original preserved; Undo removes the new version.")}
+    fun notice(text: String){control.post{message(text)}}
+    fun stopCapture(){recorder.stop()}
+    fun stopSelectionPreview(){selectionPreview.stop()}
+    fun samplePath(asset: AudioAsset)=files.audioFile(asset).absolutePath
+    private fun labFile(path: String): File {
+        val file=File(path).canonicalFile
+        require((file.parentFile==recorder.directory.canonicalFile&&file.extension=="wav")||mutableState.value.project.assets.any{files.audioFile(it).canonicalFile==file}){"Choose a recording or project sample."}
+        return file
+    }
+    fun previewSelection(path: String,first: Long,last: Long){control.post{
+        if(mutableState.value.busy||recorder.state.value.active)return@post
+        try{val file=labFile(path);stopTransport();bridge.stopPreview()
+            if(!wantsAudio)startAudio()
+            if(wantsAudio){refreshForeground();selectionPreview.play(file,first,last){error->if(error.isNotEmpty())notice(error)}}
+        }catch(e: Exception){message(e.message?:"Could not preview selection.")}
+    }}
+    fun importToLab(uri: Uri){work("Opening audio in Sample Lab",{ _ ->
+        val (name,file)=files.importAudio(uri,cancelled,MicrophoneRecorder.MAX_TAKE_BYTES,recorder.directory)
+        try{WaveFile(file).use{};check(!cancelled.get()){"Cancelled."}
+            val renamed=File(recorder.directory,"Import_"+name.substringBeforeLast('.').replace(Regex("[^A-Za-z0-9_-]"),"_").take(48)+"_"+file.name)
+            check(file.renameTo(renamed)){"Could not save imported audio."};recorder.refresh(renamed.absolutePath)
+        }catch(e: Exception){file.delete();throw e};null
+    },"Audio opened from storage. Select a section to add to this project.")}
+    fun saveLabWave(uri: Uri,path: String,first: Long,last: Long){work("Saving recording WAV",{ _ ->
+        val source=labFile(path)
+        WaveFile(source).use{wave->
+            require(first>=0&&last in (first+1)..wave.frames)
+            if(first==0L&&last==wave.frames)files.publishWave(source,uri,cancelled)
+            else {require(last-first<=(0xffffffffL-36)/8){"Selection is too large for a WAV file."}
+                val temporary=File(cacheDir,"cut-${java.util.UUID.randomUUID()}.wav")
+                try{wave.extract(temporary,first,last){check(!cancelled.get()){"Cancelled."}};files.publishWave(temporary,uri,cancelled)}finally{temporary.delete()}
+            }
+        };null
+    },"Recording WAV saved to your chosen location.")}
+    fun sampleSelection(path: String,first: Long,last: Long,slot: Int,sampler: Boolean,root: Int,fade: Boolean){work("Extracting selection",{d->
+        require(slot in 0..127&&root in 0..127)
+        val source=labFile(path);val target=if(sampler)-1 else if(d.project.clip(slot)==null)slot else d.project.emptySlot(slot%16)?:error("This track needs an empty scene slot.")
+        val available=ProjectFiles.MAX_MEDIA_BYTES-d.project.assets.sumOf{it.frames*8}
+        require(d.project.assets.size<64&&last>first&&(last-first)<=available/8){"Selection exceeds the remaining 512 MiB decoded sample budget or 64 sample slots. Select a shorter section."}
+        val output=File(files.audioDir,"${java.util.UUID.randomUUID()}.wav")
+        try{WaveFile(source).use{it.extract(output,first,last,if(fade)(it.rate*.002).roundToInt()else 0){check(!cancelled.get()){"Cancelled."}}}
+            val name=(source.nameWithoutExtension.take(48)+" cut").take(64);val next=addSamples(d,listOf(name to output),"Recorded / extracted");val a=next.project.assets.last()
+            val project=if(sampler)next.project.instrument(slot%16){it.copy(mode=1,sample=SampleZone(root=root).load(a))}
+                else next.project.put(Clip(target,name,(a.frames.toDouble()/a.rate*d.bpm/60).coerceAtLeast(.0625),asset=a.id,last=a.frames))
+            next.copy(project=project).also{require(it.valid()){"Selection exceeds the timeline limits."}}
+        }catch(e: Exception){output.delete();throw e}
+    },if(sampler)"Selection loaded into the sampler. The original recording is preserved; Undo restores the previous instrument." else "Selection added as an audio clip. The original recording is preserved; Undo removes the clip.")}
     fun saveProject(uri: Uri){work("Saving project",{files.saveArchive(it,uri,cancelled);null},"Project saved with synths, effects and audio.")}
     fun openProject(uri: Uri){control.post{if(!mutableState.value.busy)stopAudio("Opening project…")};work("Opening project",{val d=files.openArchive(uri,cancelled);loadAssets(d);d},"Project opened. Start audio to play.",true)}
     fun starter(){control.post{if(!mutableState.value.ready||mutableState.value.busy)return@post;stopTransport();commit{old->StarterProject.create(presets).let{it.copy(project=it.project.copy(assets=old.project.assets))}};message("Green circuit loaded. Start audio and press Play, or launch individual clips.")}}
@@ -557,9 +621,14 @@ class AudioService : Service() {
     },if(floating)"32-bit float stereo WAV exported." else "24-bit stereo WAV exported.")}
 
     private fun astraState(edit: (AstraState)->AstraState) { mutableState.value=mutableState.value.copy(astra=edit(mutableState.value.astra)) }
-    private fun refreshForeground() {
+    private fun foregroundTypes(extra: Int=0): Int {
         val fileJob=mutableState.value.busy||mutableState.value.astra.working
-        val type=(if(fileJob)ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0) or (if(wantsAudio)ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK else 0)
+        return extra or (if(fileJob)ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0) or
+            (if(wantsAudio)ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK else 0) or
+            (if(captureForeground)ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0)
+    }
+    private fun refreshForeground() {
+        val type=foregroundTypes()
         if(type!=0)startForeground(NOTIFICATION,notification(),type)else{stopForeground(STOP_FOREGROUND_REMOVE);stopSelf()}
     }
     /** Only the control handler owns proposals; expensive parsing, network and encryption stay on its own worker. */
@@ -630,7 +699,7 @@ class AudioService : Service() {
     fun astraNotice(text: String){control.post{astraState{it.copy(status=text.take(600))}}}
 
     override fun onDestroy() {
-        destroyed=true;unregisterReceiver(noisyReceiver);control.removeCallbacksAndMessages(null)
+        destroyed=true;recorder.close();selectionPreview.close();unregisterReceiver(noisyReceiver);control.removeCallbacksAndMessages(null)
         control.post {
             ++astraJob;astraCall?.cancel();astraWorker.shutdownNow();astraAudio=null;astraPrepared=null
             finishRecording();midi?.close();cancelled.set(true)
@@ -643,6 +712,7 @@ class AudioService : Service() {
         super.onDestroy()
     }
     companion object {
+        const val ACTION_CAPTURE="com.weskestis.astrastudio.CAPTURE"
         const val ACTION_START="com.weskestis.astrastudio.START"
         const val ACTION_STOP="com.weskestis.astrastudio.STOP"
         private const val ACTION_WORK="com.weskestis.astrastudio.WORK"

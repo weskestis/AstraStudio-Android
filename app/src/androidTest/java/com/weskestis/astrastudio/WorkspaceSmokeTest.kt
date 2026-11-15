@@ -8,6 +8,10 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
 import com.weskestis.astrastudio.audio.AudioBridge
+import com.weskestis.astrastudio.audio.AudioService
+import com.weskestis.astrastudio.recording.*
+import androidx.test.rule.ServiceTestRule
+import android.content.Intent
 import com.weskestis.astrastudio.project.*
 import com.weskestis.astrastudio.synth.SynthSchema
 import com.weskestis.astrastudio.astra.*
@@ -43,6 +47,68 @@ class WorkspaceSmokeTest {
         values.clear();values.put(android.provider.MediaStore.Images.Media.IS_PENDING,0);resolver.update(uri,values,null,null)
     }
     private fun click(tag: String){val node=compose.onNodeWithTag(tag);runCatching{node.performScrollTo()};node.performClick()}
+    @Test fun recordingLabZoomPitchExtractionAndNavigation(){
+        compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
+        click("File");click("New project");click("Confirm project")
+        compose.waitUntil(10000){compose.onAllNodesWithTag("Empty 0").fetchSemanticsNodes().isNotEmpty()}
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val binding=ServiceTestRule();val service=(binding.bindService(Intent(context,AudioService::class.java)) as AudioService.LocalBinder).service
+        val fixture=File(context.cacheDir,"Lab_A1_fixture.wav")
+        val samples=FloatArray(48000){(.7*kotlin.math.sin(2*Math.PI*55*it/48000)).toFloat()}
+        FloatWaveWriter(fixture,48000,1).use{it.write(samples,samples.size)}
+        try{
+            service.importToLab(Uri.fromFile(fixture))
+            compose.waitUntil(20000){service.recorder.state.value.latest.isNotBlank()&& !service.state.value.busy}
+            val original=service.recorder.state.value.latest
+            click("Record audio")
+            compose.onNodeWithTag("Lab waveform").performScrollTo().assertIsDisplayed()
+            click("Lab zoom in");compose.onNodeWithTag("Lab view range").assertTextContains("0.25000 s",substring=true)
+            compose.onNodeWithTag("Lab start frame").performScrollTo().performTextReplacement("4800")
+            compose.onNodeWithTag("Lab end frame").performTextReplacement("14400")
+            click("Lab apply range");click("Lab fit selection")
+            compose.onNodeWithTag("Lab selection").assertTextContains("9600 frames",substring=true)
+            compose.onNodeWithTag("Lab waveform").performScrollTo();shot("15-recording-waveform")
+            click("Lab analyze")
+            compose.waitUntil(15000){compose.onAllNodesWithTag("Lab pitch").fetchSemanticsNodes().isNotEmpty()}
+            compose.onNodeWithTag("Lab pitch").performScrollTo().assertTextContains("A1",substring=true)
+            compose.onNodeWithTag("Lab spectrum").performScrollTo();shot("16-bass-analysis")
+            compose.onNodeWithTag("Lab root note").assertTextContains("33",substring=true)
+            click("Lab choose source");back();compose.onNodeWithTag("Lab waveform").assertExists()
+            compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
+            compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
+            compose.onNodeWithTag("Lab selection").performScrollTo().assertTextContains("9600 frames",substring=true);shot("17-recording-landscape")
+            compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_PORTRAIT}
+            compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_PORTRAIT}
+            click("Lab use sampler")
+            compose.waitUntil(20000){service.state.value.project.instruments[0].mode==1&&!service.state.value.busy}
+            val zone=service.state.value.project.instruments[0].sample;assertEquals(33,zone.root);assertEquals(9600L,zone.last)
+            val asset=service.state.value.project.asset(zone.asset)!!
+            WaveFile(File(service.samplePath(asset))).use{w->val cut=FloatArray(9600*2);w.read(0,9600,cut);repeat(9600){assertEquals(samples[it+4800],cut[it*2],0f)}}
+            assertTrue(File(original).isFile)
+            val saved=File(context.cacheDir,"lab-saved-selection.wav")
+            service.saveLabWave(Uri.fromFile(saved),original,4800,14400)
+            compose.waitUntil(20000){saved.length()>44&&!service.state.value.busy}
+            WaveFile(saved).use{w->assertEquals(9600L,w.frames);val out=FloatArray(9600*2);w.read(0,9600,out);repeat(9600){assertEquals(samples[it+4800],out[it*2],0f)}}
+            saved.delete()
+            back();compose.onNodeWithTag("Session grid").assertIsDisplayed();click("Undo")
+            compose.waitUntil(10000){service.state.value.project.assets.isEmpty()};click("Redo")
+            compose.waitUntil(10000){service.state.value.project.instruments[0].mode==1}
+            click("Record audio");click("Lab add clip")
+            compose.waitUntil(20000){service.state.value.project.clip(0)?.asset?.let{it>=0}==true&&!service.state.value.busy}
+            back();compose.onNodeWithTag("Launch 0").performScrollTo().assertExists()
+            // Actual platform microphone lifecycle; emulator audio is silent, not a fidelity test.
+            InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(context.packageName,android.Manifest.permission.RECORD_AUDIO)
+            click("Record audio");click("Start microphone")
+            compose.waitUntil(15000){service.recorder.state.value.active&&service.recorder.state.value.frames>0}
+            val before=service.recorder.state.value.frames
+            back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
+            compose.waitUntil(10000){service.recorder.state.value.frames>before}
+            click("Record audio");click("Stop microphone")
+            compose.waitUntil(15000){!service.recorder.state.value.active&&service.recorder.state.value.latest!=original}
+            WaveFile(File(service.recorder.state.value.latest)).use{assertTrue(it.frames>0)}
+            shot("18-recorded-take");back()
+        }finally{service.stopCapture();fixture.delete();binding.unbindService()}
+    }
     @Test fun createEditUndoArrangeAndRotate(){
         compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
         click("File");click("Load starter song");click("Confirm project")

@@ -30,13 +30,13 @@ class ProjectFiles(private val context: Context) {
         try{out.write(ProjectCodec.encode(d).toByteArray(Charsets.UTF_8));autosave.finishWrite(out)}catch(e: Exception){autosave.failWrite(out);throw e}
     }
     fun displayName(uri: Uri): String=runCatching{context.contentResolver.query(uri,arrayOf(OpenableColumns.DISPLAY_NAME),null,null,null)?.use{if(it.moveToFirst())it.getString(0)else null}}.getOrNull()?:uri.lastPathSegment?:"Imported audio"
-    fun importAudio(uri: Uri,cancel: AtomicBoolean): Pair<String,File> {
+    fun importAudio(uri: Uri,cancel: AtomicBoolean,limit: Long=MAX_MEDIA_BYTES,directory: File=audioDir): Pair<String,File> {
         val name=displayName(uri)
         val source=File(context.cacheDir,"import-${UUID.randomUUID()}.bin")
-        val dest=File(audioDir,"${UUID.randomUUID()}.wav")
+        val dest=File(directory,"${UUID.randomUUID()}.wav")
         try {
-            requireNotNull(context.contentResolver.openInputStream(uri)).use{input->source.outputStream().use{copy(input,it,MAX_MEDIA_BYTES,cancel)}}
-            if(isPcmWave(source))source.inputStream().use{input->dest.outputStream().use{copy(input,it,MAX_MEDIA_BYTES,cancel)}} else decodeAudio(source,dest,cancel)
+            requireNotNull(context.contentResolver.openInputStream(uri)).use{input->source.outputStream().use{copy(input,it,limit,cancel)}}
+            if(isPcmWave(source))source.inputStream().use{input->dest.outputStream().use{copy(input,it,limit,cancel)}} else decodeAudio(source,dest,cancel,limit)
             return name.take(128) to dest
         }catch(e: Exception){dest.delete();throw e}finally{source.delete()}
     }
@@ -104,7 +104,7 @@ class ProjectFiles(private val context: Context) {
             if(size>f.length()-f.filePointer)return@use false;f.seek(f.filePointer+size+(size and 1))
         };false
     }
-    private fun decodeAudio(input: File,output: File,cancel: AtomicBoolean) {
+    private fun decodeAudio(input: File,output: File,cancel: AtomicBoolean,limit: Long=MAX_MEDIA_BYTES) {
         val extractor=MediaExtractor();var codec: MediaCodec?=null
         try {
             extractor.setDataSource(input.absolutePath)
@@ -136,7 +136,7 @@ class ProjectFiles(private val context: Context) {
                             floats.clear()
                             while(b.hasRemaining()){val l=sample();val r=if(channels==2)sample()else l;require(l.isFinite()&&r.isFinite()){ "Audio contains invalid samples." }
                                 floats.putFloat(l.coerceIn(-8f,8f));floats.putFloat(r.coerceIn(-8f,8f));if(floats.remaining()<8){file.write(payload,0,floats.position());bytes+=floats.position();floats.clear()}
-                                require(bytes+floats.position()<=MAX_MEDIA_BYTES){"Decoded audio exceeds the 512 MiB project audio budget."}}
+                                require(bytes+floats.position()<=limit){"Decoded audio exceeds this import limit (${limit/(1024*1024)} MiB)."}}
                             if(floats.position()>0){file.write(payload,0,floats.position());bytes+=floats.position()}
                             outputDone=info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM!=0;codec.releaseOutputBuffer(i,false);lastProgress=SystemClock.elapsedRealtime()
                         }

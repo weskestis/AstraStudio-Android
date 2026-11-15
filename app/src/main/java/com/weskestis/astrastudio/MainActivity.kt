@@ -28,6 +28,13 @@ class MainActivity : ComponentActivity() {
     private var pendingKind by mutableStateOf("")
     private var pendingSamples by mutableStateOf<List<String>>(emptyList())
     private var importSlot = 0
+    private var captureStereo=false
+    private var labExportPath=""
+    private var labExportFirst=0L
+    private var labExportLast=0L
+    private val labExport=registerForActivityResult(ActivityResultContracts.CreateDocument("audio/wav")){receive(it,"labExport")}
+    private val microphonePermission=registerForActivityResult(ActivityResultContracts.RequestPermission()){granted->if(granted)beginCapture()else audioService?.notice("Microphone permission is needed to record. You can allow it in Android Settings → Apps → Astra Studio → Permissions.")}
+    private val labImport=registerForActivityResult(ActivityResultContracts.OpenDocument()){receive(it,"lab")}
     private var exportRate = 48000
     private var exportTail = 4f
     private var exportFloating = true
@@ -45,7 +52,7 @@ class MainActivity : ComponentActivity() {
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        savedInstanceState?.let { pendingSamples=it.getStringArrayList("sampleUris")?:emptyList();pendingUri=it.getString("uri");pendingKind=it.getString("kind","");importSlot=it.getInt("slot");exportRate=it.getInt("rate",48000);exportTail=it.getFloat("tail",4f);exportFloating=it.getBoolean("floating",true) }
+        savedInstanceState?.let {captureStereo=it.getBoolean("captureStereo",false);labExportPath=it.getString("labPath","");labExportFirst=it.getLong("labFirst");labExportLast=it.getLong("labLast"); pendingSamples=it.getStringArrayList("sampleUris")?:emptyList();pendingUri=it.getString("uri");pendingKind=it.getString("kind","");importSlot=it.getInt("slot");exportRate=it.getInt("rate",48000);exportTail=it.getFloat("tail",4f);exportFloating=it.getBoolean("floating",true) }
         setContent {
             MaterialTheme(colorScheme=darkColorScheme(
                 primary=Color(0xFF55F27A),onPrimary=Color(0xFF001606),background=Color.Black,surface=Color(0xFF0B120D),
@@ -65,11 +72,11 @@ class MainActivity : ComponentActivity() {
                             if(pendingSamples.isNotEmpty()&&state.ready&&!state.busy){service.importSamples(pendingSamples.map(Uri::parse));pendingSamples=emptyList();return@LaunchedEffect}
                             val uri=pendingUri
                             if(uri!=null&&state.ready&&!state.busy){
-                                when(pendingKind){"pack"->service.importSamples(listOf(Uri.parse(uri)),true);"audio"->service.importAudio(Uri.parse(uri),importSlot);"open"->service.openProject(Uri.parse(uri));"save"->service.saveProject(Uri.parse(uri));"wave"->service.exportWave(Uri.parse(uri),exportRate,exportTail,exportFloating)}
+                                when(pendingKind){"labExport"->service.saveLabWave(Uri.parse(uri),labExportPath,labExportFirst,labExportLast);"lab"->service.importToLab(Uri.parse(uri));"pack"->service.importSamples(listOf(Uri.parse(uri)),true);"audio"->service.importAudio(Uri.parse(uri),importSlot);"open"->service.openProject(Uri.parse(uri));"save"->service.saveProject(Uri.parse(uri));"wave"->service.exportWave(Uri.parse(uri),exportRate,exportTail,exportFloating)}
                                 pendingUri=null;pendingKind=""
                             }
                         }
-                        StudioWorkspace(state,service,::requestAudio,
+                        StudioWorkspace(state,service,::requestAudio,recordAudio={stereo->captureStereo=stereo;requestCapture()},saveLab={path,name,first,last->labExportPath=path;labExportFirst=first;labExportLast=last;labExport.launch(name+".wav")},importLab={labImport.launch(arrayOf("audio/*"))},
                             importSamples={importSamples.launch(arrayOf("audio/*"))},importPack={importPack.launch(arrayOf("application/zip","application/x-zip-compressed"))},
                             importAudio={slot->importSlot=slot;importAudio.launch(arrayOf("audio/*"))},
                             openProject={openProject.launch(arrayOf("application/octet-stream","application/zip","*/*"))},
@@ -80,9 +87,11 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-    override fun onSaveInstanceState(outState: Bundle){outState.putStringArrayList("sampleUris",ArrayList(pendingSamples));outState.putString("uri",pendingUri);outState.putString("kind",pendingKind);outState.putInt("slot",importSlot);outState.putInt("rate",exportRate);outState.putFloat("tail",exportTail);outState.putBoolean("floating",exportFloating);super.onSaveInstanceState(outState)}
+    override fun onSaveInstanceState(outState: Bundle){outState.putBoolean("captureStereo",captureStereo);outState.putString("labPath",labExportPath);outState.putLong("labFirst",labExportFirst);outState.putLong("labLast",labExportLast);outState.putStringArrayList("sampleUris",ArrayList(pendingSamples));outState.putString("uri",pendingUri);outState.putString("kind",pendingKind);outState.putInt("slot",importSlot);outState.putInt("rate",exportRate);outState.putFloat("tail",exportTail);outState.putBoolean("floating",exportFloating);super.onSaveInstanceState(outState)}
     override fun onStart(){super.onStart();bound=bindService(Intent(this,AudioService::class.java),connection,Context.BIND_AUTO_CREATE)}
-    override fun onStop(){if(isChangingConfigurations)startService(Intent(this,AudioService::class.java));audioService?.releaseTouchNotes();if(bound){unbindService(connection);bound=false};audioService=null;super.onStop()}
+    override fun onStop(){if(isChangingConfigurations)startService(Intent(this,AudioService::class.java));audioService?.releaseTouchNotes();audioService?.stopSelectionPreview();if(bound){unbindService(connection);bound=false};audioService=null;super.onStop()}
+    private fun requestCapture(){if(ContextCompat.checkSelfPermission(this,Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)microphonePermission.launch(Manifest.permission.RECORD_AUDIO)else beginCapture()}
+    private fun beginCapture(){if(lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED))ContextCompat.startForegroundService(this,Intent(this,AudioService::class.java).setAction(AudioService.ACTION_CAPTURE).putExtra("stereo",captureStereo))}
     private fun requestAudio(){if(ContextCompat.checkSelfPermission(this,Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)else beginAudio()}
     private fun beginAudio(){ContextCompat.startForegroundService(this,Intent(this,AudioService::class.java).setAction(AudioService.ACTION_START))}
 }

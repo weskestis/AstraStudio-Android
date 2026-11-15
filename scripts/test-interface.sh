@@ -21,3 +21,8 @@ adb shell test -s /sdcard/Pictures/AstraStudio/11-sampler.png
 adb shell test -s /sdcard/Pictures/AstraStudio/12-tempo-map.png
 adb shell test -s /sdcard/Pictures/AstraStudio/13-stretch.png
 adb shell test -s /sdcard/Pictures/AstraStudio/14-float-export.png
+
+adb shell test -s /sdcard/Pictures/AstraStudio/15-recording-waveform.png
+adb shell test -s /sdcard/Pictures/AstraStudio/16-bass-analysis.png
+adb shell test -s /sdcard/Pictures/AstraStudio/17-recording-landscape.png
+adb shell test -s /sdcard/Pictures/AstraStudio/18-recorded-take.png

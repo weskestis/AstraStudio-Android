@@ -7,6 +7,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-feature android:name="android.software.midi" android:required="false" />
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
@@ -24,6 +27,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <service android:name=".audio.AudioService" android:exported="false" android:foregroundServiceType="mediaPlayback|dataSync" />
+        <service android:name=".audio.AudioService" android:exported="false" android:foregroundServiceType="mediaPlayback|dataSync|microphone" />
     </application>
 </manifest>
