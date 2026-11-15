@@ -119,7 +119,8 @@ class WorkspaceSmokeTest {
             compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_PORTRAIT}
             click("Record audio");click("Stop microphone")
             compose.waitUntil(15000){!service.recorder.state.value.active&&service.recorder.state.value.latest!=previous}
-            WaveFile(File(service.recorder.state.value.latest)).use{assertTrue(it.frames>0);assertEquals(service.recorder.state.value.rate,it.rate)}
+            val expectedRate=service.recorder.state.value.rate
+            WaveFile(File(service.recorder.state.value.latest)).use{assertTrue(it.frames>0);assertEquals(expectedRate,it.rate)}
             shot("18-recorded-take");back()
         }finally{service.stopCapture();binding.unbindService()}
     }
