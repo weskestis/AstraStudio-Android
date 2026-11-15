@@ -11,7 +11,8 @@ Local checks on November 15, 2026 UTC for **0.4.0-phase4 / versionCode 4**. The 
 | Kotlin JUnit | 39 passed, including 22 project/edit/format/history cases |
 | ARM64 + x86_64 JNI and Compose compilation | Passed |
 | APK and instrumentation APK assembly | Passed |
-| Android lint | 0 errors, 15 non-blocking warnings |
+| APK signature and ZIP / ELF alignment | v2 signature verified; unchanged development certificate; all six native libraries aligned to 16 KB |
+| Android lint | 0 errors, 16 non-blocking warnings |
 | Native sanitizers | All four suites passed under AddressSanitizer + UndefinedBehaviorSanitizer |
 | Android 14 instrumentation | Automated phone UI/file tests and screenshots configured in GitHub Actions; inspect the exact run result |
 | Physical Xperia, USB MIDI, listening, touch/audio latency, thermals | Not tested here |

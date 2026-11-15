@@ -54,6 +54,8 @@ Three immutable `Plan` slots use release/acquire busy flags. Parsing, sorting, s
 
 Each plan owns references to immutable decoded stereo assets. Session and Arrangement events run in sample time, with per-track sorted event cursors, 256 reserved held-note IDs, interpolation of four automation lanes every 32 samples and linear source-rate audio interpolation. Plan limits bound work; dense simultaneous notes may still exceed a real device's DSP budget. Sequenced note events do not use the external command-heap event budget.
 
+The control handler owns its current StudioState; a main-thread handler publishes snapshots to Compose collectors. Status publication never runs Compose view work on the audio control thread, including under the instrumentation test dispatcher.
+
 The dedicated project I/O worker performs archive operations, Android MediaCodec decoding, atomic autosave and offline export. Long I/O never holds the Kotlin audio monitor or native registry mutex. Offline export snapshots assets and uses a separate RenderCore with the same synth/rack/send/limiter path. It trims fixed algorithmic latency and writes deterministic-dithered 24-bit WAV outside render calls. A dataSync foreground service covers user-started file jobs.
 
 Undo/Redo stores 64 immutable project snapshots; continuous controls coalesce and MIDI takes form one group. Audio files are immutable and retained privately for safe Undo; opening/new-project clears history as appropriate. Exported portable archives contain only referenced audio. Audio import is capped by a 512 MiB decoded asset budget, not a 60-second duration limit.
