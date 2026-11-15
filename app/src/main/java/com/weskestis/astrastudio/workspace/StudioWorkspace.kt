@@ -35,6 +35,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,
     importAudio: (Int)->Unit,openProject: ()->Unit,saveProject: (String)->Unit,exportWave: (String,Int,Float)->Unit) {
     var view by rememberSaveable { mutableIntStateOf(0) }
     var slot by rememberSaveable { mutableIntStateOf(0) }
+    var fxUnit by rememberSaveable { mutableIntStateOf(0) }
     var sheet by rememberSaveable { mutableStateOf("") }
     var fileMenu by remember { mutableStateOf(false) }
     var confirm by remember { mutableStateOf("") }
@@ -88,6 +89,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,
                 Action("▶ Play",state.ready,"Play"){audioAction("play")};Action("■ Stop",state.stats.running){pending=null;service.stopTransportFromUi()}
                 Action(if(state.recording>=0)"● Recording" else "● MIDI",state.ready,"Record MIDI"){audioAction("record",slot)}
                 Action("${number(state.bpm.toDouble())} BPM",state.ready){tempoDialog=true}
+                Action("Tap"){service.tapTempo()}
                 FilterChip(state.overdub,{service.overdub(!state.overdub)},label={Text("Overdub")})
                 FilterChip(state.metronome,{service.metronome(!state.metronome)},label={Text("Click")})
             }
@@ -108,7 +110,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,
             Action("Import audio",state.ready){importAudio(slot)}
             Action("Delete clip",state.project.clip(slot)!=null){confirm="delete"}
         }
-        DeviceRack(state,track,service,compact){if(it=="clip"&&state.project.clip(slot)==null)service.newClip(slot);sheet=it}
+        DeviceRack(state,track,service,compact){if(it=="clip"&&state.project.clip(slot)==null)service.newClip(slot);if(it.startsWith("effects:")){fxUnit=it.substringAfter(":").toInt();sheet="effects"}else sheet=it}
     }
     if(sheet.isNotEmpty())ModalBottomSheet(onDismissRequest={service.releaseTouchNotes();sheet=""},sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),containerColor=Color(0xFF080F0A)){
         Column(Modifier.fillMaxWidth().fillMaxHeight(.94f).verticalScroll(rememberScrollState()).padding(horizontal=12.dp)){
@@ -116,7 +118,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,
             when(sheet){
                 "clip"->state.project.clip(slot)?.let{ClipEditor(it,state,service)}?:Text("Creating clip…")
                 "synth"->SynthEditor(track,state.patches[track],service,state.stats.running)
-                "effects"->FxEditor(track,state,service)
+                "effects"->FxEditor(track,state,service,fxUnit)
                 "mixer"->Mixer(state,track,service)
                 "master"->MasterPanel(state,service)
                 "project"->ProjectPanel(state,service)
@@ -139,7 +141,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,
             if(compact)Action("Edit clip",tag="Edit clip"){open("clip")}
             Action("Mixer"){open("mixer")};Action("${if(s.patches[t].wire[0]>0)"FM" else "Wavetable"} ›"){open("synth")}
             s.effects[t].order.forEach{unit->val on=s.effects[t][FxConfig.enabled[unit]]>.5f
-                FilterChip(on,{open("effects")},label={Text(listOf("EQ 8","Multiband","Shaper","Sidechain","Echo","Reverb","Chorus","Phaser")[unit],fontSize=11.sp)})}
+                FilterChip(on,{open("effects:$unit")},label={Text(listOf("EQ 8","Multiband","Shaper","Sidechain","Echo","Reverb","Chorus","Phaser")[unit],fontSize=11.sp)})}
             Action("Master"){service.meterTrack(16);open("master")}
         }
     }
@@ -170,7 +172,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,
     var begin by remember(s.project.loopStart){mutableStateOf(number(s.project.loopStart))};var end by remember(s.project.loopEnd){mutableStateOf(number(s.project.loopEnd))}
     OutlinedTextField(name,{name=it.take(64)},label={Text("Project name")},modifier=Modifier.fillMaxWidth(),singleLine=true)
     Action("Rename project",name.isNotBlank()){service.projectEdit{it.copy(name=name.trim())}}
-    Tools{listOf(3,4,6,7,9,12).forEach{n->FilterChip(s.project.numerator==n,{service.projectEdit{it.copy(numerator=n)}},label={Text("$n")})}}
+    Tools{(1..12).forEach{n->FilterChip(s.project.numerator==n,{service.projectEdit{it.copy(numerator=n)}},label={Text("$n")})}}
     Tools{listOf(2,4,8).forEach{n->FilterChip(s.project.denominator==n,{service.projectEdit{it.copy(denominator=n)}},label={Text("/$n")})}}
     Text("Loop uses quarter-note beats, starting at 0. It applies to Arrangement playback.",color=Muted,fontSize=12.sp)
     NumberField("Loop start",begin,{begin=it});NumberField("Loop end",end,{end=it})

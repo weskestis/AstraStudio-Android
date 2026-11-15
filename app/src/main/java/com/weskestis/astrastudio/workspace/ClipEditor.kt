@@ -49,6 +49,7 @@ private fun noteName(n: Int)="${noteNames[n%12]}${n/12-1}"
     val paint=remember{Paint(Paint.ANTI_ALIAS_FLAG).apply{color=android.graphics.Color.rgb(162,186,167)}}
     val current by rememberUpdatedState(c)
     val n=c.note(selected)
+    LaunchedEffect(c.length){span=min(span,c.length);start=min(start,max(0.0,c.length-span))}
     Tools{
         listOf("Draw","Select","Erase").forEachIndexed{i,label->FilterChip(tool==i,{tool=i},label={Text(label)},modifier=Modifier.testTag(label))}
         Action("Quantize"){service.clipEdit(c.slot){it.quantize(grid)}};Action("Legato"){service.clipEdit(c.slot){it.legato()}}

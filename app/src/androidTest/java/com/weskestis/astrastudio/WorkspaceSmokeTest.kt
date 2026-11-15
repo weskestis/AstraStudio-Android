@@ -14,6 +14,8 @@ import com.weskestis.astrastudio.synth.SynthSchema
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import org.junit.After
+import androidx.test.rule.GrantPermissionRule
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -21,12 +23,19 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class WorkspaceSmokeTest {
     @get:Rule val compose=createAndroidComposeRule<MainActivity>()
+    @get:Rule val notifications=GrantPermissionRule.grant(android.Manifest.permission.POST_NOTIFICATIONS)
+    @After fun captureFinalState(){runCatching{shot("99-last-screen")};runCatching{compose.onAllNodes(isRoot())[0].printToLog("ASTRA_UI_TEST")}}
     private fun shot(name: String){val context=InstrumentationRegistry.getInstrumentation().targetContext;val dir=File(context.filesDir,"screenshots").also{it.mkdirs()};compose.onAllNodes(isRoot())[compose.onAllNodes(isRoot()).fetchSemanticsNodes().lastIndex].captureToImage().asAndroidBitmap().let{bitmap->File(dir,"$name.png").outputStream().use{bitmap.compress(Bitmap.CompressFormat.PNG,100,it)}}}
     private fun click(tag: String){val node=compose.onNodeWithTag(tag);runCatching{node.performScrollTo()};node.performClick()}
     @Test fun createEditUndoArrangeAndRotate(){
         compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
         click("File");click("Load starter song");click("Confirm project")
         compose.waitUntil(10000){compose.onAllNodesWithText("Kick 1").fetchSemanticsNodes().isNotEmpty()}
+        click("Audio")
+        compose.waitUntil(15000){compose.onAllNodesWithText("Audio on").fetchSemanticsNodes().isNotEmpty()}
+        click("Play")
+        compose.waitUntil(10000){compose.onAllNodesWithText("▸").fetchSemanticsNodes().isNotEmpty()}
+        click("■ Stop")
         shot("01-session-portrait")
         click("Edit clip")
         compose.onNodeWithTag("Piano roll").performScrollTo().assertIsDisplayed().performTouchInput{click(Offset(width*.4f,height*.55f))}
@@ -35,9 +44,15 @@ class WorkspaceSmokeTest {
         click("Arrangement");compose.onNodeWithTag("Arrangement timeline").assertIsDisplayed();shot("03-arrangement-portrait")
         compose.onNodeWithTag("Region").assertIsNotEnabled()
         compose.onNodeWithTag("Timeline canvas").performTouchInput{click(Offset(width*.6f,35f))}
-        click("Region");compose.onNodeWithText("Arrangement region").assertIsDisplayed();compose.onNodeWithText("Cancel").performClick()
+        compose.waitUntil(10000){compose.onAllNodes(hasTestTag("Region") and isEnabled()).fetchSemanticsNodes().isNotEmpty()}
+        compose.waitForIdle();shot("03b-region-selection")
+        compose.onNodeWithTag("Region").assertIsEnabled()
+        click("Region")
+        compose.waitUntil(10000){compose.onAllNodesWithText("Arrangement region").fetchSemanticsNodes().isNotEmpty()}
+        compose.onNodeWithText("Arrangement region").assertIsDisplayed();compose.onNodeWithText("Cancel").performClick()
         compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
         compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
+        compose.waitUntil(10000){compose.onAllNodesWithTag("Arrangement timeline").fetchSemanticsNodes().isNotEmpty()}
         compose.waitForIdle();shot("04-arrangement-landscape")
         compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_PORTRAIT}
     }

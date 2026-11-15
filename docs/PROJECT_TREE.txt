@@ -87,6 +87,7 @@ gradle/wrapper/gradle-wrapper.jar
 gradle/wrapper/gradle-wrapper.properties
 gradlew
 gradlew.bat
+scripts/test-interface.sh
 scripts/test-native.sh
 settings.gradle.kts
 signing/astra-development.keystore

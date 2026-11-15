@@ -24,9 +24,9 @@ import java.util.Locale
 import kotlin.math.*
 
 @Composable
-fun FxEditor(track: Int, state: StudioState, service: AudioService) {
+fun FxEditor(track: Int, state: StudioState, service: AudioService, initialUnit: Int = 0) {
     val config = state.effects[track]
-    var unit by rememberSaveable { mutableIntStateOf(0) }
+    var unit by rememberSaveable(track,initialUnit) { mutableIntStateOf(initialUnit.coerceIn(0,7)) }
     var macro by rememberSaveable { mutableIntStateOf(0) }
     var masterSpectrum by rememberSaveable { mutableStateOf(false) }
     var expanded by rememberSaveable { mutableStateOf(true) }

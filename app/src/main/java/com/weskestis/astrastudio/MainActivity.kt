@@ -74,7 +74,7 @@ class MainActivity : ComponentActivity() {
     }
     override fun onSaveInstanceState(outState: Bundle){outState.putString("uri",pendingUri);outState.putString("kind",pendingKind);outState.putInt("slot",importSlot);outState.putInt("rate",exportRate);outState.putFloat("tail",exportTail);super.onSaveInstanceState(outState)}
     override fun onStart(){super.onStart();bound=bindService(Intent(this,AudioService::class.java),connection,Context.BIND_AUTO_CREATE)}
-    override fun onStop(){audioService?.releaseTouchNotes();if(bound){unbindService(connection);bound=false};audioService=null;super.onStop()}
+    override fun onStop(){if(isChangingConfigurations)startService(Intent(this,AudioService::class.java));audioService?.releaseTouchNotes();if(bound){unbindService(connection);bound=false};audioService=null;super.onStop()}
     private fun requestAudio(){if(ContextCompat.checkSelfPermission(this,Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)else beginAudio()}
     private fun beginAudio(){ContextCompat.startForegroundService(this,Intent(this,AudioService::class.java).setAction(AudioService.ACTION_START))}
 }

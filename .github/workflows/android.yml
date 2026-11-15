@@ -95,13 +95,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
-          script: |
-            adb shell wm size 1080x2520
-            adb shell wm density 420
-            bash gradlew --no-daemon :app:connectedDebugAndroidTest
-            mkdir -p build/screenshots
-            adb exec-out run-as com.weskestis.astrastudio tar -C files -cf - screenshots > build/screenshots.tar
-            tar -xf build/screenshots.tar -C build
+          script: bash scripts/test-interface.sh
       - name: Upload interface reports and screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -111,3 +105,4 @@ jobs:
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
             build/screenshots/
+            build/ui-logcat.txt
