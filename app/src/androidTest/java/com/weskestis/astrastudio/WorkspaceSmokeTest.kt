@@ -80,7 +80,15 @@ class WorkspaceSmokeTest {
             val p=state.project.put(c.copy(length=4.0)).copy(mode=1,tempoEnabled=true,tempoPoints=listOf(TempoPoint(0.0,120f,true),TempoPoint(2.0,90f))).place(0,0.0)
             val document=ProjectDocument(p,state.bpm,state.master,state.limiterDrive,state.limiterRelease,state.tracks,state.patches,state.effects)
             val files=ProjectFiles(context);files.saveArchive(document,Uri.fromFile(archive),AtomicBoolean(false))
-            val restored=files.openArchive(Uri.fromFile(archive),AtomicBoolean(false));assertEquals(document,restored)
+            val restored=files.openArchive(Uri.fromFile(archive),AtomicBoolean(false))
+            // Archive import deliberately assigns fresh local filenames, so an
+            // existing project's media can never be overwritten by reopening it.
+            val remapped=document.copy(project=document.project.copy(assets=document.project.assets.map{a->
+                val loaded=requireNotNull(restored.project.asset(a.id))
+                assertArrayEquals(files.audioFile(a).readBytes(),files.audioFile(loaded).readBytes())
+                a.copy(file=loaded.file)
+            }))
+            assertEquals(remapped,restored)
             val bridge=AudioBridge()
             try{assertTrue(bridge.loadAssets(restored.project.assets.map{it.id to files.audioFile(it)}));assertTrue(bridge.project(restored.project))
                 assertEquals(0,bridge.export(output,restored,48000,0f,true))
@@ -100,9 +108,11 @@ class WorkspaceSmokeTest {
         val samples=FloatArray(48000){(.7*kotlin.math.sin(2*Math.PI*55*it/48000)).toFloat()}
         FloatWaveWriter(fixture,48000,1).use{it.write(samples,samples.size)}
         try{
+            val previousTake=service.recorder.state.value.latest
             service.importToLab(Uri.fromFile(fixture))
-            compose.waitUntil(20000){service.recorder.state.value.latest.isNotBlank()&& !service.state.value.busy}
+            compose.waitUntil(20000){val latest=service.recorder.state.value.latest;latest.isNotBlank()&&latest!=previousTake&&!service.state.value.busy}
             val original=service.recorder.state.value.latest
+            assertArrayEquals(fixture.readBytes(),File(original).readBytes())
             click("Record audio")
             compose.onNodeWithTag("Lab waveform").performScrollTo().assertIsDisplayed()
             click("Lab zoom in");compose.onNodeWithTag("Lab view range").assertTextContains("0.25000 s",substring=true)
