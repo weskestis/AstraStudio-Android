@@ -29,8 +29,9 @@ class ProjectFiles(private val context: Context) {
         val out=autosave.startWrite()
         try{out.write(ProjectCodec.encode(d).toByteArray(Charsets.UTF_8));autosave.finishWrite(out)}catch(e: Exception){autosave.failWrite(out);throw e}
     }
+    fun displayName(uri: Uri): String=runCatching{context.contentResolver.query(uri,arrayOf(OpenableColumns.DISPLAY_NAME),null,null,null)?.use{if(it.moveToFirst())it.getString(0)else null}}.getOrNull()?:uri.lastPathSegment?:"Imported audio"
     fun importAudio(uri: Uri,cancel: AtomicBoolean): Pair<String,File> {
-        val name=context.contentResolver.query(uri,arrayOf(OpenableColumns.DISPLAY_NAME),null,null,null)?.use{if(it.moveToFirst())it.getString(0)else null}?:"Imported audio"
+        val name=displayName(uri)
         val source=File(context.cacheDir,"import-${UUID.randomUUID()}.bin")
         val dest=File(audioDir,"${UUID.randomUUID()}.wav")
         try {
@@ -39,8 +40,32 @@ class ProjectFiles(private val context: Context) {
             return name.take(128) to dest
         }catch(e: Exception){dest.delete();throw e}finally{source.delete()}
     }
+    fun importPack(uri: Uri,limit: Int,cancel: AtomicBoolean): List<Pair<String,File>> {
+        require(limit in 1..64){"The project sample browser is full (64 samples)."}
+        val result=mutableListOf<Pair<String,File>>();val scratch=File(context.cacheDir,"pack-${UUID.randomUUID()}.bin")
+        val discard=object: OutputStream(){override fun write(b: Int){};override fun write(b: ByteArray,off: Int,len: Int){}}
+        try {
+            var total=0L;var entries=0
+            requireNotNull(context.contentResolver.openInputStream(uri)).use{input->ZipInputStream(BufferedInputStream(input)).use{zip->
+                while(true){check(!cancel.get()){ "Cancelled." };val entry=zip.nextEntry?:break
+                    require(++entries<=4096){"Pack contains too many entries."}
+                    val name=entry.name.replace('\\','/').substringAfterLast('/')
+                    val audio=!entry.isDirectory&&name.substringAfterLast('.',"").lowercase() in setOf("wav","mp3","ogg","flac","m4a","aac","aif","aiff","webm","mp4")
+                    if(audio){
+                        require(result.size<limit){"This pack exceeds the remaining $limit sample slots. Import a smaller selection."}
+                        scratch.outputStream().use{total+=copy(zip,it,MAX_MEDIA_BYTES-total,cancel)}
+                        val dest=File(audioDir,"${UUID.randomUUID()}.wav");result+=name.take(128) to dest
+                        if(isPcmWave(scratch))scratch.inputStream().use{src->dest.outputStream().use{copy(src,it,MAX_MEDIA_BYTES,cancel)}} else decodeAudio(scratch,dest,cancel)
+                    } else total+=copy(zip,discard,MAX_MEDIA_BYTES-total,cancel)
+                    zip.closeEntry()
+                }
+            }}
+            require(result.isNotEmpty()){ "No supported audio files found. Choose a ZIP sample pack, or select audio files directly." }
+            return result
+        }catch(e: Exception){result.forEach{it.second.delete()};throw e}finally{scratch.delete()}
+    }
     fun saveArchive(d: ProjectDocument,uri: Uri,cancel: AtomicBoolean) {
-        val used=d.project.clips.filter{it.isAudio}.map{it.asset}.toSet()
+        val used=d.project.assets.map{it.id}.toSet() // Preserve the sample browser, favorites and inactive pad assignments too.
         val portable=d.copy(project=d.project.copy(assets=d.project.assets.filter{it.id in used}))
         requireNotNull(context.contentResolver.openOutputStream(uri,"wt")).use{out->ZipOutputStream(BufferedOutputStream(out)).use{zip->
             zip.putNextEntry(ZipEntry("project.json"));zip.write(ProjectCodec.encode(portable).toByteArray(Charsets.UTF_8));zip.closeEntry()

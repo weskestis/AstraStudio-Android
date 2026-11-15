@@ -1,4 +1,4 @@
-# Engine and Android architecture — Phase 4
+# Engine and Android architecture — Phase 6
 
 The application combines the Phase 1 native audio foundation with Phase 2 wavetable/FM synthesis and a phone-oriented synth editor. It is not yet a completed DAW. See `SYNTHESIS.md` for the signal path, modulation and patch-publication contract. Phase 3 adds the effects engine described in `EFFECTS.md`; Phase 4 adds the sequencer, editing and persistence described in `WORKSPACE.md`. Phase 5 adds the reversible assistant and Gemini integration described in `ASTRA.md`.
 
@@ -58,7 +58,7 @@ The control handler owns its current StudioState; a main-thread handler publishe
 
 The dedicated project I/O worker performs archive operations, Android MediaCodec decoding, atomic autosave and offline export. Long I/O never holds the Kotlin audio monitor or native registry mutex. Offline export snapshots assets and uses a separate RenderCore with the same synth/rack/send/limiter path. It trims fixed algorithmic latency and writes deterministic-dithered 24-bit WAV outside render calls. A dataSync foreground service covers user-started file jobs.
 
-Undo/Redo stores 64 immutable project snapshots; continuous controls coalesce and MIDI takes form one group. Audio files are immutable and retained privately for safe Undo; opening/new-project clears history as appropriate. Exported portable archives contain only referenced audio. Audio import is capped by a 512 MiB decoded asset budget, not a 60-second duration limit.
+Undo/Redo stores 64 immutable project snapshots; continuous controls coalesce and MIDI takes form one group. Audio files are immutable and retained privately for safe Undo; opening/new-project clears history as appropriate. Phase 6 portable archives retain all browser audio, including unused samples and inactive pad assignments. Audio import is capped by a 512 MiB decoded asset budget, not a 60-second duration limit.
 
 ## Android integration
 
@@ -83,7 +83,9 @@ ARM64 is the primary physical-device target. The test screen uses density-indepe
 | 4 (implemented) | Session and arrangement workflows, piano roll, clip editing, automation, recording/import/export, project persistence and robust Undo |
 | 5 (implemented) | Strict JSON command compiler, one-step Undo, revision checks, offline phrase grammar, voice-input delegation, Gemini text/audio integration and manual Gemini handoff |
 
-The sampler, drum rack, granular engine and independent time-stretch algorithms will need explicit implementation within the later phases. Ableton's proprietary devices and “Complex Pro” algorithm are not available to copy; any equivalent mode must have an original or appropriately licensed implementation and an honest name. No absent module has a fake control, empty DSP method or placeholder implementation in this source.
+| 6 (implemented) | Native sample voices, 16-pad drum rack, original kit, sample browser/packs, resampling, portable sample state and nested Back navigation |
+
+Phase 6 implements the sampler, drum rack and resampling in `SAMPLER.md`. Granular synthesis and independent time-stretch algorithms remain future work. Ableton's proprietary devices and “Complex Pro” algorithm are not available to copy; any equivalent mode must have an original or appropriately licensed implementation and an honest name. No absent module has a fake control, empty DSP method or placeholder implementation in this source.
 
 ## Primary references
 

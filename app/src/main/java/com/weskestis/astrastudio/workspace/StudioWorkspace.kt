@@ -4,6 +4,11 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.activity.compose.BackHandler
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,15 +37,25 @@ internal fun trackName(s: StudioState,t: Int)=s.tracks[t].name.ifBlank{"Track ${
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,
+fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,importSamples: ()->Unit,importPack: ()->Unit,
     importAudio: (Int)->Unit,openProject: ()->Unit,saveProject: (String)->Unit,exportWave: (String,Int,Float)->Unit) {
     var view by rememberSaveable { mutableIntStateOf(0) }
     var slot by rememberSaveable { mutableIntStateOf(0) }
     var fxUnit by rememberSaveable { mutableIntStateOf(0) }
     var sheet by rememberSaveable { mutableStateOf("") }
+    var parentSheet by rememberSaveable { mutableStateOf("") }
+    var browserPad by rememberSaveable { mutableIntStateOf(-2) }
+    val panelNavigation=remember(sheet){PanelNavigation()}
+    val panelStates=rememberSaveableStateHolder()
+    fun closePanel(){service.releaseTouchNotes();sheet="";parentSheet=""}
+    fun backPanel(){service.releaseTouchNotes();if(!panelNavigation.back()){if(parentSheet.isNotEmpty()){sheet=parentSheet;parentSheet=""}else closePanel()}}
+    fun browse(pad: Int=-2){parentSheet=sheet;browserPad=pad;sheet="samples"}
+    BackHandler(enabled=sheet.isNotEmpty()||view!=0){if(sheet.isNotEmpty())backPanel()else view=0}
     var fileMenu by remember { mutableStateOf(false) }
     var confirm by remember { mutableStateOf("") }
     var tempoDialog by remember { mutableStateOf(false) }
+    var workVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(state.busy,state.work){workVisible=state.busy}
     var exportDialog by remember { mutableStateOf(false) }
     var cursor by rememberSaveable { mutableDoubleStateOf(0.0) }
     var selectedRegion by rememberSaveable { mutableIntStateOf(-1) }
@@ -64,6 +79,8 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,
                     DropdownMenuItem({Text("Save portable project")},{act{saveProject(state.project.name)}})
                     DropdownMenuItem({Text("Import audio to track ${track+1}")},{act{importAudio(slot)}})
                     DropdownMenuItem({Text("Export arrangement WAV")},{act{exportDialog=true}})
+                    DropdownMenuItem({Text("Sample browser")},{act{browserPad=-2;sheet="samples"}})
+                    DropdownMenuItem({Text("Resample to audio")},{act{sheet="resample"}})
                     DropdownMenuItem({Text("How to use")},{act{sheet="help"}})
                 }
             }
@@ -97,6 +114,8 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,
             }
             Action("Undo",state.canUndo){service.undo()};Action("Redo",state.canRedo){service.redo()}
             Action("Keys"){sheet="keys"}
+            Action("Samples"){browserPad=-2;sheet="samples"}
+            Action("Resample"){sheet="resample"}
             Action("${state.project.numerator}/${state.project.denominator}"){sheet="project"}
             Action("Launch: ${listOf("1 bar","¼","⅛")[state.project.quantization]}"){service.projectEdit{it.copy(quantization=(it.quantization+1)%3)}}
         }
@@ -114,13 +133,19 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,
         }
         DeviceRack(state,track,service,compact){if(it=="clip"&&state.project.clip(slot)==null)service.newClip(slot);if(it.startsWith("effects:")){fxUnit=it.substringAfter(":").toInt();sheet="effects"}else sheet=it}
     }
-    if(sheet.isNotEmpty())ModalBottomSheet(onDismissRequest={service.releaseTouchNotes();sheet=""},sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),containerColor=Color(0xFF080F0A)){
-        Column(Modifier.fillMaxWidth().fillMaxHeight(.94f).verticalScroll(rememberScrollState()).padding(horizontal=12.dp)){
-            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text(when(sheet){"clip"->"CLIP / ${state.project.clip(slot)?.name?:"New MIDI"}";"keys"->"KEYBOARD / ${trackName(state,track)}";else->"${sheet.uppercase()} / ${trackName(state,track)}"},Modifier.weight(1f),color=Green,fontWeight=FontWeight.Bold,fontSize=13.sp);TextButton({service.releaseTouchNotes();sheet=""},Modifier.testTag("Close panel")){Text("Close ×")}}
+    if(sheet.isNotEmpty())Dialog(onDismissRequest={backPanel()},properties=DialogProperties(usePlatformDefaultWidth=false,decorFitsSystemWindows=false)){
+        CompositionLocalProvider(LocalPanelNavigation provides panelNavigation){panelStates.SaveableStateProvider(sheet){
+        Box(Modifier.fillMaxSize().safeDrawingPadding(),contentAlignment=Alignment.BottomCenter){
+        Surface(Modifier.fillMaxWidth().fillMaxHeight(.96f),color=Color(0xFF080F0A),shape=RoundedCornerShape(topStart=24.dp,topEnd=24.dp)){
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=12.dp)){
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text(when(sheet){"clip"->"CLIP / ${state.project.clip(slot)?.name?:"New MIDI"}";"keys"->"KEYBOARD / ${trackName(state,track)}";else->"${sheet.uppercase()} / ${trackName(state,track)}"},Modifier.weight(1f),color=Green,fontWeight=FontWeight.Bold,fontSize=13.sp);TextButton({backPanel()},Modifier.testTag("Panel back")){Text("‹ Back")};TextButton({closePanel()},Modifier.testTag("Close panel")){Text("Close ×")}}
             when(sheet){
                 "astra"->AstraPanel(state,service,slot)
                 "clip"->state.project.clip(slot)?.let{ClipEditor(it,state,service)}?:Text("Creating clip…")
-                "synth"->SynthEditor(track,state.patches[track],service,state.stats.running)
+                "synth"->{Tools{Action("Use synth",state.project.instruments[track].mode!=0){service.instrument(track,0)};Action("Sampler / drums"){sheet="instrument"}};SynthEditor(track,state.patches[track],service,state.stats.running)}
+                "instrument"->SampleInstrumentPanel(state,track,service,start){browse(it)}
+                "samples"->SampleBrowser(state,track,slot,if(browserPad==-2)null else browserPad,service,start,importSamples,importPack){service.stopPreview();if(parentSheet.isNotEmpty()){sheet=parentSheet;parentSheet=""}else sheet="instrument"}
+                "resample"->ResamplePanel(state,slot,service){browse()}
                 "effects"->FxEditor(track,state,service,fxUnit)
                 "mixer"->Mixer(state,track,service)
                 "master"->MasterPanel(state,service)
@@ -131,10 +156,11 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,
             Spacer(Modifier.height(32.dp))
         }
     }
+    }}}}
     if(confirm.isNotEmpty())AlertDialog(onDismissRequest={confirm=""},title={Text(when(confirm){"delete"->"Delete this clip?";"starter"->"Load the starter song?";else->"Start a new project?"})},text={Text(if(confirm=="delete")"Its arrangement regions will also be removed. Undo restores them." else "This replaces the current composition. Save a portable project from File first if you want to keep it.")},confirmButton={TextButton({when(confirm){"delete"->service.projectEdit{it.remove(slot)};"starter"->{service.starter();slot=0;selectedRegion=-1;cursor=0.0};else->{service.newProject();slot=0;selectedRegion=-1;cursor=0.0}};confirm=""},Modifier.testTag("Confirm project")){Text("Continue")}},dismissButton={TextButton({confirm=""}){Text("Cancel")}})
     if(tempoDialog)TempoDialog(state.bpm,{tempoDialog=false}){service.tempo(it);tempoDialog=false}
     if(exportDialog)ExportDialog(state.project,{exportDialog=false}){rate,tail->exportDialog=false;exportWave(state.project.name,rate,tail)}
-    if(state.busy&&state.ready)AlertDialog(onDismissRequest={},title={Text(state.work)},text={Column{if(state.work=="Rendering WAV")LinearProgressIndicator(progress={state.progress.coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth())else LinearProgressIndicator(Modifier.fillMaxWidth());Text("You can leave the app while this finishes.",fontSize=12.sp,modifier=Modifier.padding(top=12.dp))}},confirmButton={TextButton(service::cancelWork){Text("Cancel")}})
+    if(state.busy&&state.ready&&workVisible)AlertDialog(onDismissRequest={workVisible=false},title={Text(state.work)},text={Column{if(state.work in listOf("Rendering WAV","Resampling"))LinearProgressIndicator(progress={state.progress.coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth())else LinearProgressIndicator(Modifier.fillMaxWidth());Text("Back hides this window while the work continues. Cancel stops the operation.",fontSize=12.sp,modifier=Modifier.padding(top=12.dp))}},confirmButton={TextButton(service::cancelWork){Text("Cancel")}})
 }
 
 @Composable private fun DeviceRack(s: StudioState,t: Int,service: AudioService,compact: Boolean,open: (String)->Unit){
@@ -143,6 +169,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,
         Tools {
             if(compact)Action("Edit clip",tag="Edit clip"){open("clip")}
             Action("Mixer"){open("mixer")};Action("${if(s.patches[t].wire[0]>0)"FM" else "Wavetable"} ›"){open("synth")}
+            Action(when(s.project.instruments[t].mode){1->"Sampler ›";2->"Drum rack ›";else->"Sampler / drums"},tag="Sample instrument"){open("instrument")}
             s.effects[t].order.forEach{unit->val on=s.effects[t][FxConfig.enabled[unit]]>.5f
                 FilterChip(on,{open("effects:$unit")},label={Text(listOf("EQ 8","Multiband","Shaper","Sidechain","Echo","Reverb","Chorus","Phaser")[unit],fontSize=11.sp)})}
             Action("Master"){service.meterTrack(16);open("master")}
@@ -204,4 +231,4 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,
         }
     },confirmButton={TextButton({apply(rate,tail.toFloat())},enabled=p.regions.isNotEmpty()&&tail.toFloatOrNull()?.let{it in 0f..30f}==true){Text("Export")}},dismissButton={TextButton(close){Text("Cancel")}})
 }
-@Composable private fun HelpPanel(){Text("1. Start audio. Use File → Load starter song to explore a working session, or tap an empty Session slot to write a MIDI clip.\n\n2. Tap ▶ on clips or scenes to launch at the chosen quantization. Tap a clip body to select it; Edit clip opens its piano roll, velocity and automation lanes.\n\n3. Open Keys to play. Record MIDI writes the keyboard or USB controller into the selected clip after its launch boundary. Overdub adds notes; turn it off to replace the take.\n\n4. Select a clip, switch to Arrangement, tap the ruler for a cursor, then Place clip. Drag regions horizontally to move them. Split and duplicate build the song. Open Region for exact beat lengths or sample positions.\n\n5. The bottom rack opens synths and effects for the selected track. Mixer has volume, pan, arm, mute, solo and two effect sends.\n\n6. File → Import audio accepts WAV and formats supported by Android. Audio keeps its original pitch and speed; it is not time-stretched. You can trim and split at source-sample boundaries.\n\n7. Work autosaves locally. Save portable project carries all audio, notes, automation and sound settings to a .astra file. Export arrangement creates a 24-bit WAV.\n\nLimits: 16 tracks, 8 scenes, 256 notes per clip, 512 arrangement regions, 64 audio assets and 512 MiB of decoded stereo audio. This phase records MIDI, not microphone audio. Tap Astra beside File for command previews, Gemini listening and setup. Advanced warping remains later work.",fontSize=14.sp,lineHeight=21.sp)}
+@Composable private fun HelpPanel(){Text("1. Start audio. Use File → Load starter song to explore a working session, or tap an empty Session slot to write a MIDI clip.\n\n2. Tap ▶ on clips or scenes to launch at the chosen quantization. Tap a clip body to select it; Edit clip opens its piano roll, velocity and automation lanes.\n\n3. Open Keys to play. Record MIDI writes the keyboard or USB controller into the selected clip after its launch boundary. Overdub adds notes; turn it off to replace the take.\n\n4. Select a clip, switch to Arrangement, tap the ruler for a cursor, then Place clip. Drag regions horizontally to move them. Split and duplicate build the song. Open Region for exact beat lengths or sample positions.\n\n5. The bottom rack opens synths and effects for the selected track. Mixer has volume, pan, arm, mute, solo and two effect sends.\n\n6. File → Import audio accepts WAV and formats supported by Android. Audio clips keep their original pitch and speed. Sampler / drums in the device chain plays samples with pitch, reverse, loops and envelopes. You can trim and split at source-sample boundaries.\n\n7. Work autosaves locally. Save portable project carries all audio, notes, automation and sound settings to a .astra file. Export arrangement creates a 24-bit WAV.\n\nLimits: 16 tracks, 8 scenes, 256 notes per clip, 512 arrangement regions, 64 audio assets and 512 MiB of decoded stereo audio. This phase records MIDI, not microphone audio. Open Samples to import multiple files or a ZIP pack, audition, favorite and assign sounds. Resample creates a processed clip or arrangement bounce in the browser. Back returns from details to the parent panel, closes a panel, and returns Arrangement to Session before leaving the app. Tap Astra beside File for commands and Gemini. Advanced warping remains later work.",fontSize=14.sp,lineHeight=21.sp)}

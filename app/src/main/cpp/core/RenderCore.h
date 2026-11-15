@@ -19,7 +19,7 @@ inline constexpr std::size_t kScheduledCapacity = 8192;
 
 enum class CommandType : int32_t {
     NoteOn = 0, NoteOff = 1, MasterGain = 2, TrackGain = 3, TrackPan = 4,
-    TrackMute = 5, TrackSolo = 6, Tempo = 7, Transport = 8, Metronome = 9, PatchSnapshot = 10, FxSnapshot = 11, LimiterDrive = 12, LimiterRelease = 13, MeterTrack = 14, ProjectSnapshot = 15, LaunchClip = 16, LaunchScene = 17, Seek = 18, SendA = 19, SendB = 20
+    TrackMute = 5, TrackSolo = 6, Tempo = 7, Transport = 8, Metronome = 9, PatchSnapshot = 10, FxSnapshot = 11, LimiterDrive = 12, LimiterRelease = 13, MeterTrack = 14, ProjectSnapshot = 15, LaunchClip = 16, LaunchScene = 17, Seek = 18, SendA = 19, SendB = 20, Preview = 21, StopPreview = 22
 };
 struct Command {
     CommandType type{};
@@ -76,6 +76,7 @@ private:
         int32_t track{};
         int32_t note{};
         synth::SynthVoice synth;
+        sampler::Voice sample;bool sampled{};
         bool active{};
         uint64_t age{};
     };
@@ -108,7 +109,7 @@ private:
     static void sequenceNote(void*,int,int,float,uint32_t,bool) noexcept;
     static void sequenceAutomation(void*,int,int,float,bool) noexcept;
     void refreshAutomation(int track) noexcept;
-    void releaseVoice(Voice& voice) noexcept;
+    void releaseVoice(Voice& voice,bool force=false) noexcept;
     void resetSound() noexcept;
     void recyclePatch(const Command& command) noexcept;
     void updateLfoSteps() noexcept;
@@ -123,6 +124,7 @@ private:
     std::array<Track, kTrackCount> tracks_{};
     std::array<float, 2049> sine_{};
     synth::WavetableBank wavetables_;
+    sampler::Kernel sampleKernel_;sampler::Voice preview_;
     struct PatchSlot { synth::Patch patch; std::atomic<bool> busy{false}; };
     std::array<PatchSlot, 64> patchSlots_{};
     struct FxSlot { fx::Config config; std::atomic<bool> busy{false}; };

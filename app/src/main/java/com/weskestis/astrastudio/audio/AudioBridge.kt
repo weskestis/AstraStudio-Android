@@ -97,6 +97,8 @@ class AudioBridge : AutoCloseable {
     @Synchronized fun seek(beat: Double) = send(18, value = beat.toFloat())
     @Synchronized fun sendA(track: Int, amount: Float) = send(19, track, value = amount)
     @Synchronized fun sendB(track: Int, amount: Float) = send(20, track, value = amount)
+    @Synchronized fun preview(asset: Int)=send(21,note=asset,value=.65f)
+    @Synchronized fun stopPreview()=send(22,value=0f)
     @Synchronized fun sequence(): SequenceStats {
         if(handle==0L||!nativeReadSequence(handle,sequenceBuffer))return SequenceStats()
         fun v(i: Int)=sequenceBuffer.getFloat(i*4)

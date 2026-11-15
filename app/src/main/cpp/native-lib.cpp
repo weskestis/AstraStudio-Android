@@ -61,7 +61,7 @@ Java_com_weskestis_astrastudio_audio_AudioBridge_nativeSend(
         JNIEnv*, jobject, jlong handle, jint type, jint track, jint note, jint noteId, jfloat value, jlong frame) {
     std::lock_guard guard(registryMutex);
     auto* engine = findEngine(handle);
-    if (!engine || frame < -1 || noteId < 0 || type < 0 || type > 20 || type == 10 || type == 11 || type == 15) return JNI_FALSE;
+    if (!engine || frame < -1 || noteId < 0 || type < 0 || type > 22 || type == 10 || type == 11 || type == 15) return JNI_FALSE;
     const astra::Command command{static_cast<astra::CommandType>(type), track, note,
         static_cast<uint32_t>(noteId), value, frame == -1 ? astra::kImmediate : static_cast<uint64_t>(frame), 0};
     return engine->enqueue(command) ? JNI_TRUE : JNI_FALSE;

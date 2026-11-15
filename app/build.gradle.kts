@@ -13,8 +13,8 @@ android {
         applicationId = "com.weskestis.astrastudio"
         minSdk = 34
         targetSdk = 34
-        versionCode = 5
-        versionName = "0.5.0-phase5"
+        versionCode = 6
+        versionName = "0.6.0-phase6"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         externalNativeBuild {

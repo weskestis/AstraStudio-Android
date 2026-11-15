@@ -143,4 +143,76 @@ class WorkspaceSmokeTest {
             }finally{wave.delete()}
         }finally{bridge.close()}
     }
+    private fun back(){InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);compose.waitForIdle()}
+    @Test fun nestedBackDrumRackSamplerBrowserAndBounce(){
+        compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
+        click("File");click("Load starter song");click("Confirm project")
+        compose.waitUntil(10000){compose.onAllNodesWithText("Kick 1").fetchSemanticsNodes().isNotEmpty()}
+        click("Sample instrument");click("Instrument 2");click("Starter kit")
+        compose.waitUntil(30000){compose.onAllNodesWithText("Sub kick").fetchSemanticsNodes().isNotEmpty()}
+        click("Sample audio")
+        compose.waitUntil(15000){compose.onAllNodes(hasTestTag("Sample audio") and hasText("Audio on")).fetchSemanticsNodes().isNotEmpty()}
+        click("Pad 0");shot("07-drum-rack")
+        click("Edit pad");compose.onNodeWithTag("Pad editor").performScrollTo().assertIsDisplayed()
+        click("Sample reverse");click("Trim / loop frames")
+        back();compose.onNodeWithTag("Pad editor").performScrollTo().assertIsDisplayed();compose.onNodeWithTag("Apply sample range").assertDoesNotExist()
+        shot("08-pad-editor");back();compose.onNodeWithTag("Pad 0").performScrollTo().assertIsDisplayed()
+        // Browser opened from a pad returns to that pad's instrument panel.
+        click("Load sample");click("Sample 0");click("Favorite sample");shot("09-sample-browser")
+        back();compose.onNodeWithTag("Sample search").performScrollTo().assertIsDisplayed()
+        back();compose.onNodeWithTag("Pad 0").performScrollTo().assertIsDisplayed()
+        back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
+        click("Astra");click("Astra settings");back()
+        compose.onNodeWithTag("Astra key input").assertDoesNotExist();compose.onNodeWithTag("Astra prompt").performScrollTo().assertIsDisplayed()
+        back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
+        click("Edit clip");click("Name / length");back();compose.onNodeWithTag("Piano roll").performScrollTo().assertIsDisplayed()
+        back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
+        click("Arrangement");back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
+        click("Resample");click("Render resample")
+        compose.waitUntil(30000){compose.onAllNodesWithText("Bounce added to Samples → Resampled. Assign it to a pad, sampler or audio clip.").fetchSemanticsNodes().isNotEmpty()}
+        shot("10-resample");click("Open samples");click("Sample 16")
+        compose.onNodeWithTag("Sample details").performScrollTo().assertTextEquals("Kick 1 bounce")
+        click("Use in sampler");back() // return from browser to resampling, then close
+        click("Sample instrument")
+        compose.waitUntil(10000){compose.onAllNodes(hasTestTag("Instrument 1") and isSelected()).fetchSemanticsNodes().isNotEmpty()}
+        compose.onNodeWithTag("Instrument 1").assertIsSelected();shot("11-sampler")
+        compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
+        compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
+        compose.onNodeWithTag("Instrument 1").assertIsSelected();back()
+        compose.onNodeWithTag("Session grid").assertIsDisplayed()
+        compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_PORTRAIT}
+    }
+    @Test fun packImportSamplerArchiveAndNativeRender(){
+        val context=InstrumentationRegistry.getInstrumentation().targetContext;val io=ProjectFiles(context);val cancel=AtomicBoolean(false);val bridge=AudioBridge()
+        val input=File(context.cacheDir,"kit-input.wav");val pack=File(context.cacheDir,"test-kit.zip");val archive=File(context.cacheDir,"sampler.astra");val wave=File(context.cacheDir,"sampler-render.wav")
+        var created=emptyList<Pair<String,File>>();var restored: ProjectDocument?=null
+        try{
+            FactorySamples.write(0,input,cancel)
+            java.util.zip.ZipOutputStream(pack.outputStream()).use{zip->
+                for(name in listOf("drums/kick.wav","../unused.wav")){zip.putNextEntry(java.util.zip.ZipEntry(name));input.inputStream().use{it.copyTo(zip)};zip.closeEntry()}
+                zip.putNextEntry(java.util.zip.ZipEntry("README.txt"));zip.write("Original test samples".toByteArray());zip.closeEntry()
+            }
+            val before=io.audioDir.list()!!.toSet()
+            assertTrue(runCatching{io.importPack(Uri.fromFile(pack),1,cancel)}.isFailure)
+            assertEquals(before,io.audioDir.list()!!.toSet())
+            created=io.importPack(Uri.fromFile(pack),2,cancel);assertEquals(2,created.size);assertFalse(File(context.filesDir,"unused.wav").exists())
+            assertTrue(bridge.loadAssets(created.mapIndexed{i,x->i to x.second}))
+            val assets=created.mapIndexed{i,x->val info=bridge.assetInfo(i)!!;AudioAsset(i,x.first,x.second.name,info[0].toInt(),info[1].toLong(),info.drop(2).map{it.toFloat()},true,"Test kit")}
+            val presets=SynthSchema.presets.indices.map(bridge::preset)
+            val base=StarterProject.create(presets)
+            val project=Project(assets=assets,clips=listOf(Clip(0,length=1.0).add(0.0,36,.25))).instrument(0){it.copy(mode=2).edit(0){z->z.load(assets[0])}}.place(0,0.0)
+            val doc=base.copy(project=project)
+            io.saveArchive(doc,Uri.fromFile(archive),cancel);restored=io.openArchive(Uri.fromFile(archive),cancel)
+            assertEquals(2,restored.project.assets.size);assertEquals(doc.project.instruments,restored.project.instruments);assertTrue(restored.project.assets.all{it.favorite&&it.group=="Test kit"})
+            assertArrayEquals(created[1].second.readBytes(),io.audioFile(restored.project.assets[1]).readBytes())
+            assertTrue(bridge.loadAssets(restored.project.assets.map{it.id to io.audioFile(it)}))
+            assertEquals(0,bridge.export(wave,restored,48000,.1f))
+            val bytes=wave.readBytes();var peak=0
+            for(i in 44 until bytes.size-2 step 3){var value=(bytes[i].toInt() and 255) or ((bytes[i+1].toInt() and 255) shl 8) or ((bytes[i+2].toInt() and 255) shl 16);if(value and 0x800000!=0)value-=0x1000000;peak=maxOf(peak,kotlin.math.abs(value))}
+            assertTrue("Sampler must render through JNI",peak>10000)
+            // Actual Android bridge command validation includes browser preview opcodes.
+            assertEquals(0,bridge.start());assertTrue(bridge.project(restored.project));assertTrue(bridge.preview(0));assertTrue(bridge.stopPreview());bridge.stop()
+        }finally{bridge.close();created.forEach{it.second.delete()};restored?.project?.assets?.forEach{io.audioFile(it).delete()};listOf(input,pack,archive,wave).forEach{it.delete()}}
+    }
+
 }

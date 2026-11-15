@@ -1,5 +1,6 @@
 #pragma once
 #include "fx/FxPrimitives.h"
+#include "sampler/Sampler.h"
 #include <atomic>
 #include <span>
 #include <string>
@@ -21,7 +22,7 @@ struct Clip {
 struct Region {int id{},slot{};double start{},length{},offset{};int64_t audioOffset{};bool operator==(const Region&)const=default;};
 struct Plan {
     int mode{},numerator{4},denominator{4};bool loop{};double loopStart{},loopEnd{16};
-    std::array<Clip,kClips> clips;std::array<std::vector<Region>,kTracks> regions;Samples samples;
+    std::array<Clip,kClips> clips;std::array<std::vector<Region>,kTracks> regions;Samples samples;std::array<sampler::Instrument,kTracks> instruments;
     bool decode(std::span<const double> data,const Samples& audio);
     double barBeats()const noexcept{return numerator*4.0/denominator;}
     double endBeat()const noexcept;

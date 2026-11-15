@@ -26,11 +26,14 @@ class MainActivity : ComponentActivity() {
     private var bound = false
     private var pendingUri by mutableStateOf<String?>(null)
     private var pendingKind by mutableStateOf("")
+    private var pendingSamples by mutableStateOf<List<String>>(emptyList())
     private var importSlot = 0
     private var exportRate = 48000
     private var exportTail = 4f
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { beginAudio() }
     private val importAudio = registerForActivityResult(ActivityResultContracts.OpenDocument()) { receive(it,"audio") }
+    private val importSamples = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { pendingSamples=it.map(Uri::toString) }
+    private val importPack = registerForActivityResult(ActivityResultContracts.OpenDocument()) { receive(it,"pack") }
     private val openProject = registerForActivityResult(ActivityResultContracts.OpenDocument()) { receive(it,"open") }
     private val saveProject = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { receive(it,"save") }
     private val exportWave = registerForActivityResult(ActivityResultContracts.CreateDocument("audio/wav")) { receive(it,"wave") }
@@ -41,7 +44,7 @@ class MainActivity : ComponentActivity() {
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        savedInstanceState?.let { pendingUri=it.getString("uri");pendingKind=it.getString("kind","");importSlot=it.getInt("slot");exportRate=it.getInt("rate",48000);exportTail=it.getFloat("tail",4f) }
+        savedInstanceState?.let { pendingSamples=it.getStringArrayList("sampleUris")?:emptyList();pendingUri=it.getString("uri");pendingKind=it.getString("kind","");importSlot=it.getInt("slot");exportRate=it.getInt("rate",48000);exportTail=it.getFloat("tail",4f) }
         setContent {
             MaterialTheme(colorScheme=darkColorScheme(
                 primary=Color(0xFF55F27A),onPrimary=Color(0xFF001606),background=Color.Black,surface=Color(0xFF0B120D),
@@ -57,14 +60,16 @@ class MainActivity : ComponentActivity() {
                     if(service==null) Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center){Text("Opening Astra Studio…")}
                     else workspaceState.SaveableStateProvider("studio") {
                         val state by service.state.collectAsStateWithLifecycle()
-                        LaunchedEffect(pendingUri,state.ready,state.busy) {
+                        LaunchedEffect(pendingUri,pendingSamples,state.ready,state.busy) {
+                            if(pendingSamples.isNotEmpty()&&state.ready&&!state.busy){service.importSamples(pendingSamples.map(Uri::parse));pendingSamples=emptyList();return@LaunchedEffect}
                             val uri=pendingUri
                             if(uri!=null&&state.ready&&!state.busy){
-                                when(pendingKind){"audio"->service.importAudio(Uri.parse(uri),importSlot);"open"->service.openProject(Uri.parse(uri));"save"->service.saveProject(Uri.parse(uri));"wave"->service.exportWave(Uri.parse(uri),exportRate,exportTail)}
+                                when(pendingKind){"pack"->service.importSamples(listOf(Uri.parse(uri)),true);"audio"->service.importAudio(Uri.parse(uri),importSlot);"open"->service.openProject(Uri.parse(uri));"save"->service.saveProject(Uri.parse(uri));"wave"->service.exportWave(Uri.parse(uri),exportRate,exportTail)}
                                 pendingUri=null;pendingKind=""
                             }
                         }
                         StudioWorkspace(state,service,::requestAudio,
+                            importSamples={importSamples.launch(arrayOf("audio/*"))},importPack={importPack.launch(arrayOf("application/zip","application/x-zip-compressed"))},
                             importAudio={slot->importSlot=slot;importAudio.launch(arrayOf("audio/*"))},
                             openProject={openProject.launch(arrayOf("application/octet-stream","application/zip","*/*"))},
                             saveProject={saveProject.launch(it+".astra")},
@@ -74,7 +79,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-    override fun onSaveInstanceState(outState: Bundle){outState.putString("uri",pendingUri);outState.putString("kind",pendingKind);outState.putInt("slot",importSlot);outState.putInt("rate",exportRate);outState.putFloat("tail",exportTail);super.onSaveInstanceState(outState)}
+    override fun onSaveInstanceState(outState: Bundle){outState.putStringArrayList("sampleUris",ArrayList(pendingSamples));outState.putString("uri",pendingUri);outState.putString("kind",pendingKind);outState.putInt("slot",importSlot);outState.putInt("rate",exportRate);outState.putFloat("tail",exportTail);super.onSaveInstanceState(outState)}
     override fun onStart(){super.onStart();bound=bindService(Intent(this,AudioService::class.java),connection,Context.BIND_AUTO_CREATE)}
     override fun onStop(){if(isChangingConfigurations)startService(Intent(this,AudioService::class.java));audioService?.releaseTouchNotes();if(bound){unbindService(connection);bound=false};audioService=null;super.onStop()}
     private fun requestAudio(){if(ContextCompat.checkSelfPermission(this,Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)else beginAudio()}

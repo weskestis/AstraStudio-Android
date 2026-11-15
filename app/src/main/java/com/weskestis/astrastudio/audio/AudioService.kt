@@ -290,7 +290,7 @@ class AudioService : Service() {
                 }
             }
             val stats = bridge.stats()
-            mutableState.value = mutableState.value.copy(stats = stats, fxStats = if (stats.running) bridge.fxStats() else FxStats(), sequence=if(stats.running)bridge.sequence() else SequenceStats(), progress=if(mutableState.value.work=="Rendering WAV")bridge.exportProgress() else mutableState.value.progress)
+            mutableState.value = mutableState.value.copy(stats = stats, fxStats = if (stats.running) bridge.fxStats() else FxStats(), sequence=if(stats.running)bridge.sequence() else SequenceStats(), progress=if(mutableState.value.work in listOf("Rendering WAV","Resampling"))bridge.exportProgress() else mutableState.value.progress)
             if (wantsAudio && stats.running) {
                 if (++stablePolls >= 100) reconnectAttempts = 0
             } else stablePolls = 0
@@ -322,7 +322,7 @@ class AudioService : Service() {
         if(wantsAudio&&bridge.noteOn(track,note,velocity,id)){heldTouch[(track.toLong() shl 32)+id]=track to id;recordEvent(track,note,velocity,id,true)}
     } }
     fun noteOff(track: Int,id: Int) { control.post {heldTouch.remove((track.toLong() shl 32)+id);recordEvent(track,0,0f,id,false);bridge.noteOff(track,id)} }
-    fun releaseTouchNotes() { control.post { heldTouch.values.toList().forEach{(track,id)->recordEvent(track,0,0f,id,false);bridge.noteOff(track,id)};heldTouch.clear();for(t in 0..15)bridge.noteOff(t,20000+t) } }
+    fun releaseTouchNotes() { control.post { heldTouch.values.toList().forEach{(track,id)->recordEvent(track,0,0f,id,false);bridge.noteOff(track,id)};heldTouch.clear();bridge.stopPreview();for(t in 0..15)bridge.noteOff(t,20000+t) } }
     fun transport() { control.post { if(playingIntent)stopTransport()else playNow(mutableState.value.project.mode,0.0) } }
     private fun stopTransport(){finishRecording();bridge.transport(false);playingIntent=false;pendingLaunch=null}
     fun stopTransportFromUi(){control.post{stopTransport()}}
@@ -453,7 +453,7 @@ class AudioService : Service() {
             ContextCompat.startForegroundService(this,Intent(this,AudioService::class.java).setAction(ACTION_WORK))
             io.execute {
                 var result: ProjectDocument?=null;var error: String?=null
-                try{result=task(snapshot);check(!cancelled.get()){ "Cancelled." }}catch(e: Exception){error=e.message?:"File operation failed.";runCatching{loadAssets(snapshot)}}
+                try{result=task(snapshot);check(!cancelled.get()){ "Cancelled." }}catch(e: Exception){error=e.message?:"File operation failed.";result?.project?.assets?.filter{a->snapshot.project.assets.none{it.file==a.file}}?.forEach{files.audioFile(it).delete()};runCatching{loadAssets(snapshot)}}
                 control.post {if(!destroyed){
                     mutableState.value=mutableState.value.copy(busy=false,work="",progress=0f)
                     if(error==null&&result!=null){if(resetHistory)history.clear()else history.commit(document(),result);adopt(result);sent=null;syncEngine()}
@@ -476,6 +476,54 @@ class AudioService : Service() {
             d.copy(project=project).also{require(it.valid()){ "Audio exceeds the supported timeline or memory limits." }}
         }catch(e: Exception){file.delete();throw e}
     },"Audio imported into the selected track. Select its clip to edit the waveform.")}
+    fun instrument(track: Int,mode: Int){if(track in 0..15&&mode in 0..2)projectEdit{it.instrument(track){i->i.copy(mode=mode)}}}
+    fun sampleEdit(track: Int,pad: Int,edit: (SampleZone)->SampleZone){if(track in 0..15&&pad in -1..15)projectEdit("sample-$track-$pad"){it.instrument(track){i->i.edit(pad,edit)}}}
+    fun assignSample(track: Int,pad: Int,asset: Int){if(track in 0..15&&pad in -1..15)projectEdit{p->val a=p.asset(asset)?:error("Choose a sample.");p.instrument(track){i->i.edit(pad){it.load(a)}.copy(mode=if(pad<0)1 else 2)}}}
+    fun sampleFavorite(asset: Int){projectEdit{p->p.copy(assets=p.assets.map{if(it.id==asset)it.copy(favorite=!it.favorite)else it})}}
+    fun sampleGroup(asset: Int,name: String){projectEdit{p->p.copy(assets=p.assets.map{if(it.id==asset)it.copy(group=name.trim().take(64))else it})}}
+    fun sampleClip(asset: Int,slot: Int){projectEdit{p->val a=p.asset(asset)?:error("Choose a sample.");val target=if(p.clip(slot)==null)slot else p.emptySlot(slot%16)?:error("This track has no empty slots.")
+        p.put(Clip(target,a.name.take(64),(a.frames.toDouble()/a.rate*mutableState.value.bpm/60).coerceAtLeast(.0625),asset=a.id,last=a.frames))}}
+    fun hitPad(track: Int,pad: Int){if(track !in 0..15||pad !in 0..15)return;val id=280000+pad;noteOn(track,36+pad,id);control.postDelayed({noteOff(track,id)},120)}
+    fun previewSample(id: Int){control.post{if(wantsAudio&&!mutableState.value.busy&&syncEngine())bridge.preview(id)else message("Start audio to audition samples.")}}
+    fun stopPreview(){control.post{bridge.stopPreview()}}
+    private fun addSamples(d: ProjectDocument,items: List<Pair<String,File>>,group: String): ProjectDocument {
+        require(items.isNotEmpty()&&items.size+d.project.assets.size<=64){"A project holds 64 samples."}
+        val ids=(0..63).filter{d.project.asset(it)==null}.take(items.size)
+        check(bridge.loadAssets(d.project.assets.map{it.id to files.audioFile(it)}+items.mapIndexed{i,p->ids[i] to p.second})){"Unsupported audio or decoded sample budget exceeded (512 MiB)."}
+        val added=items.mapIndexed{i,p->val info=requireNotNull(bridge.assetInfo(ids[i]));AudioAsset(ids[i],p.first.take(128).ifBlank{"Sample"},p.second.name,info[0].toInt(),info[1].toLong(),info.drop(2).map{it.toFloat()},group=group.take(64))}
+        check(!cancelled.get()){ "Cancelled." }
+        return d.copy(project=d.project.copy(assets=d.project.assets+added)).also{require(it.valid()){ "Invalid sample metadata." }}
+    }
+    fun importSamples(uris: List<Uri>,pack: Boolean=false){work("Importing samples",{d->
+        val created=mutableListOf<Pair<String,File>>()
+        try{
+            require(uris.isNotEmpty()&&uris.size<=64-d.project.assets.size){"Choose at most ${64-d.project.assets.size} samples."}
+            if(pack){require(uris.size==1);created+=files.importPack(uris[0],64-d.project.assets.size,cancelled)}else for(uri in uris)created+=files.importAudio(uri,cancelled)
+            addSamples(d,created,if(pack)files.displayName(uris[0]).substringBeforeLast('.').take(64).ifBlank{"Imported pack"} else "Imports")
+        }catch(e: Exception){created.forEach{it.second.delete()};throw e}
+    },"Samples added. Audition, favorite, or assign them to the sampler and pads.")}
+    fun factoryKit(track: Int){work("Creating starter kit",{d->
+        require(track in 0..15);val created=mutableListOf<Pair<String,File>>()
+        try{
+            val existing=FactorySamples.names.map{name->d.project.assets.firstOrNull{it.group=="Astra starter kit"&&it.name==name}}
+            val next=if(existing.all{it!=null})d else {
+                require(d.project.assets.size+16<=64){"The starter kit needs 16 free sample slots."}
+                for(i in FactorySamples.names.indices){val file=File(files.audioDir,"${java.util.UUID.randomUUID()}.wav");created+=FactorySamples.names[i] to file;FactorySamples.write(i,file,cancelled)}
+                addSamples(d,created,"Astra starter kit")
+            }
+            val assets=if(existing.all{it!=null})existing.filterNotNull() else next.project.assets.takeLast(16)
+            next.copy(project=next.project.instrument(track){instrument->instrument.copy(mode=2,pads=assets.mapIndexed{i,a->SampleZone(root=36+i,decay=(a.frames.toFloat()/a.rate).coerceAtLeast(.001f),sustain=0f,oneShot=true,choke=if(i==6||i==10)1 else 0).load(a)})})
+        }catch(e: Exception){created.forEach{it.second.delete()};throw e}
+    },"Original 16-pad starter kit loaded. Pads 36–51 also play from MIDI and the piano roll.")}
+    fun resample(slot: Int,whole: Boolean,tail: Float){work("Resampling",{d->
+        val source=Resampling.source(d,slot,whole);Resampling.checkCapacity(d,source,48000,tail)
+        val file=File(files.audioDir,"${java.util.UUID.randomUUID()}.wav")
+        try{check(!cancelled.get()){ "Cancelled." };val result=bridge.export(file,source,48000,tail)
+            check(result==0){if(result==3)"Cancelled." else "Could not resample this phrase."}
+            val name=(if(whole)d.project.name else d.project.clip(slot)!!.name)+" bounce"
+            addSamples(d,listOf(name.take(128) to file),"Resampled")
+        }catch(e: Exception){file.delete();throw e}
+    },"Bounce added to Samples → Resampled. Assign it to a pad, sampler or audio clip.")}
     fun saveProject(uri: Uri){work("Saving project",{files.saveArchive(it,uri,cancelled);null},"Project saved with synths, effects and audio.")}
     fun openProject(uri: Uri){control.post{if(!mutableState.value.busy)stopAudio("Opening project…")};work("Opening project",{val d=files.openArchive(uri,cancelled);loadAssets(d);d},"Project opened. Start audio to play.",true)}
     fun starter(){control.post{if(!mutableState.value.ready||mutableState.value.busy)return@post;stopTransport();commit{old->StarterProject.create(presets).let{it.copy(project=it.project.copy(assets=old.project.assets))}};message("Green circuit loaded. Start audio and press Play, or launch individual clips.")}}

@@ -79,7 +79,12 @@ object AstraCommands {
                     "pattern" -> {
                         val slot=c.slot();val style=c.str("style");require(style in PatternGenerator.styles) { "Unsupported pattern style." }
                         val key=c.str("root","F");val minor=c.minor();val name=c.str("name","$key ${if(minor)"minor" else "major"} $style")
-                        val clip=PatternGenerator.create(slot,style,key,minor,c.int("bars",1,16,4),d.project.barBeats,c.int("seed",0,1000000,0),name)
+                        var clip=PatternGenerator.create(slot,style,key,minor,c.int("bars",1,16,4),d.project.barBeats,c.int("seed",0,1000000,0),name)
+                        if(d.project.instruments[slot%16].mode==2){
+                            val pitch=mapOf("kick" to 36,"snare" to 38,"hats" to 42)[style]
+                            if(pitch!=null)clip=clip.copy(notes=clip.notes.map{it.copy(pitch=pitch)})
+                            require(clip.notes.all{it.pitch in 36..51}){"This track is a drum rack (MIDI 36–51). Use a drum pattern or choose a synth/sampler track for the bassline."}
+                        }
                         d=replaceClip(d,clip,c.bool("replace"),changes)
                     }
                     "midi_clip" -> {
@@ -94,21 +99,21 @@ object AstraCommands {
                     }
                     "preset" -> {
                         val t=c.track();val preset=c.str("preset");val i=S.presets.indexOfFirst{it.equals(preset,true)};require(i>=0) { "Choose one of the eight factory synth presets." }
-                        d=d.copy(patches=d.patches.toMutableList().also{it[t]=presets[i]});changes+="Track ${t+1}: load ${S.presets[i]} (replaces its complete synth patch)."
+                        d=d.copy(project=d.project.instrument(t){it.copy(mode=0)},patches=d.patches.toMutableList().also{it[t]=presets[i]});changes+="Track ${t+1}: load ${S.presets[i]} (selects the synth and replaces its complete patch; sample assignments are retained)."
                     }
                     "synth" -> {
-                        val t=c.track();val name=c.str("parameter");val id=S.keys.indexOf(name);require(id>=0) { "Unknown synth parameter '$name'." }
+                        val t=c.track();require(d.project.instruments[t].mode==0){"Select a synth preset before changing synth parameters on a sample track."};val name=c.str("parameter");val id=S.keys.indexOf(name);require(id>=0) { "Unknown synth parameter '$name'." }
                         val spec=S.parameters[id];val n=c.num("value",spec.minimum.toDouble(),spec.maximum.toDouble());val value=n.toFloat()
                         require(!spec.integer || n==floor(n)) { "'$name' needs an integer." }
                         d=d.copy(patches=d.patches.toMutableList().also{it[t]=it[t].parameter(id,value)});changes+="Track ${t+1}: ${spec.name} = $value."
                     }
                     "lfo" -> {
-                        val t=c.track();val lfo=c.int("lfo",1,4)-1;val beats=c.num("beats",.0625,16.0).toFloat();val shape=shapes.indexOf(c.str("shape","sine"));require(shape>=0){"LFO shape must be sine, down, up or square."}
+                        val t=c.track();require(d.project.instruments[t].mode==0){"LFO commands target a synth track. Select a synth preset first."};val lfo=c.int("lfo",1,4)-1;val beats=c.num("beats",.0625,16.0).toFloat();val shape=shapes.indexOf(c.str("shape","sine"));require(shape>=0){"LFO shape must be sine, down, up or square."}
                         val p=d.patches[t].parameter(S.Lfo1Beats+lfo*4,beats).parameter(S.Lfo1Sync+lfo*4,1f).parameter(S.Lfo1Retrigger+lfo*4,if(c.bool("retrigger",true))1f else 0f).shape(lfo,shape)
                         d=d.copy(patches=d.patches.toMutableList().also{it[t]=p});changes+="Track ${t+1}: LFO ${lfo+1}, ${shapes[shape]}, $beats beats per cycle, ${if(c.bool("retrigger",true))"note retrigger" else "free running"}."
                     }
                     "modulation" -> {
-                        val t=c.track();val source=sources.indexOf(c.str("source"));val target=targets.indexOf(c.str("destination"));require(source>=0 && target>=0){"Unknown modulation source or destination."}
+                        val t=c.track();require(d.project.instruments[t].mode==0){"Modulation commands target a synth track. Select a synth preset first."};val source=sources.indexOf(c.str("source"));val target=targets.indexOf(c.str("destination"));require(source>=0 && target>=0){"Unknown modulation source or destination."}
                         val amount=c.num("amount",-1.0,1.0).toFloat();val p=d.patches[t]
                         val existing=(0 until S.MOD_SLOTS).firstOrNull{p.wire[p.routeOffset(it)].toInt()==source&&p.wire[p.routeOffset(it)+1].toInt()==target}
                         val slot=if(c.has("slot"))c.int("slot",1,16)-1 else existing ?: (0 until S.MOD_SLOTS).firstOrNull{p.wire[p.routeOffset(it)]==0f} ?: error("All modulation slots are occupied. Specify a slot to replace.")

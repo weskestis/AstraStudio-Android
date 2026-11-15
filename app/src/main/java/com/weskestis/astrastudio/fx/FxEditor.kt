@@ -30,6 +30,7 @@ fun FxEditor(track: Int, state: StudioState, service: AudioService, initialUnit:
     var macro by rememberSaveable { mutableIntStateOf(0) }
     var masterSpectrum by rememberSaveable { mutableStateOf(false) }
     var expanded by rememberSaveable { mutableStateOf(true) }
+    com.weskestis.astrastudio.workspace.PanelBackHandler(expanded){expanded=false}
     val set: (Int,Float)->Unit = { id,v -> service.fxParameter(track,id,v) }
     LaunchedEffect(track,masterSpectrum) { service.meterTrack(if(masterSpectrum)16 else track) }
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {

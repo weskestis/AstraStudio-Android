@@ -41,3 +41,8 @@ Not implemented: microphone recording, simultaneous recording into multiple clip
 Native project wire is a bounded double array: header `[version, mode, numerator, denominator, loop, loopStart, loopEnd, clipCount, regionCount]`; clip header `[slot, length, asset, first, last, noteCount, pointCount]`; notes `[beat, length, pitch, velocity]`; points `[lane, beat, value]`; regions `[id, slot, start, length, clipOffset, audioSampleOffset]`. Internal IDs and source sample offsets are validated integers. MIDI-only asset is -1. Native sequence telemetry is 49 floats: 16 active slots, 16 queued scenes, 16 normalized phases and mode. Telemetry is observational, not a transactional snapshot.
 
 Primary references: [Android document picker](https://developer.android.com/training/data-storage/shared/documents-files), [MediaCodec](https://developer.android.com/reference/android/media/MediaCodec), [foreground-service types](https://developer.android.com/develop/background-work/services/fgs/service-types).
+
+
+## Phase 6 extension
+
+See [SAMPLER.md](SAMPLER.md) for sample instruments, packs and resampling. Project JSON version 2 adds sample assignments, favorites and collections; version 1 projects remain readable. Portable projects now retain every browser asset, including unused samples. Android Back first returns from subpages and dialogs, then closes panels, then returns Arrangement to Session.

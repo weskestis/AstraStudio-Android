@@ -53,7 +53,7 @@ std::shared_ptr<const Sample> readSample(const char* path,std::size_t remainingB
 }
 bool Plan::decode(std::span<const double> data,const Samples& audio){
     if(data.size()>400000)return false;
-    Reader r{data};if(r.integer(1,1)!=1)return false;
+    Reader r{data};const int version=r.integer(1,2);
     mode=r.integer(0,1);numerator=r.integer(1,12);denominator=r.integer(2,8);if(denominator!=2&&denominator!=4&&denominator!=8)return false;
     loop=r.integer(0,1)!=0;loopStart=r.get(0,65535);loopEnd=r.get(.0625,65536);if(loopEnd<=loopStart)return false;
     const int clipCount=r.integer(0,kClips),regionCount=r.integer(0,kMaxRegions);samples=audio;
@@ -85,6 +85,18 @@ bool Plan::decode(std::span<const double> data,const Samples& audio){
     }
     for(auto& list:regions){std::sort(list.begin(),list.end(),[](const Region& a,const Region& b){return a.start<b.start;});double end=0;
         for(const auto& x:list){if(x.start<end-1e-8)return false;end=x.start+x.length;}}
+    instruments={};
+    if(version==2){
+        auto zone=[&](sampler::Zone& z){
+            z.asset=r.integer(-1,63);z.first=r.frame();z.last=r.frame();z.loopFirst=r.frame();z.loopLast=r.frame();z.root=r.integer(0,127);
+            z.pitch=static_cast<float>(r.get(-48,48));z.gain=static_cast<float>(r.get(0,2));z.pan=static_cast<float>(r.get(-1,1));
+            z.attack=static_cast<float>(r.get(0,5));z.decay=static_cast<float>(r.get(.00099999,30));z.sustain=static_cast<float>(r.get(0,1));z.release=static_cast<float>(r.get(.00499999,10));
+            z.reverse=r.integer(0,1);z.loop=r.integer(0,1);z.oneShot=r.integer(0,1);z.choke=r.integer(0,8);
+            if(z.asset<0)return z.first==0&&z.last==0&&z.loopFirst==0&&z.loopLast==0&&!z.loop;
+            return samples[z.asset]&&z.last>z.first&&z.last<=samples[z.asset]->frames()&&z.loopFirst>=z.first&&z.loopLast<=z.last&&z.loopLast>z.loopFirst&&!(z.loop&&z.oneShot);
+        };
+        for(auto& instrument:instruments){instrument.mode=r.integer(0,2);if(!zone(instrument.sample))return false;for(auto& pad:instrument.pads)if(!zone(pad))return false;}
+    }
     return r.ok&&r.at==data.size();
 }
 std::unique_ptr<Plan> decodePlan(std::span<const double> data,const Samples& samples)noexcept{

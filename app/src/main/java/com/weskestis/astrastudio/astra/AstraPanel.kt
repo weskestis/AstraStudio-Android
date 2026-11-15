@@ -40,6 +40,7 @@ fun AstraPanel(state: StudioState, service: AudioService, selected: Int) {
     var settings by rememberSaveable{mutableStateOf(false)}
     var showJson by rememberSaveable{mutableStateOf(false)}
     var history by rememberSaveable{mutableStateOf(false)}
+    com.weskestis.astrastudio.workspace.PanelBackHandler(settings||showJson||history){when{history->history=false;showJson->showJson=false;else->settings=false}}
     var json by remember{mutableStateOf("")}
     // Never save credentials in the Activity saved-state bundle or project file.
     var key by remember{mutableStateOf("")}
@@ -52,14 +53,14 @@ fun AstraPanel(state: StudioState, service: AudioService, selected: Int) {
     Text("ASTRA / MAKE THE NEXT MOVE",color=Green,fontWeight=FontWeight.Bold,fontSize=17.sp)
     Text("Track ${selected%16+1} · scene ${selected/16+1}. Preview edits, apply once, undo the whole proposal.",fontSize=12.sp,color=Muted,modifier=Modifier.padding(vertical=6.dp))
     Tools{
-        Action("Gemini settings",!a.working,"Astra settings"){settings=!settings;key=""}
-        Action("Command JSON",!a.working,"Astra JSON"){showJson=!showJson}
+        Action("Gemini settings",!a.working,"Astra settings"){settings=!settings;showJson=false;history=false;key=""}
+        Action("Command JSON",!a.working,"Astra JSON"){showJson=!showJson;settings=false;history=false}
         Action("Copy for Gemini",!a.working,"Astra handoff"){
             val d=ProjectDocument(state.project,state.bpm,state.master,state.limiterDrive,state.limiterRelease,state.tracks,state.patches,state.effects)
             clipboard.setText(AnnotatedString(GeminiProtocol.handoff(prompt,d,selected)))
             service.astraNotice("Copied a prompt with project details. Paste it into Gemini, attach audio there if wanted, then paste its JSON into Command JSON. No API key is needed for this manual route.")
         }
-        Action("Recent feedback"){history=!history}
+        Action("Recent feedback"){history=!history;settings=false;showJson=false}
     }
     if(settings){
         Text("Gemini · ${GeminiProtocol.MODEL}",color=Green,modifier=Modifier.padding(top=10.dp))

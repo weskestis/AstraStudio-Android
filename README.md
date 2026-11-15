@@ -1,6 +1,16 @@
-# Astra Studio — Phase 5
+# Astra Studio — Phase 6
 
-Android 14+ native music workstation, built for **Sony Xperia 1 IV** first. Package `com.weskestis.astrastudio`, version **0.5.0-phase5**, green and black throughout. This is a development DAW, with implemented editing/playback features and explicit limits below; it is not yet a production-certified replacement for a desktop workstation.
+Android 14+ native music workstation, built for **Sony Xperia 1 IV** first. Package `com.weskestis.astrastudio`, version **0.6.0-phase6**, green and black throughout. This is a development DAW, with implemented editing/playback features and explicit limits below; it is not yet a production-certified replacement for a desktop workstation.
+
+## Sampler, drum rack and resampling
+
+Open **Sampler / drums** in the bottom device chain. **Drum rack → Load starter kit** supplies 16 original samples, including an 808. Load your own sounds through **Samples → Import samples** (multiple files) or **Import ZIP pack**. The keyboard sampler and 16 pads support pitch, trim, reverse, envelopes, looping, velocity and choke groups, with the same effects and WAV-export path as the synths.
+
+**Resample** turns the selected clip or full arrangement into a 24-bit WAV in **Samples → Resampled**. Originals remain editable. Search, favorite and organize samples into collections; portable projects carry the browser and all assignments. Limits remain 64 assets / 512 MiB decoded audio. ZIP packs are supported; RAR and independent time stretching are not included.
+
+**Android Back returns through the current screen**: detail → parent panel → workspace, then Arrangement → Session. It leaves the Activity only from Session with no open panel. The system keyboard closes first when visible. **Close ×** closes a whole panel directly.
+
+Full controls and behavior: [Phase 6 sampler guide](docs/SAMPLER.md).
 
 ## Astra commands and Gemini listening
 
@@ -16,7 +26,7 @@ Full workflow, command reference and limitations: [Astra Phase 5](docs/ASTRA.md)
 
 ## Install and make a track
 
-Install `AstraStudio_Phase5_0.5.0.apk` over Phase 1, 2, 3 or 4. The development signing certificate is unchanged. GitHub fallback: **Actions → Android Phase 5 → a successful run → AstraStudio-Phase5-APK**.
+Install `AstraStudio_Phase6_0.6.0.apk` over Phase 1–5. The development signing certificate is unchanged. GitHub fallback: **Actions → Android Phase 6 → a successful run → AstraStudio-Phase6-APK**.
 
 1. **File → Load starter song** opens Green circuit: original, editable MIDI drums, bass and lead, two scenes and a 16-bar arrangement. Save your current project first.
 2. Tap **Start audio**, then **Play**. Session Play launches Scene 1; Arrangement Play begins at the white cursor. Clip/scene launch buttons follow the selected bar, quarter-note or eighth-note quantization.
@@ -106,4 +116,4 @@ The debug key in `signing/astra-development.keystore` is deliberately public (`a
 - `docs/SYNTHESIS.md`: signal path, modulation units, memory/thread contract and DSP limits.
 - `docs/VALIDATION.md`: performed checks and remaining hardware validation.
 
-Phase 5 adds a working validated command interface, offline phrase commands, Gemini REST integration and explicit audio attachments. Advanced warping/time stretching, sampler/drum rack, microphone recording, importable wavetables, tempo-map editing, full MIDI expression and production certification remain future work.
+Phase 5 adds a working validated command interface, offline phrase commands, Gemini REST integration and explicit audio attachments. Phase 6 adds the sampler, drum rack, original starter kit, ZIP/multiple-audio import, sample collections/favorites, resampling and hierarchical Back navigation. Advanced warping/time stretching, microphone recording, importable wavetables, tempo-map editing, full MIDI expression and production certification remain future work.

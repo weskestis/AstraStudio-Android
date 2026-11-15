@@ -7,7 +7,7 @@ import kotlin.math.*
 
 data class MidiNote(val id: Int, val beat: Double, val length: Double, val pitch: Int, val velocity: Float=.85f)
 data class AutoPoint(val beat: Double,val value: Float)
-data class AudioAsset(val id: Int,val name: String,val file: String,val rate: Int,val frames: Long,val waveform: List<Float>)
+data class AudioAsset(val id: Int,val name: String,val file: String,val rate: Int,val frames: Long,val waveform: List<Float>,val favorite: Boolean=false,val group: String="Imports")
 data class Clip(val slot: Int,val name: String="MIDI clip",val length: Double=16.0,
     val notes: List<MidiNote> = emptyList(),val automation: List<List<AutoPoint>> = List(4){emptyList()},
     val asset: Int = -1,val first: Long = 0,val last: Long = 0,val root: Int = 5,val minor: Boolean = true) {
@@ -46,11 +46,12 @@ data class Clip(val slot: Int,val name: String="MIDI clip",val length: Double=16
 data class Region(val id: Int,val slot: Int,val beat: Double,val length: Double,val offset: Double=0.0,val audioOffset: Long=0)
 data class Project(val name: String="Untitled",val numerator: Int=4,val denominator: Int=4,
     val mode: Int=0,val quantization: Int=0,val loop: Boolean=false,val loopStart: Double=0.0,val loopEnd: Double=16.0,
-    val clips: List<Clip> = emptyList(),val regions: List<Region> = emptyList(),val assets: List<AudioAsset> = emptyList()) {
+    val clips: List<Clip> = emptyList(),val regions: List<Region> = emptyList(),val assets: List<AudioAsset> = emptyList(),val instruments: List<SampleInstrument> = List(16){SampleInstrument()}) {
     val barBeats get()=numerator*4.0/denominator
     val launchBeats get()=when(quantization){1->1.0;2->.5;else->barBeats}
     val endBeat get()=regions.maxOfOrNull{it.beat+it.length}?:0.0
     fun clip(slot: Int)=clips.firstOrNull{it.slot==slot}
+    fun instrument(track: Int,edit: (SampleInstrument)->SampleInstrument)=copy(instruments=instruments.toMutableList().also{it[track]=edit(it[track])})
     fun asset(id: Int)=assets.firstOrNull{it.id==id}
     fun put(clip: Clip)=copy(clips=clips.filter{it.slot!=clip.slot}+clip)
     fun remove(slot: Int)=copy(clips=clips.filter{it.slot!=slot},regions=regions.filter{it.slot!=slot})
@@ -72,21 +73,23 @@ data class Project(val name: String="Untitled",val numerator: Int=4,val denomina
         val next=copy(regions=regions.filter{it.id!=id}+r.copy(length=left)+b);require(next.valid());return next
     }
     fun nativeWire(): DoubleArray {
-        val data=ArrayList<Double>();data.addAll(listOf(1.0,mode.toDouble(),numerator.toDouble(),denominator.toDouble(),if(loop)1.0 else 0.0,loopStart,loopEnd,clips.size.toDouble(),regions.size.toDouble()))
+        val data=ArrayList<Double>();data.addAll(listOf(2.0,mode.toDouble(),numerator.toDouble(),denominator.toDouble(),if(loop)1.0 else 0.0,loopStart,loopEnd,clips.size.toDouble(),regions.size.toDouble()))
         for(c in clips.sortedBy{it.slot}) {
             data.addAll(listOf(c.slot.toDouble(),c.length,c.asset.toDouble(),c.first.toDouble(),c.last.toDouble(),c.notes.size.toDouble(),c.automation.sumOf{it.size}.toDouble()))
             for(n in c.notes)data.addAll(listOf(n.beat,n.length,n.pitch.toDouble(),n.velocity.toDouble()))
             c.automation.forEachIndexed{lane,points->points.forEach{data.addAll(listOf(lane.toDouble(),it.beat,it.value.toDouble()))}}
         }
         for(r in regions)data.addAll(listOf(r.id.toDouble(),r.slot.toDouble(),r.beat,r.length,r.offset,r.audioOffset.toDouble()))
+        for(i in instruments){data.add(i.mode.toDouble());data.addAll(i.sample.wire());for(p in i.pads)data.addAll(p.wire())}
         return data.toDoubleArray()
     }
     fun valid(): Boolean {
         if(name.isBlank()||name.length>64||name.any{it.isISOControl()}||numerator !in 1..12||denominator !in listOf(2,4,8)||mode !in 0..1||quantization !in 0..2)return false
         if(!loopStart.isFinite()||!loopEnd.isFinite()||loopStart<0||loopEnd<=loopStart||loopEnd>65536)return false
         if(clips.size>128||clips.map{it.slot}.toSet().size!=clips.size||regions.size>512||regions.map{it.id}.toSet().size!=regions.size)return false
+        if(instruments.size!=16||instruments.any{!it.valid(assets)})return false
         if(assets.size>64||assets.map{it.id}.toSet().size!=assets.size||assets.sumOf{it.frames}>67108864)return false
-        for(a in assets)if(a.id !in 0..63||a.rate !in 8000..384000||a.frames !in 1..67108864||!a.file.matches(Regex("[A-Za-z0-9_-]{1,100}\\.wav"))||a.name.length>128||a.waveform.size!=1024||a.waveform.any{!it.isFinite()||abs(it)>8})return false
+        for(a in assets)if(a.id !in 0..63||a.rate !in 8000..384000||a.frames !in 1..67108864||!a.file.matches(Regex("[A-Za-z0-9_-]{1,100}\\.wav"))||a.name.isBlank()||a.name.length>128||a.group.length>64||a.waveform.size!=1024||a.waveform.any{!it.isFinite()||abs(it)>8})return false
         for(c in clips){
             if(c.slot !in 0..127||c.name.isBlank()||c.name.length>64||!c.length.isFinite()||c.length !in .0625..65536.0||c.root !in 0..11||c.asset !in -1..63||c.first<0||c.last<0||c.notes.size>256||c.notes.map{it.id}.toSet().size!=c.notes.size||c.automation.size!=4)return false
             if(c.isAudio){val a=asset(c.asset)?:return false;if(c.last<=c.first||c.last>a.frames||c.notes.isNotEmpty())return false}

@@ -29,6 +29,7 @@ import kotlin.math.roundToInt
 fun SynthEditor(track: Int, patch: SynthPatch, service: AudioService, running: Boolean) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     var page by rememberSaveable { mutableIntStateOf(0) }
+    com.weskestis.astrastudio.workspace.PanelBackHandler(expanded){if(page!=0)page=0 else expanded=false}
     var audition by remember(track) { mutableStateOf(false) }
     DisposableEffect(track) { onDispose { service.audition(track, false) } }
     LaunchedEffect(running) { if (!running) audition = false }

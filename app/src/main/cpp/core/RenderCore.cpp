@@ -57,6 +57,8 @@ bool RenderCore::valid(const Command& c) noexcept {
         case CommandType::ProjectSnapshot: return c.note>=0&&c.note<3&&c.frame==kImmediate;
         case CommandType::LaunchClip: case CommandType::LaunchScene: return c.note>=-1&&c.note<8&&c.value>=0&&c.value<=24;
         case CommandType::Seek: return c.value>=0&&c.value<=65536;
+        case CommandType::Preview:return c.note>=0&&c.note<project::kAssets&&c.value>=0&&c.value<=1;
+        case CommandType::StopPreview:return true;
         case CommandType::SendA: case CommandType::SendB: return c.value>=0&&c.value<=1;
     }
     return false;
@@ -140,12 +142,12 @@ Command RenderCore::popScheduled() noexcept {
 }
 
 void RenderCore::resetSound() noexcept {
-    sequence_.stop(true);
-    for (auto& voice : voices_) { voice.active = false; voice.synth.silence(); }
+    sequence_.stop(true);preview_.silence();
+    for (auto& voice : voices_) { voice.active = false; voice.synth.silence(); voice.sample.silence(); }
     // Pop in submission/frame order: several accepted edits may target one track.
     while (scheduledSize_ != 0) {
         const auto event = popScheduled();
-        if (event.type != CommandType::NoteOn && event.type != CommandType::NoteOff && event.type != CommandType::Transport) apply(event);
+        if (event.type != CommandType::NoteOn && event.type != CommandType::NoteOff && event.type != CommandType::Preview && event.type != CommandType::Transport) apply(event);
     }
     clickEnvelope_ = 0.0f;
     for (auto& track : tracks_) track.effects.reset();
@@ -162,17 +164,17 @@ void RenderCore::consumeCommands() noexcept {
         // Bounded drain, even if the producer is continuously active.
         for (std::size_t i = 0; i < kQueueCapacity && commands_.pop(command); ++i) {
             // Panic stops notes, but an accepted patch must still match the UI.
-            if (command.type != CommandType::NoteOn && command.type != CommandType::NoteOff && command.type != CommandType::Transport) apply(command);
+            if (command.type != CommandType::NoteOn && command.type != CommandType::NoteOff && command.type != CommandType::Preview && command.type != CommandType::Transport) apply(command);
         }
         return;
     }
     for (int i = 0; i < kCommandsPerCallback && commands_.pop(command); ++i) {
-        if ((command.type == CommandType::NoteOn || command.type == CommandType::NoteOff) && command.order < minNoteOrder_) continue;
+        if ((command.type == CommandType::NoteOn || command.type == CommandType::NoteOff || command.type == CommandType::Preview) && command.order < minNoteOrder_) continue;
         if (command.frame == kImmediate) command.frame = frame_;
         if (!schedule(command)) {
             dropped_.fetch_add(1, std::memory_order_relaxed);
             resetSound();
-            if (command.type != CommandType::NoteOn && command.type != CommandType::NoteOff && command.type != CommandType::Transport) apply(command);
+            if (command.type != CommandType::NoteOn && command.type != CommandType::NoteOff && command.type != CommandType::Preview && command.type != CommandType::Transport) apply(command);
             playing_ = false;
             // Flush the pending queue next callback as a second safety boundary.
             panic();
@@ -192,11 +194,19 @@ void RenderCore::updateTrackTargets() noexcept {
     }
 }
 
-void RenderCore::releaseVoice(Voice& voice) noexcept {
-    voice.synth.release();
+void RenderCore::releaseVoice(Voice& voice,bool force) noexcept {
+    if(voice.sampled)voice.sample.release(force);else voice.synth.release();
 }
 
 void RenderCore::noteOn(const Command& c) noexcept {
+    const project::Plan* plan=activePlan_>=0?planSlots_[activePlan_].plan.get():nullptr;
+    const sampler::Instrument* instrument=plan?&plan->instruments[c.track]:nullptr;
+    const sampler::Zone* zone=nullptr;
+    if(instrument&&instrument->mode){
+        if(instrument->mode==2){if(c.note<36||c.note>=52)return;zone=&instrument->pads[c.note-36];}else zone=&instrument->sample;
+        if(zone->asset<0||!plan->samples[zone->asset])return;
+        if(instrument->mode==2&&zone->choke)for(auto& v:voices_)if(v.active&&v.sampled&&v.track==c.track&&v.sample.group()==zone->choke)v.sample.choke();
+    }
     Voice* selected = nullptr;
     for (auto& voice : voices_) {
         if (voice.active && voice.id == c.noteId && voice.track == c.track) {
@@ -206,20 +216,21 @@ void RenderCore::noteOn(const Command& c) noexcept {
         if (!voice.active && selected == nullptr) selected = &voice;
     }
     if (selected == nullptr) {
-        // Prefer a releasing/quiet voice. Stable oldest-voice tie breaking.
-        selected = &voices_[0];
-        for (auto& voice : voices_) {
-            if ((voice.synth.releasing() && !selected->synth.releasing()) ||
-                (voice.synth.releasing() == selected->synth.releasing() &&
-                 (voice.synth.amplitude() < selected->synth.amplitude() ||
-                  (voice.synth.amplitude() == selected->synth.amplitude() && voice.age < selected->age)))) selected = &voice;
-        }
+        // Prefer a releasing/quiet voice across both instrument families.
+        const auto releasing=[](const Voice& v){return v.sampled?v.sample.releasing():v.synth.releasing();};
+        const auto amplitude=[](const Voice& v){return v.sampled?v.sample.amplitude():v.synth.amplitude();};
+        selected=&voices_[0];
+        for(auto& voice:voices_)if((releasing(voice)&&!releasing(*selected))||
+            (releasing(voice)==releasing(*selected)&&(amplitude(voice)<amplitude(*selected)||
+            (amplitude(voice)==amplitude(*selected)&&voice.age<selected->age))))selected=&voice;
     }
     selected->id = c.noteId;
     selected->track = c.track;
     selected->note = c.note;
     const auto& track = tracks_[c.track];
-    selected->synth.start(c.note, c.value, c.noteId * 2654435761U, track.renderPatch, sampleRate_, track.freePhases, bpm_);
+    selected->sampled=zone!=nullptr;
+    if(zone){selected->synth.silence();selected->sample.start(plan->samples[zone->asset].get(),*zone,c.note,c.value,sampleRate_,instrument->mode==2);}
+    else {selected->sample.silence();selected->synth.start(c.note, c.value, c.noteId * 2654435761U, track.renderPatch, sampleRate_, track.freePhases, bpm_);}
     selected->active = true;
     selected->age = voiceAge_++;
 }
@@ -252,7 +263,13 @@ void RenderCore::apply(const Command& c) noexcept {
         case CommandType::LimiterRelease: limiter_.setRelease(c.value); break;
         case CommandType::MeterTrack: meterTrack_=static_cast<int>(c.value); break;
         case CommandType::ProjectSnapshot: {
-            sequence_.activate(planSlots_[c.note].plan.get());const int old=activePlan_;activePlan_=c.note;
+            const auto* next=planSlots_[c.note].plan.get();
+            if(preview_.active()&&next->samples[preview_.asset()].get()!=preview_.source())preview_.silence();
+            // Retire every raw sample pointer before its owning old plan can be reclaimed.
+            for(auto& v:voices_)if(v.active){const int mode=next->instruments[v.track].mode;
+                const int oldMode=activePlan_>=0?planSlots_[activePlan_].plan->instruments[v.track].mode:0;
+                if(mode!=oldMode||(v.sampled&&(v.sample.asset()<0||next->samples[v.sample.asset()].get()!=v.sample.source()))){v.active=false;v.sample.silence();v.synth.silence();}}
+            sequence_.activate(next);const int old=activePlan_;activePlan_=c.note;
             if(old>=0)planSlots_[old].busy.store(false,std::memory_order_release);
             break;
         }
@@ -282,14 +299,17 @@ void RenderCore::apply(const Command& c) noexcept {
                 auto end = std::remove_if(scheduled_.begin(), scheduled_.begin() + static_cast<std::ptrdiff_t>(scheduledSize_),
                     [this](const Command& event) {
                         return event.order < minNoteOrder_ &&
-                            (event.type == CommandType::NoteOn || event.type == CommandType::NoteOff);
+                            (event.type == CommandType::NoteOn || event.type == CommandType::NoteOff || event.type == CommandType::Preview);
                     });
                 scheduledSize_ = static_cast<std::size_t>(end - scheduled_.begin());
                 std::make_heap(scheduled_.begin(), end, Later{});
                 clickEnvelope_ = 0.0f;
-                for (auto& voice : voices_) if (voice.active) releaseVoice(voice);
+                for (auto& voice : voices_) if (voice.active) releaseVoice(voice,true);
             }
             break;
+        case CommandType::Preview:{
+            if(activePlan_>=0){const auto& sample=planSlots_[activePlan_].plan->samples[c.note];if(sample){sampler::Zone z;z.asset=c.note;z.last=std::min<int64_t>(sample->frames(),sample->rate*10LL);z.loopLast=z.last;z.attack=.002f;z.sustain=1;z.oneShot=true;preview_.start(sample.get(),z,60,c.value,sampleRate_,false);}}break;}
+        case CommandType::StopPreview:preview_.choke();break;
         case CommandType::Metronome: metronome_ = c.value != 0.0f; break;
     }
 }
@@ -320,8 +340,8 @@ void RenderCore::render(float* output, int32_t frames) noexcept {
         for (auto& voice : voices_) {
             if (!voice.active) continue;
             auto& t = tracks_[static_cast<std::size_t>(voice.track)];
-            mono[static_cast<std::size_t>(voice.track)] += voice.synth.render(t.renderPatch, wavetables_, t.freePhases, bpm_);
-            voice.active = voice.synth.active();
+            if(voice.sampled){clipAudio[voice.track]=clipAudio[voice.track]+voice.sample.tick(sampleKernel_);voice.active=voice.sample.active();}
+            else{mono[static_cast<std::size_t>(voice.track)] += voice.synth.render(t.renderPatch, wavetables_, t.freePhases, bpm_);voice.active = voice.synth.active();}
         }
         std::array<fx::Stereo,kTrackCount> dry{};
         for(int t=0;t<kTrackCount;++t)dry[t]=clipAudio[t]+fx::Stereo{mono[t],mono[t]};
@@ -361,6 +381,7 @@ void RenderCore::render(float* output, int32_t frames) noexcept {
         clickSample=clickDelay_.tick(clickSample);left+=clickSample.l;right+=clickSample.r;
         master_ += smoothing_ * (targetMaster_ - master_);
         limiterDrive_ += smoothing_ * (targetLimiterDrive_ - limiterDrive_);
+        const auto preview=preview_.tick(sampleKernel_);left+=preview.l;right+=preview.r;
         left *= master_*limiterDrive_;
         right *= master_*limiterDrive_;
         if (std::abs(left) > kCeiling || std::abs(right) > kCeiling) ++clipped_;
