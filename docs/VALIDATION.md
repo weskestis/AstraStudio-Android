@@ -10,7 +10,7 @@ Development build **0.5.0-phase5 / versionCode 5**, November 15, 2026. The same 
 | Android ARM64/x86_64 APK | Assembled |
 | Android instrumentation APK | Assembled |
 | Android lint | 0 errors, 17 warnings (pinned versions, API target, backup settings, KTX conveniences) |
-| Native source | Unchanged in Phase 5; existing core/synth/effects/project regression and sanitizer suites retained in CI |
+| Native source | Unchanged in Phase 5; all four core/synth/effects/project regression suites and ASan/UBSan checks passed in CI |
 | Gemini REST | Request/response, schema, audio encoding and bounds tested with fixtures; no live Google request |
 | Physical Sony Xperia / USB / voice recognition | Not tested here |
 
@@ -24,7 +24,17 @@ Gemini fixtures verify exact audio bytes after Base64 encoding, selected project
 
 The existing playback/edit/rotation and portable project/native export tests are retained. Added tests exercise Astra preview/apply/Undo, a proposal invalidated by a later Redo, missing-key guidance, Android Keystore encrypted round trip/removal and a JSON-generated phrase rendered through the actual JNI WAV exporter with signal exceeding the dither floor. Screenshot capture now uses UiAutomation to include modal windows.
 
-Phase 5 CI execution and screenshot review will be recorded here after the run completes.
+Both jobs in [Phase 5 CI run 43690764693](https://github.com/weskestis/AstraStudio-Android/actions/runs/43690764693) passed for app commit `9db19755106a26173deea1b3cbd557f78733b88c`. The build job passed native regressions, sanitizers, generated-schema checks, unit tests, APK assembly and lint. The API 34 emulator job passed all **4 instrumentation tests**, with **0 failures, errors or skips** (94.598 seconds), on an x86_64 display configured to 1080 × 2520 at 420 dpi.
+
+Reviewed the captured Astra preview and Gemini settings screenshots. The green/black sheet displays the requested phrase, exact proposed tempo and MIDI changes, Apply/Undo controls, audio attachment limit, encrypted-key settings and free-tier explanation. These screenshots establish the observed emulator layout; they are not physical Xperia performance or touch testing.
+
+## Install package
+
+`AstraStudio_Phase5_0.5.0.apk` is 27,608,180 bytes. APK signature verification and 16 KiB ZIP alignment checks passed. All six packaged native ELF libraries are byte-identical to the previously validated Phase 4 libraries. The package remains `com.weskestis.astrastudio`, minimum/target API 34, with ARM64 and x86_64 binaries.
+
+SHA-256: `14753f0cb758c274eda324399102d56ccd5559d9ac89ff172c1ac9c8d89fe004`
+
+Signing certificate SHA-256: `1bff24ae64d74c99d9540a1ecc5acccc8479367f44772b305144d2c10ce4bd45` (same development certificate as Phase 4).
 
 ## Practical limits
 
