@@ -24,7 +24,7 @@ public:
     void start(const project::Sample*,const Zone&,int note,float velocity,double outputRate,bool drum)noexcept;
     void release(bool force=false)noexcept;
     void choke()noexcept;
-    void silence()noexcept{active_=false;sample_=nullptr;env_=0;}
+    void silence()noexcept{active_=false;sample_=nullptr;env_=0;last_={};tail_={};tailFrames_=0;}
     fx::Stereo tick(const Kernel&)noexcept;
     bool active()const noexcept{return active_;}
     bool releasing()const noexcept{return stage_==3;}
@@ -33,6 +33,7 @@ public:
     int asset()const noexcept{return zone_.asset;}
     const project::Sample* source()const noexcept{return sample_;}
 private:
+    fx::Stereo last_{},tail_{};int tailFrames_{};
     const project::Sample* sample_{};Zone zone_;double position_{},step_{},rate_{48000};
     float env_{},velocity_{},left_{},right_{},releaseStep_{};
     int stage_{},age_{},attackFrames_{},decayFrames_{},stageFrames_{},band_{};

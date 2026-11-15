@@ -184,15 +184,20 @@ class WorkspaceSmokeTest {
     }
     @Test fun packImportSamplerArchiveAndNativeRender(){
         val context=InstrumentationRegistry.getInstrumentation().targetContext;val io=ProjectFiles(context);val cancel=AtomicBoolean(false);val bridge=AudioBridge()
-        val input=File(context.cacheDir,"kit-input.wav");val pack=File(context.cacheDir,"test-kit.zip");val archive=File(context.cacheDir,"sampler.astra");val wave=File(context.cacheDir,"sampler-render.wav")
+        val input=File(context.cacheDir,"kit-input.wav");val pack=File(context.cacheDir,"test-kit.zip");val unsafePack=File(context.cacheDir,"unsafe-kit.zip");val archive=File(context.cacheDir,"sampler.astra");val wave=File(context.cacheDir,"sampler-render.wav")
         var created=emptyList<Pair<String,File>>();var restored: ProjectDocument?=null
         try{
             FactorySamples.write(0,input,cancel)
             java.util.zip.ZipOutputStream(pack.outputStream()).use{zip->
-                for(name in listOf("drums/kick.wav","../unused.wav")){zip.putNextEntry(java.util.zip.ZipEntry(name));input.inputStream().use{it.copyTo(zip)};zip.closeEntry()}
+                for(name in listOf("drums/kick.wav","extras/unused.wav")){zip.putNextEntry(java.util.zip.ZipEntry(name));input.inputStream().use{it.copyTo(zip)};zip.closeEntry()}
                 zip.putNextEntry(java.util.zip.ZipEntry("README.txt"));zip.write("Original test samples".toByteArray());zip.closeEntry()
             }
             val before=io.audioDir.list()!!.toSet()
+            java.util.zip.ZipOutputStream(unsafePack.outputStream()).use{zip->
+                for(name in listOf("drums/kick.wav","../unused.wav")){zip.putNextEntry(java.util.zip.ZipEntry(name));input.inputStream().use{it.copyTo(zip)};zip.closeEntry()}
+            }
+            assertTrue(runCatching{io.importPack(Uri.fromFile(unsafePack),2,cancel)}.exceptionOrNull() is java.util.zip.ZipException)
+            assertEquals("Unsafe pack must roll back the earlier valid sample",before,io.audioDir.list()!!.toSet())
             assertTrue(runCatching{io.importPack(Uri.fromFile(pack),1,cancel)}.isFailure)
             assertEquals(before,io.audioDir.list()!!.toSet())
             created=io.importPack(Uri.fromFile(pack),2,cancel);assertEquals(2,created.size);assertFalse(File(context.filesDir,"unused.wav").exists())
@@ -212,7 +217,7 @@ class WorkspaceSmokeTest {
             assertTrue("Sampler must render through JNI",peak>10000)
             // Actual Android bridge command validation includes browser preview opcodes.
             assertEquals(0,bridge.start());assertTrue(bridge.project(restored.project));assertTrue(bridge.preview(0));assertTrue(bridge.stopPreview());bridge.stop()
-        }finally{bridge.close();created.forEach{it.second.delete()};restored?.project?.assets?.forEach{io.audioFile(it).delete()};listOf(input,pack,archive,wave).forEach{it.delete()}}
+        }finally{bridge.close();created.forEach{it.second.delete()};restored?.project?.assets?.forEach{io.audioFile(it).delete()};listOf(input,pack,unsafePack,archive,wave).forEach{it.delete()}}
     }
 
 }

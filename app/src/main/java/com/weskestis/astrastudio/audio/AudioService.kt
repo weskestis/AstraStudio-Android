@@ -108,6 +108,8 @@ class AudioService : Service() {
     private var playingIntent = false
     private var sent: ProjectDocument? = null
     private var pendingLaunch: Triple<Int,Int,Boolean>? = null
+    private val touchIds=java.util.concurrent.atomic.AtomicInteger(300000000)
+    fun nextTouchId(): Int=touchIds.getAndUpdate{if(it>=400000000)300000000 else it+1}
     private val heldTouch = mutableMapOf<Long,Pair<Int,Int>>()
     private data class Recorded(val track: Int,val pitch: Int,val velocity: Float,val absolute: Double,val local: Double)
     private val recorded = mutableMapOf<Long,Recorded>()
@@ -483,7 +485,7 @@ class AudioService : Service() {
     fun sampleGroup(asset: Int,name: String){projectEdit{p->p.copy(assets=p.assets.map{if(it.id==asset)it.copy(group=name.trim().take(64))else it})}}
     fun sampleClip(asset: Int,slot: Int){projectEdit{p->val a=p.asset(asset)?:error("Choose a sample.");val target=if(p.clip(slot)==null)slot else p.emptySlot(slot%16)?:error("This track has no empty slots.")
         p.put(Clip(target,a.name.take(64),(a.frames.toDouble()/a.rate*mutableState.value.bpm/60).coerceAtLeast(.0625),asset=a.id,last=a.frames))}}
-    fun hitPad(track: Int,pad: Int){if(track !in 0..15||pad !in 0..15)return;val id=280000+pad;noteOn(track,36+pad,id);control.postDelayed({noteOff(track,id)},120)}
+    fun hitPad(track: Int,pad: Int){if(track !in 0..15||pad !in 0..15)return;val id=nextTouchId();noteOn(track,36+pad,id);control.postDelayed({noteOff(track,id)},120)}
     fun previewSample(id: Int){control.post{if(wantsAudio&&!mutableState.value.busy&&syncEngine())bridge.preview(id)else message("Start audio to audition samples.")}}
     fun stopPreview(){control.post{bridge.stopPreview()}}
     private fun addSamples(d: ProjectDocument,items: List<Pair<String,File>>,group: String): ProjectDocument {

@@ -23,24 +23,24 @@ import com.weskestis.astrastudio.audio.*
 import com.weskestis.astrastudio.project.*
 import kotlin.math.roundToInt
 
-@Composable internal fun SampleInstrumentPanel(s: StudioState,t: Int,service: AudioService,start: ()->Unit,browse: (Int)->Unit) {
+@Composable internal fun SampleInstrumentPanel(s: StudioState,t: Int,slot: Int,service: AudioService,start: ()->Unit,browse: (Int)->Unit) {
     val instrument=s.project.instruments[t]
     var selected by rememberSaveable(t){mutableIntStateOf(0)}
     var editing by rememberSaveable(t){mutableStateOf(false)}
     PanelBackHandler(editing){editing=false;service.releaseTouchNotes()}
     Tools{listOf("Synth","Sampler","Drum rack").forEachIndexed{i,label->FilterChip(instrument.mode==i,{service.instrument(t,i);editing=false},label={Text(label)},modifier=Modifier.testTag("Instrument $i"))}}
-    Tools{Action(if(s.stats.running)"Audio on" else "Start audio",tag="Sample audio"){if(!s.stats.running)start()};Action("Stop notes"){service.panic()}}
+    Tools{Action(if(s.stats.running)"Audio on" else "Start audio",tag="Sample audio"){if(!s.stats.running)start()};Action("Stop notes"){service.panic()};Action(if(s.recording>=0)"Finish recording" else "Record MIDI",s.stats.running&&!s.busy,"Sample record"){service.record(slot)}}
     Text(s.message,color=Muted,fontSize=12.sp)
     if(instrument.mode==0){Text("Choose Sampler or Drum rack to play samples. Your synth patch is retained.");return}
     if(instrument.mode==2&&!editing){
         Text("DRUM RACK · MIDI 36–51",color=Green,fontWeight=FontWeight.Bold,modifier=Modifier.padding(vertical=8.dp))
         Text("Tap to play and select. Edit pad opens its sound settings. Record MIDI captures your performance.",fontSize=12.sp,color=Muted)
         for(row in 0..3)Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(6.dp)){
-            for(col in 0..3){val pad=row*4+col;val zone=instrument.pads[pad];val asset=s.project.asset(zone.asset);val id=270000+pad
+            for(col in 0..3){val pad=row*4+col;val zone=instrument.pads[pad];val asset=s.project.asset(zone.asset)
                 val label="Pad ${pad+1}: ${asset?.name?:"Empty"}"
                 Box(Modifier.weight(1f).heightIn(min=76.dp).padding(vertical=3.dp).background(if(selected==pad)Color(0xFF174D26)else Color(0xFF102016)).border(1.dp,if(selected==pad)Green else Color(0xFF32633E))
                     .testTag("Pad $pad").semantics{contentDescription=label;role=Role.Button;onClick{selected=pad;if(s.stats.running&&asset!=null)service.hitPad(t,pad);true}}
-                    .pointerInput(t,pad,s.stats.running,asset?.id){detectTapGestures(onPress={selected=pad;if(s.stats.running&&asset!=null){service.noteOn(t,36+pad,id);try{tryAwaitRelease()}finally{service.noteOff(t,id)}}},onLongPress={selected=pad;editing=true})},contentAlignment=Alignment.Center){
+                    .pointerInput(t,pad,s.stats.running,asset?.id){detectTapGestures(onPress={selected=pad;if(s.stats.running&&asset!=null){val id=service.nextTouchId();service.noteOn(t,36+pad,id);try{tryAwaitRelease()}finally{service.noteOff(t,id)}}},onLongPress={selected=pad;editing=true})},contentAlignment=Alignment.Center){
                     Column(Modifier.padding(5.dp),horizontalAlignment=Alignment.CenterHorizontally){Text("${pad+1} · ${36+pad}",fontSize=11.sp,color=Green);Text(asset?.name?:"Empty",fontSize=11.sp,maxLines=2)}
                 }
             }
@@ -64,7 +64,7 @@ import kotlin.math.roundToInt
     var first by remember(a.id,z.first){mutableStateOf(z.first.toString())};var last by remember(a.id,z.last){mutableStateOf(z.last.toString())}
     var loopFirst by remember(a.id,z.loopFirst){mutableStateOf(z.loopFirst.toString())};var loopLast by remember(a.id,z.loopLast){mutableStateOf(z.loopLast.toString())}
     var ranges by rememberSaveable{mutableStateOf(false)}
-    PanelBackHandler(ranges){ranges=false}
+    PanelBackHandler(ranges,depth=1){ranges=false}
     Tools{
         FilterChip(z.reverse,{change{it.copy(reverse=!it.reverse)}},label={Text("Reverse")},modifier=Modifier.testTag("Sample reverse"))
         FilterChip(z.loop,{change{it.copy(loop=!it.loop,oneShot=false)}},label={Text("Loop")},modifier=Modifier.testTag("Sample loop"))
@@ -92,7 +92,7 @@ import kotlin.math.roundToInt
 
 @Composable internal fun SampleWaveform(a: AudioAsset,first: Long=0,last: Long=a.frames,loopFirst: Long=0,loopLast: Long=a.frames,loop: Boolean=false){
     Canvas(Modifier.fillMaxWidth().height(110.dp).background(Color.Black).testTag("Sample waveform").semantics{contentDescription="Waveform for ${a.name}"}){
-        for(i in 0 until 512){val x=size.width*i/512;drawLine(Green,Offset(x,size.height*(.5f-a.waveform[i*2]*.45f)),Offset(x,size.height*(.5f-a.waveform[i*2+1]*.45f)),1f)}
+        for(i in 0 until 512){val x=size.width*i/512;drawLine(Green,Offset(x,size.height*(.5f-a.waveform[i*2].coerceIn(-1f,1f)*.45f)),Offset(x,size.height*(.5f-a.waveform[i*2+1].coerceIn(-1f,1f)*.45f)),1f)}
         fun line(frame: Long,color: Color){val x=(frame.toDouble()/a.frames*size.width).toFloat();drawLine(color,Offset(x,0f),Offset(x,size.height),3f)}
         line(first,Color.White);line(last,Color.White);if(loop){line(loopFirst,Color.Yellow);line(loopLast,Color.Yellow)}
     }

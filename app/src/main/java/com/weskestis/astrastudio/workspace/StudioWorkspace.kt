@@ -133,7 +133,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,imp
         }
         DeviceRack(state,track,service,compact){if(it=="clip"&&state.project.clip(slot)==null)service.newClip(slot);if(it.startsWith("effects:")){fxUnit=it.substringAfter(":").toInt();sheet="effects"}else sheet=it}
     }
-    if(sheet.isNotEmpty())Dialog(onDismissRequest={backPanel()},properties=DialogProperties(usePlatformDefaultWidth=false,decorFitsSystemWindows=false)){
+    if(sheet.isNotEmpty())Dialog(onDismissRequest={backPanel()},properties=DialogProperties(usePlatformDefaultWidth=false,decorFitsSystemWindows=false,dismissOnClickOutside=false)){
         CompositionLocalProvider(LocalPanelNavigation provides panelNavigation){panelStates.SaveableStateProvider(sheet){
         Box(Modifier.fillMaxSize().safeDrawingPadding(),contentAlignment=Alignment.BottomCenter){
         Surface(Modifier.fillMaxWidth().fillMaxHeight(.96f),color=Color(0xFF080F0A),shape=RoundedCornerShape(topStart=24.dp,topEnd=24.dp)){
@@ -143,7 +143,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,imp
                 "astra"->AstraPanel(state,service,slot)
                 "clip"->state.project.clip(slot)?.let{ClipEditor(it,state,service)}?:Text("Creating clip…")
                 "synth"->{Tools{Action("Use synth",state.project.instruments[track].mode!=0){service.instrument(track,0)};Action("Sampler / drums"){sheet="instrument"}};SynthEditor(track,state.patches[track],service,state.stats.running)}
-                "instrument"->SampleInstrumentPanel(state,track,service,start){browse(it)}
+                "instrument"->SampleInstrumentPanel(state,track,slot,service,start){browse(it)}
                 "samples"->SampleBrowser(state,track,slot,if(browserPad==-2)null else browserPad,service,start,importSamples,importPack){service.stopPreview();if(parentSheet.isNotEmpty()){sheet=parentSheet;parentSheet=""}else sheet="instrument"}
                 "resample"->ResamplePanel(state,slot,service){browse()}
                 "effects"->FxEditor(track,state,service,fxUnit)

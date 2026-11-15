@@ -17,7 +17,8 @@ Kernel::Kernel()noexcept {
     }
 }
 void Voice::start(const project::Sample* sample,const Zone& z,int note,float velocity,double outputRate,bool drum)noexcept {
-    silence();if(!sample||z.first<0||z.last<=z.first||z.last>sample->frames()||!std::isfinite(outputRate)||outputRate<=0)return;
+    const auto stolen=active_?last_:fx::Stereo{};silence();tail_=stolen;tailFrames_=32;
+    if(!sample||z.first<0||z.last<=z.first||z.last>sample->frames()||!std::isfinite(outputRate)||outputRate<=0)return;
     sample_=sample;zone_=z;rate_=outputRate;held_=true;active_=true;stage_=0;stageFrames_=age_=0;velocity_=velocity;
     step_=sample->rate/outputRate*std::exp2(((drum?0:note-z.root)+z.pitch)/12.0);
     band_=std::clamp(static_cast<int>(std::ceil(std::log2(std::max(1.0,step_))*8)),0,Kernel::bands-1);
@@ -60,6 +61,7 @@ fx::Stereo Voice::tick(const Kernel& kernel)noexcept {
     if(looping){const double span=static_cast<double>(zone_.loopLast-zone_.loopFirst);
         if(!zone_.reverse&&position_>=zone_.loopLast)position_=zone_.loopFirst+std::fmod(position_-zone_.loopFirst,span);
         if(zone_.reverse&&position_<zone_.loopFirst){const double remainder=std::fmod(zone_.loopFirst-position_,span);position_=remainder==0?zone_.loopFirst:zone_.loopLast-remainder;}}
-    return value;
+    if(tailFrames_>0){value=value+tail_*(tailFrames_/32.f);--tailFrames_;}
+    last_=value;return value;
 }
 }

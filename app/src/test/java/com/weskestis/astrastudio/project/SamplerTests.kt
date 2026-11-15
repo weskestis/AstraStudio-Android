@@ -39,4 +39,7 @@ class SamplerTests {
     }
     @Test fun nestedBackPopsMostRecentActiveChild(){val nav=PanelNavigation();val calls=mutableListOf<String>();val a=Any();val b=Any();var inner=true
         nav.add(a){calls+="panel";true};nav.add(b){if(inner){inner=false;calls+="detail";true}else false};assertTrue(nav.back());assertTrue(nav.back());assertEquals(listOf("detail","panel"),calls);nav.remove(b);nav.remove(a);assertFalse(nav.back())}
+    @Test fun deeperPageWinsWhenParentRegistersAfterChild(){val nav=PanelNavigation();val calls=mutableListOf<String>();var inner=true
+        nav.add(Any(),depth=1){if(inner){inner=false;calls+="trim";true}else false};nav.add(Any()){calls+="pad";true}
+        assertTrue(nav.back());assertTrue(nav.back());assertEquals(listOf("trim","pad"),calls)}
 }
