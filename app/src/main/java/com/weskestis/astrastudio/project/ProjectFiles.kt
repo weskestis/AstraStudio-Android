@@ -53,10 +53,10 @@ class ProjectFiles(private val context: Context) {
                     val audio=!entry.isDirectory&&name.substringAfterLast('.',"").lowercase() in setOf("wav","mp3","ogg","flac","m4a","aac","aif","aiff","webm","mp4")
                     if(audio){
                         require(result.size<limit){"This pack exceeds the remaining $limit sample slots. Import a smaller selection."}
-                        scratch.outputStream().use{total+=copy(zip,it,MAX_MEDIA_BYTES-total,cancel)}
+                        scratch.outputStream().use{total+=copy(zip,it,minOf(MAX_MEDIA_BYTES,MAX_PROJECT_MEDIA_BYTES-total),cancel)}
                         val dest=File(audioDir,"${UUID.randomUUID()}.wav");result+=name.take(128) to dest
                         if(isPcmWave(scratch))scratch.inputStream().use{src->dest.outputStream().use{copy(src,it,MAX_MEDIA_BYTES,cancel)}} else decodeAudio(scratch,dest,cancel)
-                    } else total+=copy(zip,discard,MAX_MEDIA_BYTES-total,cancel)
+                    } else total+=copy(zip,discard,minOf(MAX_MEDIA_BYTES,MAX_PROJECT_MEDIA_BYTES-total),cancel)
                     zip.closeEntry()
                 }
             }}
@@ -80,8 +80,8 @@ class ProjectFiles(private val context: Context) {
                 while(true){val entry=zip.nextEntry?:break;val name=entry.name
                     require(!entry.isDirectory&&(name=="project.json"||name.matches(Regex("audio/[A-Za-z0-9_-]{1,100}\\.wav")))&&seen.add(name)&&seen.size<=65){"Invalid or duplicate project archive entry."}
                     val out=File(folder,name);out.parentFile?.mkdirs()
-                    out.outputStream().use{total+=copy(zip,it,if(name=="project.json")ProjectCodec.MAX_JSON_BYTES.toLong() else MAX_MEDIA_BYTES-total,cancel)}
-                    require(total<=MAX_MEDIA_BYTES+ProjectCodec.MAX_JSON_BYTES){"Project archive is too large."};zip.closeEntry()
+                    out.outputStream().use{total+=copy(zip,it,if(name=="project.json")ProjectCodec.MAX_JSON_BYTES.toLong() else minOf(MAX_MEDIA_BYTES,MAX_PROJECT_MEDIA_BYTES-total),cancel)}
+                    require(total<=MAX_PROJECT_MEDIA_BYTES+ProjectCodec.MAX_JSON_BYTES){"Project archive is too large."};zip.closeEntry()
                 }
             }}
             val json=File(folder,"project.json");require(json.isFile){"The archive has no project.json."}
@@ -150,7 +150,8 @@ class ProjectFiles(private val context: Context) {
         }finally{runCatching{codec?.stop()};codec?.release();extractor.release()}
     }
     companion object {
-        const val MAX_MEDIA_BYTES=512L*1024*1024
+        const val MAX_MEDIA_BYTES=AudioStorage.MAX_FILE_BYTES
+        const val MAX_PROJECT_MEDIA_BYTES=AudioStorage.MAX_PROJECT_BYTES
         private fun readLimited(input: InputStream,limit: Long): ByteArray=ByteArrayOutputStream().also{copy(input,it,limit,AtomicBoolean(false))}.toByteArray()
         fun copy(input: InputStream,output: OutputStream,limit: Long,cancel: AtomicBoolean): Long {
             val data=ByteArray(65536);var total=0L

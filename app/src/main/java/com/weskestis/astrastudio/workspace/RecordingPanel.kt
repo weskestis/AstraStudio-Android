@@ -182,7 +182,7 @@ private fun db(value: Double)=String.format(Locale.US,"%.1f",20*log10(max(1e-6,v
     if(error.isNotBlank())Text(error,color=Color(0xFFFFA58D),fontSize=12.sp)
     OutlinedTextField(root,{root=it.take(3)},label={Text("Sampler root MIDI note (0–127)")},singleLine=true,modifier=Modifier.fillMaxWidth().testTag("Lab root note"))
     FilterChip(fade,{fade=!fade},label={Text("2 ms edge fades")},modifier=Modifier.testTag("Lab edge fades"))
-    Text("Saved as 32-bit float at the source rate. No normalization. With edge fades off, selection samples are unchanged. Only the selection uses the project's 512 MiB audio budget.",fontSize=11.sp,color=Muted)
+    Text("Saved as 32-bit float at the source rate. No normalization. With edge fades off, selection samples are unchanged. Large selections stream from storage; originals remain available in Sample Lab.",fontSize=11.sp,color=Muted)
     val canSave=enabled&&!s.busy&&root.toIntOrNull() in 0..127
     LabTools{
         Action("Use as sampler",canSave,"Lab use sampler"){keyboard?.hide();service.stopSelectionPreview();service.sampleSelection(source.path,first,last,slot,true,root.toInt(),fade)}

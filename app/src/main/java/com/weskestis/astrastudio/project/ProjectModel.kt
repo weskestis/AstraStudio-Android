@@ -93,8 +93,8 @@ data class Project(val name: String="Untitled",val numerator: Int=4,val denomina
         if(!loopStart.isFinite()||!loopEnd.isFinite()||loopStart<0||loopEnd<=loopStart||loopEnd>65536)return false
         if(clips.size>128||clips.map{it.slot}.toSet().size!=clips.size||regions.size>512||regions.map{it.id}.toSet().size!=regions.size)return false
         if(instruments.size!=16||instruments.any{!it.valid(assets)})return false
-        if(assets.size>64||assets.map{it.id}.toSet().size!=assets.size||assets.sumOf{it.frames}>67108864)return false
-        for(a in assets)if(a.id !in 0..63||a.rate !in 8000..384000||a.frames !in 1..67108864||!a.file.matches(Regex("[A-Za-z0-9_-]{1,100}\\.wav"))||a.name.isBlank()||a.name.length>128||a.group.length>64||a.waveform.size!=1024||a.waveform.any{!it.isFinite()||abs(it)>8})return false
+        if(assets.size>64||assets.map{it.id}.toSet().size!=assets.size||assets.sumOf{it.frames}>AudioStorage.MAX_PROJECT_FRAMES)return false
+        for(a in assets)if(a.id !in 0..63||a.rate !in 8000..384000||a.frames !in 1..AudioStorage.MAX_ASSET_FRAMES||!a.file.matches(Regex("[A-Za-z0-9_-]{1,100}\\.wav"))||a.name.isBlank()||a.name.length>128||a.group.length>64||a.waveform.size!=1024||a.waveform.any{!it.isFinite()||abs(it)>8})return false
         for(c in clips){
             if(!c.sourceBpm.isFinite()||c.sourceBpm !in 30.0..300.0||!c.pitch.isFinite()||c.pitch !in -24.0..24.0||c.warpStart<0||(!c.isAudio&&(c.warp||c.warpStart!=0L||c.pitch!=0.0)))return false
             if(c.slot !in 0..127||c.name.isBlank()||c.name.length>64||!c.length.isFinite()||c.length !in .0625..65536.0||c.root !in 0..11||c.asset !in -1..63||c.first<0||c.last<0||c.notes.size>256||c.notes.map{it.id}.toSet().size!=c.notes.size||c.automation.size!=4)return false

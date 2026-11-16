@@ -44,6 +44,8 @@ data class StudioState(
     val astra: AstraState = AstraState(),
     val project: Project = Project(),
     val sequence: SequenceStats = SequenceStats(),
+    val storage: StorageStats = StorageStats(),
+    val finishedExports: List<FinishedExport> = emptyList(),
     val ready: Boolean = false,
     val busy: Boolean = false,
     val work: String = "",
@@ -200,7 +202,8 @@ class AudioService : Service() {
             io.execute {
                 var restored: ProjectDocument?=null;var error: String?=null
                 try { restored=files.load();if(restored!=null)loadAssets(restored) } catch(e: Exception){restored=null;error=e.message;runCatching{files.preserveFailedAutosave()};bridge.loadAssets(emptyList())}
-                control.post { if(!destroyed){if(restored!=null)adopt(restored);else adopt(fallback)
+                val exports=runCatching{FinishedTracks(this).list()}.getOrDefault(emptyList())
+                control.post { if(!destroyed){mutableState.value=mutableState.value.copy(finishedExports=exports);if(restored!=null)adopt(restored);else adopt(fallback)
                     mutableState.value=mutableState.value.copy(ready=true,busy=false,work="",message=error?.let{"Could not restore project: $it"}?:"Ready. Start audio, then launch a clip or build an arrangement.")
                     control.post(poll)
                 } }
@@ -316,7 +319,7 @@ class AudioService : Service() {
                 }
             }
             val stats = bridge.stats()
-            mutableState.value = mutableState.value.copy(stats = stats, fxStats = if (stats.running) bridge.fxStats() else FxStats(), sequence=if(stats.running)bridge.sequence() else SequenceStats(), progress=if(mutableState.value.work in listOf("Rendering WAV","Resampling","Stretching audio"))bridge.exportProgress() else mutableState.value.progress)
+            mutableState.value = mutableState.value.copy(stats = stats, storage=bridge.storageStats(), fxStats = if (stats.running) bridge.fxStats() else FxStats(), sequence=if(stats.running)bridge.sequence() else SequenceStats(), progress=if(mutableState.value.work in listOf("Rendering WAV","Resampling","Stretching audio","Rendering finished track","Bouncing instrument"))bridge.exportProgress() else mutableState.value.progress)
             if (wantsAudio && stats.running) {
                 if (++stablePolls >= 100) reconnectAttempts = 0
             } else stablePolls = 0
@@ -468,7 +471,7 @@ class AudioService : Service() {
     }
     private fun finishRecording(){if(mutableState.value.recording<0)return;recorded.values.toList().forEach{finishNote(it)};recorded.clear();history.end();mutableState.value=mutableState.value.copy(recording=-1,canUndo=history.canUndo,canRedo=history.canRedo)}
     private fun loadAssets(d: ProjectDocument){
-        check(bridge.loadAssets(d.project.assets.map{it.id to files.audioFile(it)})){"Audio is missing, unsupported, or exceeds the 512 MiB decoded audio budget."}
+        check(bridge.loadAssets(d.project.assets.map{it.id to files.audioFile(it)})){"Audio is missing, unsupported, or exceeds the 128 MiB playback-page budget."}
         for(a in d.project.assets){val info=requireNotNull(bridge.assetInfo(a.id));require(info[0].toInt()==a.rate&&info[1].toLong()==a.frames){"Audio file does not match its project metadata."}}
     }
     private fun work(title: String,task: (ProjectDocument)->ProjectDocument?,done: String,resetHistory: Boolean=false){
@@ -480,8 +483,9 @@ class AudioService : Service() {
             io.execute {
                 var result: ProjectDocument?=null;var error: String?=null
                 try{result=task(snapshot);check(!cancelled.get()){ "Cancelled." }}catch(e: Exception){error=e.message?:"File operation failed.";result?.project?.assets?.filter{a->snapshot.project.assets.none{it.file==a.file}}?.forEach{files.audioFile(it).delete()};runCatching{loadAssets(snapshot)}}
+                val exports=runCatching{FinishedTracks(this).list()}.getOrDefault(emptyList())
                 control.post {if(!destroyed){
-                    mutableState.value=mutableState.value.copy(busy=false,work="",progress=0f)
+                    mutableState.value=mutableState.value.copy(finishedExports=exports,busy=false,work="",progress=0f)
                     if(error==null&&result!=null){if(resetHistory)history.clear()else history.commit(document(),result);adopt(result);sent=null;syncEngine()}
                     message(error?:done)
                     refreshForeground()
@@ -495,7 +499,7 @@ class AudioService : Service() {
         val id=(0..63).firstOrNull{i->d.project.asset(i)==null}?:error("The project holds up to 64 audio files.")
         val (name,file)=files.importAudio(uri,cancelled)
         try{
-            check(bridge.loadAssets(d.project.assets.map{it.id to files.audioFile(it)}+(id to file))){"Unsupported WAV or decoded audio budget exceeded (512 MiB)."}
+            check(bridge.loadAssets(d.project.assets.map{it.id to files.audioFile(it)}+(id to file))){"Unsupported WAV, invalid sample data, or playback-page budget exceeded."}
             val info=requireNotNull(bridge.assetInfo(id));val asset=AudioAsset(id,name,file.name,info[0].toInt(),info[1].toLong(),info.drop(2).map{it.toFloat()})
             val length=asset.frames.toDouble()/asset.rate*d.bpm/60
             val project=d.project.copy(assets=d.project.assets+asset).put(Clip(target,name.take(64).ifBlank{"Audio"},length.coerceAtLeast(.0625),asset=id,last=asset.frames))
@@ -515,7 +519,7 @@ class AudioService : Service() {
     private fun addSamples(d: ProjectDocument,items: List<Pair<String,File>>,group: String): ProjectDocument {
         require(items.isNotEmpty()&&items.size+d.project.assets.size<=64){"A project holds 64 samples."}
         val ids=(0..63).filter{d.project.asset(it)==null}.take(items.size)
-        check(bridge.loadAssets(d.project.assets.map{it.id to files.audioFile(it)}+items.mapIndexed{i,p->ids[i] to p.second})){"Unsupported audio or decoded sample budget exceeded (512 MiB)."}
+        check(bridge.loadAssets(d.project.assets.map{it.id to files.audioFile(it)}+items.mapIndexed{i,p->ids[i] to p.second})){"Unsupported audio, invalid samples, or playback-page budget exceeded."}
         val added=items.mapIndexed{i,p->val info=requireNotNull(bridge.assetInfo(ids[i]));AudioAsset(ids[i],p.first.take(128).ifBlank{"Sample"},p.second.name,info[0].toInt(),info[1].toLong(),info.drop(2).map{it.toFloat()},group=group.take(64))}
         check(!cancelled.get()){ "Cancelled." }
         return d.copy(project=d.project.copy(assets=d.project.assets+added)).also{require(it.valid()){ "Invalid sample metadata." }}
@@ -550,6 +554,18 @@ class AudioService : Service() {
             addSamples(d,listOf(name.take(128) to file),"Resampled")
         }catch(e: Exception){file.delete();throw e}
     },"Bounce added to Samples → Resampled. Assign it to a pad, sampler or audio clip.")}
+    fun bounceInstrument(slot: Int){work("Bouncing instrument",{d->
+        val original=d.project.clip(slot)?:error("Select a clip first.")
+        val target=d.project.emptySlot(original.track)?:error("This track needs an empty scene slot for the bounce.")
+        val source=Resampling.source(d,slot,false);Resampling.checkCapacity(d,source,48000,0f)
+        val file=File(files.audioDir,"${java.util.UUID.randomUUID()}.wav")
+        try{val code=bridge.export(file,source,48000,0f,true,original.track)
+            check(code==0){if(code==3)"Cancelled." else "Could not bounce this instrument."}
+            val name=(original.name+" audio").take(64);val next=addSamples(d,listOf(name to file),"Instrument bounces");val asset=next.project.assets.last()
+            next.copy(project=next.project.put(Clip(target,name,original.length,automation=original.automation,
+                asset=asset.id,last=asset.frames,warp=true,sourceBpm=d.bpm.toDouble())))
+        }catch(e: Exception){file.delete();throw e}
+    },"Audio clip added in the next empty scene on this track. Play it instead of the source to reduce instrument processing. Original kept; mixer and effects remain live.")}
     fun stretchClip(slot: Int,beats: Double,semitones: Double){work("Stretching audio",{d->
         val clip=d.project.clip(slot)?:error("Select an audio clip.")
         val target=d.project.emptySlot(slot%16)?:error("This track needs an empty scene slot for the new clip.")
@@ -598,8 +614,7 @@ class AudioService : Service() {
     fun sampleSelection(path: String,first: Long,last: Long,slot: Int,sampler: Boolean,root: Int,fade: Boolean){work("Extracting selection",{d->
         require(slot in 0..127&&root in 0..127)
         val source=labFile(path);val target=if(sampler)-1 else if(d.project.clip(slot)==null)slot else d.project.emptySlot(slot%16)?:error("This track needs an empty scene slot.")
-        val available=ProjectFiles.MAX_MEDIA_BYTES-d.project.assets.sumOf{it.frames*8}
-        require(d.project.assets.size<64&&last>first&&(last-first)<=available/8){"Selection exceeds the remaining 512 MiB decoded sample budget or 64 sample slots. Select a shorter section."}
+        require(last>first&&AudioStorage.canAdd(d.project,last-first)){"Selection exceeds the 2 GiB WAV, 8 GiB source-frame or 64 sample limits. Select a shorter section."}
         val output=File(files.audioDir,"${java.util.UUID.randomUUID()}.wav")
         try{WaveFile(source).use{it.extract(output,first,last,if(fade)(it.rate*.002).roundToInt()else 0){check(!cancelled.get()){"Cancelled."}}}
             val name=(MicrophoneRecorder.displayName(source).take(48)+" cut").take(64);val next=addSamples(d,listOf(name to output),"Recorded / extracted");val a=next.project.assets.last()
@@ -619,6 +634,16 @@ class AudioService : Service() {
             files.publishWave(file,uri,cancelled)
         }finally{file.delete()};null
     },if(floating)"32-bit float stereo WAV exported." else "24-bit stereo WAV exported.")}
+
+    fun renderFinishedTrack(rate: Int,tail: Float,floating: Boolean){work("Rendering finished track",{d->
+        val exports=FinishedTracks(this);val part=exports.begin(d.project.name,ExportNames.bytes(d.project,d.bpm,rate,tail,floating))
+        try{val result=bridge.export(part,d,rate,tail,floating)
+            check(result==0){if(result==3)"Cancelled." else "Could not render the finished track. Check storage and source files."}
+            check(!cancelled.get()){ "Cancelled." };exports.complete(part)
+        }finally{part.delete()};null
+    },"Finished WAV ready. Open File → Share finished track to share or save it.")}
+    fun saveFinishedTrack(uri: Uri,path: String){work("Saving finished track",{_->files.publishWave(FinishedTracks(this).file(path),uri,cancelled);null},"Finished track saved to your chosen location.")}
+    fun deleteFinishedTrack(path: String){work("Deleting finished export",{_->FinishedTracks(this).delete(path);null},"Finished export deleted. Project and recordings retained.")}
 
     private fun astraState(edit: (AstraState)->AstraState) { mutableState.value=mutableState.value.copy(astra=edit(mutableState.value.astra)) }
     private fun foregroundTypes(extra: Int=0): Int {

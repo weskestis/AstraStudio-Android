@@ -47,6 +47,60 @@ class WorkspaceSmokeTest {
         values.clear();values.put(android.provider.MediaStore.Images.Media.IS_PENDING,0);resolver.update(uri,values,null,null)
     }
     private fun click(tag: String){val node=compose.onNodeWithTag(tag);runCatching{node.performScrollTo()};node.assertIsDisplayed().performClick()}
+    @Test fun streamedAudioBounceAndFinishedTrackSharing(){
+        compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
+        click("File");click("New project");click("Confirm project")
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val binding=ServiceTestRule();val service=(binding.bindService(Intent(context,AudioService::class.java)) as AudioService.LocalBinder).service
+        val source=File(context.cacheDir,"Streaming_55Hz.wav");val saved=File(context.cacheDir,"finished-copy.wav")
+        val samples=FloatArray(48000*6){(.3*kotlin.math.sin(2*Math.PI*55*it/48000)).toFloat()}
+        FloatWaveWriter(source,48000,1).use{it.write(samples,samples.size)}
+        var finished: FinishedExport?=null
+        try{
+            service.importAudio(Uri.fromFile(source),0)
+            compose.waitUntil(20000){service.state.value.project.clip(0)!=null&&!service.state.value.busy}
+            compose.waitUntil(10000){service.state.value.storage.streamed>0}
+            assertEquals(2L*1024*1024,service.state.value.storage.audioBytes)
+            assertEquals(48000L*6*8,service.state.value.storage.sourceBytes)
+            click("Resample");click("Bounce instrument")
+            compose.waitUntil(20000){service.state.value.project.clip(16)!=null&&!service.state.value.busy}
+            val p=service.state.value.project;assertTrue(p.clip(16)!!.isAudio);assertTrue(p.clip(16)!!.warp);assertNotNull(p.clip(0))
+            val files=ProjectFiles(context);val bounced=files.audioFile(p.asset(p.clip(16)!!.asset)!!)
+            WaveFile(bounced).use{wave->val values=FloatArray(1024);wave.read(1000,512,values);for(i in 0 until 512){assertEquals(samples[1000+i],values[i*2],0f);assertEquals(values[i*2],values[i*2+1],0f)}}
+            service.undo();compose.waitUntil(10000){service.state.value.project.clip(16)==null};service.redo();compose.waitUntil(10000){service.state.value.project.clip(16)!=null}
+            back();service.projectEdit{it.place(0,0.0)};compose.waitUntil(10000){service.state.value.project.regions.isNotEmpty()}
+            click("File");click("Share finished track")
+            val previous=service.state.value.finishedExports.map{it.path}.toSet()
+            click("Render finished track")
+            compose.waitUntil(30000){!service.state.value.busy&&service.state.value.finishedExports.any{it.path !in previous}}
+            finished=service.state.value.finishedExports.first{it.path !in previous}
+            val store=FinishedTracks(context);val f=store.file(finished!!.path)
+            WaveFile(f).use{wave->assertEquals(48000,wave.rate);assertEquals(480000L,wave.frames);val b=FloatArray(48000);wave.read(12000,24000,b);assertTrue(b.any{kotlin.math.abs(it)>.01f})}
+            val send=store.sendIntent(f.absolutePath)
+            assertEquals(Intent.ACTION_SEND,send.action);assertEquals("audio/wav",send.type)
+            val uri=requireNotNull(send.getParcelableExtra(Intent.EXTRA_STREAM,Uri::class.java))
+            assertEquals("content",uri.scheme);assertTrue(send.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION!=0);assertEquals(uri,send.clipData!!.getItemAt(0).uri)
+            context.contentResolver.openInputStream(uri)!!.use{input->assertArrayEquals(f.readBytes(),input.readBytes())}
+            assertTrue(runCatching{store.sendIntent(source.absolutePath)}.isFailure)
+            assertTrue(FinishedTracks(context).list().any{it.path==f.absolutePath})
+            shot("21-finished-track-phone")
+            compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
+            compose.onNodeWithTag("Share WAV 0").performScrollTo().assertIsDisplayed();shot("22-finished-track-landscape")
+            click("Share WAV 0")
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+            InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+            compose.waitUntil(10000){compose.onAllNodesWithTag("Share WAV 0").fetchSemanticsNodes().isNotEmpty()}
+            service.saveFinishedTrack(Uri.fromFile(saved),f.absolutePath)
+            compose.waitUntil(10000){saved.exists()&&saved.length()==f.length()&&!service.state.value.busy}
+            assertArrayEquals(f.readBytes(),saved.readBytes())
+            back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
+        }finally{
+            compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            finished?.let{runCatching{FinishedTracks(context).delete(it.path)}}
+            source.delete();saved.delete();binding.unbindService()
+        }
+    }
     @Test fun warpControlsUndoRotationArchiveAndNativeExport(){
         compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
         click("File");click("New project");click("Confirm project")

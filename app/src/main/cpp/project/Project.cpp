@@ -6,50 +6,13 @@
 #include <limits>
 namespace astra::project {
 namespace {
-uint16_t u16(const unsigned char* p){return static_cast<uint16_t>(p[0]|(p[1]<<8));}
-uint32_t u32(const unsigned char* p){return p[0]|(static_cast<uint32_t>(p[1])<<8)|(static_cast<uint32_t>(p[2])<<16)|(static_cast<uint32_t>(p[3])<<24);}
-struct File {std::FILE* f;~File(){if(f)std::fclose(f);}};
 struct Reader {
     std::span<const double> data;std::size_t at{};bool ok{true};
     double get(double lo,double hi){if(at>=data.size()){ok=false;return lo;}const double v=data[at++];if(!std::isfinite(v)||v<lo||v>hi){ok=false;return lo;}return v;}
     int integer(int lo,int hi){const double v=get(lo,hi);if(v!=std::floor(v))ok=false;return static_cast<int>(v);}
-    int64_t frame(){const double v=get(0,static_cast<double>(kSampleBudget/sizeof(float)));if(v!=std::floor(v))ok=false;return static_cast<int64_t>(v);}
+    int64_t frame(){const double v=get(0,static_cast<double>(kMaxSourceFrames));if(v!=std::floor(v))ok=false;return static_cast<int64_t>(v);}
 };
 void hash(uint64_t& h,double x){h^=std::bit_cast<uint64_t>(x);h*=1099511628211ULL;}
-}
-std::shared_ptr<const Sample> readSample(const char* path,std::size_t remainingBytes){
-    File file{std::fopen(path,"rb")};if(!file.f)return {};
-    unsigned char header[12];if(std::fread(header,1,12,file.f)!=12||std::memcmp(header,"RIFF",4)||std::memcmp(header+8,"WAVE",4))return {};
-    int format=0,channels=0,bits=0,rate=0,align=0;long offset=0;uint32_t bytes=0;
-    for(int chunk=0;chunk<10000;++chunk){unsigned char h[8];if(std::fread(h,1,8,file.f)!=8)break;const auto size=u32(h+4);const long start=std::ftell(file.f);
-        if(!std::memcmp(h,"fmt ",4)){unsigned char fmt[40]{};if(size<16||std::fread(fmt,1,std::min<uint32_t>(size,40),file.f)!=std::min<uint32_t>(size,40))return {};
-            format=u16(fmt);channels=u16(fmt+2);rate=static_cast<int>(u32(fmt+4));align=u16(fmt+12);bits=u16(fmt+14);
-            if(format==0xfffe){
-                constexpr unsigned char suffix[12]={0,0,16,0,128,0,0,170,0,56,155,113};
-                if(size<40||u16(fmt+16)<22||std::memcmp(fmt+28,suffix,12)||u16(fmt+26)!=0||u16(fmt+18)!=bits)return {};
-                format=u16(fmt+24);
-            }
-        }else if(!std::memcmp(h,"data",4)){offset=start;bytes=size;}
-        if(std::fseek(file.f,start+static_cast<long>(size)+(size&1U),SEEK_SET))return {};
-        if(offset&&format)break;
-    }
-    if(!offset||rate<8000||rate>384000||channels<1||channels>2||align!=channels*bits/8||
-       !((format==1&&(bits==16||bits==24||bits==32))||(format==3&&bits==32))||bytes==0||bytes%align)return {};
-    const std::size_t frames=bytes/static_cast<unsigned>(align);
-    if(frames>remainingBytes/(2*sizeof(float)))return {};
-    if(std::fseek(file.f,0,SEEK_END)||std::ftell(file.f)<offset+static_cast<long>(bytes)||std::fseek(file.f,offset,SEEK_SET))return {};
-    auto result=std::make_shared<Sample>();result->rate=rate;result->stereo.resize(frames*2);unsigned char block[8192];std::size_t at=0;
-    while(at<frames){const auto count=std::min<std::size_t>(sizeof(block)/align,frames-at);if(std::fread(block,align,count,file.f)!=count)return {};
-        for(std::size_t i=0;i<count;++i)for(int ch=0;ch<2;++ch){const auto* p=block+i*align+std::min(ch,channels-1)*(bits/8);float v=0;
-            if(format==3){const uint32_t raw=u32(p);v=std::bit_cast<float>(raw);}
-            else if(bits==16)v=static_cast<int16_t>(u16(p))/32768.f;
-            else if(bits==24){int32_t n=p[0]|(p[1]<<8)|(p[2]<<16);if(n&0x800000)n|=static_cast<int32_t>(0xff000000U);v=n/8388608.f;}
-            else v=static_cast<int32_t>(u32(p))/2147483648.f;
-            if(!std::isfinite(v))return {};
-            result->stereo[(at+i)*2+ch]=std::clamp(v,-8.f,8.f);
-        }
-        at+=count;
-    }return result;
 }
 bool Plan::decode(std::span<const double> data,const Samples& audio){
     if(data.size()>400000)return false;
@@ -110,7 +73,10 @@ bool Plan::decode(std::span<const double> data,const Samples& audio){
             hash(c.hash,c.warp);hash(c.hash,c.sourceBpm);hash(c.hash,double(c.warpStart));hash(c.hash,c.pitch);
         }
     }
-    return r.ok&&r.at==data.size();
+    if(!r.ok||r.at!=data.size())return false;
+    for(const auto& c:clips)if(c.present&&c.asset>=0)samples[c.asset]->prefetch(c.first+c.warpStart);
+    for(const auto& instrument:instruments){const auto warm=[&](const sampler::Zone& z){if(z.asset>=0)samples[z.asset]->prefetch(z.reverse?z.last-1:z.first);};warm(instrument.sample);for(const auto& pad:instrument.pads)warm(pad);}
+    return true;
 }
 std::unique_ptr<Plan> decodePlan(std::span<const double> data,const Samples& samples)noexcept{
     try{auto p=std::make_unique<Plan>();if(p->decode(data,samples))return p;}catch(const std::bad_alloc&){}return {};
@@ -136,6 +102,7 @@ void Sequencer::stop(bool clear)noexcept{for(int i=0;i<16;++i){release(i);clearA
 }
 void Sequencer::launch(int track,int sceneIndex,double beat,double quantum)noexcept{
     if(track<0||track>=16||sceneIndex< -1||sceneIndex>=8)return;
+    if(plan_&&sceneIndex>=0){const auto& c=plan_->clips[sceneIndex*16+track];if(c.present&&c.asset>=0)plan_->samples[c.asset]->prefetch(c.first+c.warpStart);}
     auto& t=tracks_[track];t.queued=sceneIndex;
     t.due=quantum>0?std::ceil((beat-1e-9)/quantum)*quantum:beat;t.due=std::max(beat,t.due);
 }
@@ -174,8 +141,8 @@ void Sequencer::tick(double beat,float bpm,std::array<fx::Stereo,16>& audio)noex
         else{const auto& sample=*plan_->samples[c.asset];if(c.warp&&kernel_){const auto* map=plan_->mode==1?&plan_->tempo:nullptr;
                 if(entered&&!continueWarp){warps_[i].start(c,sample,beat,phase,audioOffset,bpm,map);t.warpBpm=bpm;}
                 audio[i]=warps_[i].tick(sample,map);
-            }else if(kernel_)audio[i]=kernel_->read(sample.stereo.data(),t.audioPosition,c.first,c.last,t.audioBand,sample.rate==rate_);
-            else {const auto at=static_cast<int64_t>(t.audioPosition);if(at>=c.first&&at<c.last)audio[i]={sample.stereo[at*2],sample.stereo[at*2+1]};}
+            }else if(kernel_)audio[i]=kernel_->read(sample,t.reader,t.audioPosition,c.first,c.last,t.audioBand,sample.rate==rate_);
+            else {const auto at=static_cast<int64_t>(t.audioPosition);if(at>=c.first&&at<c.last){float pair[2]{};sample.read(at,pair,1,t.reader);audio[i]={pair[0],pair[1]};}}
             t.audioPosition+=sample.rate/rate_;}
         if(entered||automationClock_==0)for(int lane=0;lane<4;++lane){const auto& points=c.lanes[lane];const bool enabled=!points.empty();float value=0;
             if(enabled){auto at=std::upper_bound(points.begin(),points.end(),phase,[](double b,const Point& p){return b<p.beat;});

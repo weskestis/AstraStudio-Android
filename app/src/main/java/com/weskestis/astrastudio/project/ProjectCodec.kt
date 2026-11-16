@@ -12,7 +12,7 @@ object ProjectCodec {
     fun encode(d: ProjectDocument): String {
         require(d.valid())
         val p=d.project
-        val root=JSONObject().put("format","astra-studio").put("version",4).put("name",p.name)
+        val root=JSONObject().put("format","astra-studio").put("version",5).put("name",p.name)
             .put("bpm",d.bpm.toDouble()).put("master",d.master.toDouble()).put("limiterDrive",d.limiterDrive.toDouble()).put("limiterRelease",d.limiterRelease.toDouble())
             .put("signature",array(listOf(p.numerator,p.denominator))).put("mode",p.mode).put("quantization",p.quantization)
             .put("tempoEnabled",p.tempoEnabled).put("tempoPoints",array(p.tempoPoints.map{array(listOf(it.beat,it.bpm,if(it.ramp)1 else 0))}))
@@ -31,11 +31,11 @@ object ProjectCodec {
     private fun JSONArray.items(max: Int): IntRange {require(length()<=max){"Project exceeds supported limits."};return 0 until length()}
     private fun JSONObject.int(key: String): Int {val v=getDouble(key);require(v.isFinite()&&v==kotlin.math.floor(v)&&v in Int.MIN_VALUE.toDouble()..Int.MAX_VALUE.toDouble());return v.toInt()}
     private fun JSONArray.int(index: Int): Int {val v=getDouble(index);require(v.isFinite()&&v==kotlin.math.floor(v)&&v in Int.MIN_VALUE.toDouble()..Int.MAX_VALUE.toDouble());return v.toInt()}
-    private fun JSONObject.frame(key: String): Long {val v=getDouble(key);require(v.isFinite()&&v==kotlin.math.floor(v)&&v in 0.0..67108864.0);return v.toLong()}
-    private fun JSONArray.frame(index: Int): Long {val v=getDouble(index);require(v.isFinite()&&v==kotlin.math.floor(v)&&v in 0.0..67108864.0);return v.toLong()}
+    private fun JSONObject.frame(key: String): Long {val v=getDouble(key);require(v.isFinite()&&v==kotlin.math.floor(v)&&v in 0.0..AudioStorage.MAX_ASSET_FRAMES.toDouble());return v.toLong()}
+    private fun JSONArray.frame(index: Int): Long {val v=getDouble(index);require(v.isFinite()&&v==kotlin.math.floor(v)&&v in 0.0..AudioStorage.MAX_ASSET_FRAMES.toDouble());return v.toLong()}
     fun decode(text: String): ProjectDocument {
         require(text.toByteArray(Charsets.UTF_8).size<=MAX_JSON_BYTES){"Project description is too large."}
-        val r=JSONObject(text);require(r.getString("format")=="astra-studio"&&r.int("version") in 1..4){"Unsupported project format/version."}
+        val r=JSONObject(text);require(r.getString("format")=="astra-studio"&&r.int("version") in 1..5){"Unsupported project format/version."}
         val signature=r.getJSONArray("signature");require(signature.length()==2)
         val clips=r.getJSONArray("clips").let{a->a.items(128).map{i->val c=a.getJSONObject(i);val notes=c.getJSONArray("notes");val lanes=c.getJSONArray("automation");require(lanes.length()==4)
             Clip(c.int("slot"),c.getString("name"),c.getDouble("length"),notes.items(256).map{j->val n=notes.getJSONArray(j);require(n.length()==5);MidiNote(n.int(0),n.getDouble(1),n.getDouble(2),n.int(3),n.getDouble(4).toFloat())},

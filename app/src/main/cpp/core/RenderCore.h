@@ -65,7 +65,9 @@ public:
     bool setProject(std::span<const double> data,const project::Samples& samples) noexcept;
     project::Snapshot sequenceSnapshot() const noexcept;
     FxSnapshot effectsSnapshot() noexcept;
-    int outputLatencyFrames() const noexcept { return fx::Rack::latency + limiter_.latency(); }
+    int outputLatencyFrames() const noexcept { return sourceTrack_>=0?0:fx::Rack::latency + limiter_.latency(); }
+    // Offline renderer only, before render begins: tap before insert effects/faders/sends/master.
+    void sourceTrack(int track)noexcept{sourceTrack_=track;}
     void panic() noexcept { panic_.store(true, std::memory_order_release); }
     void render(float* interleavedStereo, int32_t frames) noexcept;
     CoreSnapshot snapshot() const noexcept;
@@ -118,6 +120,7 @@ private:
     float oscillator(double phase) const noexcept;
     void publish(float left, float right) noexcept;
 
+    int sourceTrack_{-1};
     SpscRing<Command, kQueueCapacity> commands_;
     std::array<Command, kScheduledCapacity> scheduled_{};
     std::size_t scheduledSize_{};

@@ -2,7 +2,8 @@
 #include "fx/FxPrimitives.h"
 #include <array>
 #include <cstdint>
-namespace astra::project { struct Sample; }
+#include "project/SampleStream.h"
+namespace astra::project { struct Sample; struct SampleCursor; }
 namespace astra::sampler {
 struct Zone {
     int asset{-1};int64_t first{},last{},loopFirst{},loopLast{};int root{60};
@@ -19,6 +20,7 @@ public:
     const float* at(int band,int phase)const noexcept{return table_.data()+(band*(phases+1)+phase)*taps;}
     static int bandFor(double step)noexcept;
     fx::Stereo read(const float* stereo,double position,int64_t first,int64_t last,int band,bool exactRate)const noexcept;
+    fx::Stereo read(const project::Sample&,project::SampleCursor&,double position,int64_t first,int64_t last,int band,bool exactRate)const noexcept;
 private:std::array<float,bands*(phases+1)*taps> table_{};
 };
 class Voice {
@@ -35,7 +37,7 @@ public:
     int asset()const noexcept{return zone_.asset;}
     const project::Sample* source()const noexcept{return sample_;}
 private:
-    fx::Stereo last_{},tail_{};int tailFrames_{};
+    project::SampleCursor reader_;fx::Stereo last_{},tail_{};int tailFrames_{};
     const project::Sample* sample_{};Zone zone_;double position_{},step_{},rate_{48000};
     float env_{},velocity_{},left_{},right_{},releaseStep_{};
     int stage_{},age_{},attackFrames_{},decayFrames_{},stageFrames_{},band_{};

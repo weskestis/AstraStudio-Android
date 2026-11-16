@@ -1,10 +1,20 @@
-# Astra Studio — Phase 9
+# Astra Studio — Phase 10
 
-Android 14+ native music workstation, built for **Sony Xperia 1 IV** first. Package `com.weskestis.astrastudio`, version **0.9.0-phase9**, green and black throughout. This is a development DAW, with implemented editing/playback features and explicit limits below; it is not yet a production-certified replacement for a desktop workstation.
+Android 14+ native music workstation, built for **Sony Xperia 1 IV** first. Package `com.weskestis.astrastudio`, version **0.10.0-phase10**, green and black throughout. This is a development DAW, with implemented editing/playback features and explicit limits below; it is not yet a production-certified replacement for a desktop workstation.
 
 ## Full workstation development goal
 
-The goal is a professional Android DAW with Ableton Live-level workflow depth and sound-design capability. Phase 13 is a possible release milestone within that goal, not the finish line. The [full roadmap and capability ledger](docs/ROADMAP.md) records the remaining scope, current limitations and completion criteria. Phase 9 adds tempo-following audio; Phase 10 (project audio streaming/scaling) is next.
+The goal is a professional Android DAW with Ableton Live-level workflow depth and sound-design capability. Phase 13 is a possible release milestone within that goal, not the finish line. The [full roadmap and capability ledger](docs/ROADMAP.md) records the remaining scope, current limitations and completion criteria. Phase 10 adds bounded project audio streaming, instrument phrase bounces and finished-track sharing. Device measurements and full-track freezing remain open; the next feature increments continue closing the capability ledger.
+
+## Larger sources and sharing
+
+Large project samples now stream through **2 MiB audio-page caches per asset**, with an active-bank audio-page/resident ceiling of **128 MiB**. Imports support **2 GiB per file**, 64 assets and **8 GiB of stereo-float-equivalent source frames**. Instrument, effect, UI and temporary export memory are additional. Master shows memory, streamed files, read misses and errors. Exports read independently and never capture a live cache underrun as successful audio.
+
+**File → Share finished track → Render finished track** keeps a completed WAV ready for **Share WAV** or **Save WAV as…**. The Android share sheet supports compatible installed apps. For SoundCloud, save the WAV and choose it from SoundCloud's Upload screen if it is absent from the share sheet. The app does not upload automatically. Exports remain available until you delete them.
+
+**Resample → Bounce instrument to clip** adds a float audio version on the same track while preserving the original. Insert effects, mixer, sends and master stay live. This is a one-cycle phrase bounce; full-track freeze/unfreeze remains planned.
+
+[Streaming behavior, memory accounting, sharing and limits](docs/STREAMING.md).
 
 ## Tempo-following audio
 
@@ -18,13 +28,13 @@ Open **Record audio** (or **File → Record & Sample Lab**). Allow microphone ac
 
 Choose a take or a project sample. Zoom, pan/pinch, drag a selection or enter exact source frames. **Analyze bass** shows an estimated fundamental, MIDI note/cents, periodicity, RMS/peak and a 20 Hz–2 kHz spectrum. **Use as sampler** maps the selection to the keyboard with an editable root note; **Add audio clip** puts it in the selected track's next free slot. Both preserve the original and support Undo. Optional 2 ms edge fades prevent hard-cut clicks; fades default off for unchanged samples.
 
-Recordings and **Open audio from storage** use disk-backed reading, preview and waveform windows. Each take/import supports up to 1 GiB of audio, while only extracted samples enter the unchanged **512 MiB / 64 asset project budget**. Full multitrack playback still uses decoded RAM, and its capacity limits remain unchanged. [Recording controls, fidelity and storage details](docs/RECORDING.md).
+Recordings and **Open audio from storage** use disk-backed reading, preview and waveform windows. Each take/import supports up to 1 GiB of audio, while extracted samples enter the **64-asset streamed project library**. Project imports have the separate Phase 10 limits above. [Recording controls, fidelity and storage details](docs/RECORDING.md).
 
 ## Sampler, drum rack and resampling
 
 Open **Sampler / drums** in the bottom device chain. **Drum rack → Load starter kit** supplies 16 original samples, including an 808. Load your own sounds through **Samples → Import samples** (multiple files) or **Import ZIP pack**. The keyboard sampler and 16 pads support pitch, trim, reverse, envelopes, looping, velocity and choke groups, with the same effects and WAV-export path as the synths.
 
-**Resample** turns the selected clip or full arrangement into a 32-bit float WAV in **Samples → Resampled**. Originals remain editable. Search, favorite and organize samples into collections; portable projects carry the browser and all assignments. Limits remain 64 assets / 512 MiB decoded audio. ZIP packs are supported; RAR is not included. Independent offline time stretching is described below.
+**Resample** turns the selected clip or full arrangement into a 32-bit float WAV in **Samples → Resampled**. Originals remain editable. Search, favorite and organize samples into collections; portable projects carry the browser and all assignments. The browser holds 64 assets; larger files stream under the Phase 10 limits above. ZIP packs are supported; RAR is not included. Independent offline time stretching is described below.
 
 **Android Back returns through the current screen**: detail → parent panel → workspace, then Arrangement → Session. It leaves the Activity only from Session with no open panel. The system keyboard closes first when visible. **Close ×** closes a whole panel directly.
 
@@ -42,7 +52,7 @@ Tap **Astra** beside File. Type a request or use **Speak**; choose **Offline pre
 
 - Offline examples generate riddim/psytrance/trance/house phrases, load patches, map LFOs and route sidechains without an account.
 - **Ask Gemini** uses your own Google AI Studio key, saved encrypted on the phone. The default `gemini-3.5-flash-lite` supports audio and has a free tier subject to Google's quotas and availability. Use a project without Cloud Billing to stay on the free tier; Astra cannot inspect your billing tier or prevent charges on a paid project. No shared key is included in this public repository or APK.
-- **Attach audio** adds a local file up to 8 MiB; it is sent to Google only when you choose Ask Gemini. MP3 is practical for longer songs. This listening attachment limit is separate from the DAW's 512 MiB decoded-audio project budget. There is no automatic live-engine listening.
+- **Attach audio** adds a local file up to 8 MiB; it is sent to Google only when you choose Ask Gemini. MP3 is practical for longer songs. This listening attachment limit is separate from the DAW's streamed project storage limits. There is no automatic live-engine listening.
 - **Copy for Gemini** lets you paste a prepared prompt into the Gemini app/website, attach audio there yourself, then paste its response into **Command JSON → Validate JSON**. This manual route needs no API key in Astra.
 - Google says free-tier submissions may be used to improve its products. Requests include your text, selected clip notes, track/patch names and mix summary, plus any attached audio. Audio files, API keys and network chat are not stored in `.astra` projects.
 
@@ -50,7 +60,7 @@ Full workflow, command reference and limitations: [Astra Phase 5](docs/ASTRA.md)
 
 ## Install and make a track
 
-Install `AstraStudio_Phase9_0.9.0.apk` over Phase 1–8. The development signing certificate is unchanged. GitHub fallback: **Actions → Android Phase 9 → a successful run → AstraStudio-Phase9-APK**.
+Install `AstraStudio_Phase10_0.10.0.apk` over Phase 1–9. The development signing certificate is unchanged. GitHub fallback: **Actions → Android Phase 10 → a successful run → AstraStudio-Phase10-APK**.
 
 1. **File → Load starter song** opens Green circuit: original, editable MIDI drums, bass and lead, two scenes and a 16-bar arrangement. Save your current project first.
 2. Tap **Start audio**, then **Play**. Session Play launches Scene 1; Arrangement Play begins at the white cursor. Clip/scene launch buttons follow the selected bar, quarter-note or eighth-note quantization.
@@ -140,4 +150,4 @@ The debug key in `signing/astra-development.keystore` is deliberately public (`a
 - `docs/SYNTHESIS.md`: signal path, modulation units, memory/thread contract and DSP limits.
 - `docs/VALIDATION.md`: performed checks and remaining hardware validation.
 
-Phase 5 adds the validated command interface and optional Gemini listening. Phase 6 adds sample instruments, packs and resampling. Phase 7 adds tempo maps, independent offline pitch/time processing, improved sample-rate conversion and float export. Phase 8 adds microphone recording and the disk-backed Sample Lab. Phase 9 adds source-tempo/downbeat warp with independent pitch. Streamed multitrack playback, imported wavetables, full MIDI expression and the other workstation gaps remain tracked in [ROADMAP.md](docs/ROADMAP.md).
+Phase 5 adds the validated command interface and optional Gemini listening. Phase 6 adds sample instruments, packs and resampling. Phase 7 adds tempo maps, independent offline pitch/time processing, improved sample-rate conversion and float export. Phase 8 adds microphone recording and the disk-backed Sample Lab. Phase 9 adds source-tempo/downbeat warp with independent pitch. Phase 10 adds bounded streamed playback, source bounces and finished-track sharing. Full-track freeze, imported wavetables, full MIDI expression and the other workstation gaps remain tracked in [ROADMAP.md](docs/ROADMAP.md).

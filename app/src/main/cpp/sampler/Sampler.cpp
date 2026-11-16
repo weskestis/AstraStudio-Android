@@ -27,6 +27,15 @@ fx::Stereo Kernel::read(const float* stereo,double position,int64_t first,int64_
         const double weight=a[i]+mix*(b[i]-a[i]);left+=stereo[frame*2]*weight;right+=stereo[frame*2+1]*weight;}
     return {static_cast<float>(left),static_cast<float>(right)};
 }
+fx::Stereo Kernel::read(const project::Sample& sample,project::SampleCursor& cursor,double position,int64_t first,int64_t last,int band,bool exactRate)const noexcept {
+    if(!sample.stream)return read(sample.stereo.data(),position,first,last,band,exactRate);
+    if(position<first||position>=last)return {};
+    const auto base=static_cast<int64_t>(position);const double fraction=position-base;
+    if(exactRate&&fraction==0){float pair[2]{};sample.read(base,pair,1,cursor);return {pair[0],pair[1]};}
+    const auto begin=base-(taps/2-1);const auto lo=std::max(begin,first),hi=std::min(begin+taps,last);
+    std::array<float,taps*2> block{};if(hi>lo)sample.read(lo,block.data()+(lo-begin)*2,int(hi-lo),cursor);
+    return read(block.data(),taps/2-1+fraction,0,taps,band,false);
+}
 void Voice::start(const project::Sample* sample,const Zone& z,int note,float velocity,double outputRate,bool drum)noexcept {
     const auto stolen=active_?last_:fx::Stereo{};silence();tail_=stolen;tailFrames_=32;
     if(!sample||z.first<0||z.last<=z.first||z.last>sample->frames()||!std::isfinite(outputRate)||outputRate<=0)return;
@@ -54,7 +63,7 @@ fx::Stereo Voice::tick(const Kernel& kernel)noexcept {
     else if(stage_==1){env_=1+(zone_.sustain-1)*static_cast<float>(++stageFrames_)/decayFrames_;if(stageFrames_>=decayFrames_){stage_=2;env_=zone_.sustain;}}
     else if(stage_==3){env_=std::max(0.f,env_-releaseStep_);if(env_<=1e-7f){silence();return {};}}
     if(stage_==2&&env_<=1e-7f){silence();return {};}
-    auto value=kernel.read(sample_->stereo.data(),position_,zone_.first,zone_.last,band_,step_==1);
+    auto value=kernel.read(*sample_,reader_,position_,zone_.first,zone_.last,band_,step_==1);
     const bool looping=zone_.loop&&held_;
     const double remaining=(zone_.reverse?position_-zone_.first+1:zone_.last-position_)/step_;
     if(age_<32)++age_;

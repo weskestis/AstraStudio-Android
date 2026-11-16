@@ -397,6 +397,7 @@ void RenderCore::render(float* output, int32_t frames) noexcept {
         if (std::abs(left) > kCeiling || std::abs(right) > kCeiling) ++clipped_;
         const auto limited=limiter_.tick({left,right});left=limited.l;right=limited.r;
         if(meterTrack_==16)analyzer_.push(limited,16);
+        if(sourceTrack_>=0&&sourceTrack_<kTrackCount){left=dry[sourceTrack_].l;right=dry[sourceTrack_].r;}
         output[2 * i] = left;
         output[2 * i + 1] = right;
         peakL = std::max(peakL, std::abs(left));

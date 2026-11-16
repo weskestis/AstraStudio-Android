@@ -3,6 +3,7 @@
 #include "sampler/Sampler.h"
 #include "TempoMap.h"
 #include "WarpVoice.h"
+#include "SampleStream.h"
 #include <atomic>
 #include <span>
 #include <string>
@@ -10,10 +11,7 @@
 namespace astra::project {
 constexpr int kTracks=16,kScenes=8,kClips=128,kAssets=64,kMaxRegions=512,kMaxNotes=256,kMaxPoints=64;
 constexpr uint32_t kSequenceId=0x40000000U;
-constexpr std::size_t kSampleBudget=512ULL*1024*1024;
-struct Sample { int rate{};std::vector<float> stereo;int64_t frames()const noexcept{return static_cast<int64_t>(stereo.size()/2);} };
 using Samples=std::array<std::shared_ptr<const Sample>,kAssets>;
-std::shared_ptr<const Sample> readSample(const char* path,std::size_t remainingBytes);
 struct Note {double start{},length{};int pitch{};float velocity{};};
 struct Event {double beat{};int note{};bool on{};};
 struct Point {double beat{};float value{};};
@@ -53,7 +51,7 @@ public:
     Snapshot snapshot()const noexcept;
 private:
     struct Track {int scene{-1},queued{-2};double launchBeat{},due{},previous{-1};int slot{-1},region{-1};uint64_t hash{};
-        std::size_t cursor{};std::array<uint32_t,kMaxNotes> held{};double audioPosition{},warpBpm{},previousAbsolute{},lastAudioOffset{};int audioBand{};float phase{};
+        std::size_t cursor{};std::array<uint32_t,kMaxNotes> held{};double audioPosition{},warpBpm{},previousAbsolute{},lastAudioOffset{};int audioBand{};float phase{};SampleCursor reader;
         std::array<float,4> automation{};std::array<bool,4> automated{};};
     void release(int track)noexcept;void clearAutomation(int track)noexcept;
     void enter(int track,int slot,int region,double phase,double audioOffset,double elapsed,float bpm)noexcept;

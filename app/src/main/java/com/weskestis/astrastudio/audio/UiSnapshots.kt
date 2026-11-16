@@ -11,7 +11,7 @@ private val idleEffects=FxStats()
  * The service and meter/timeline panels still receive the complete live state.
  */
 internal fun StudioState.editorSnapshot()=copy(
-    stats=AudioStats(running=stats.running),sequence=idleSequence,fxStats=idleEffects,progress=0f
+    stats=AudioStats(running=stats.running),sequence=idleSequence,fxStats=idleEffects,progress=0f,storage=storage.copy(missedFrames=0,diskReads=0)
 )
 internal fun StudioState.sessionSnapshot()=StudioState(
     project=project,tracks=tracks,patches=patches,sequence=sequence.copy(phase=idleSequence.phase)

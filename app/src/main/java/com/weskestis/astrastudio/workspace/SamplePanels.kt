@@ -117,7 +117,7 @@ import kotlin.math.roundToInt
     }
     Text("SAMPLES · ${s.project.assets.size}/64",color=Green,fontWeight=FontWeight.Bold)
     Tools{Action("Import samples",!s.busy,click=importFiles);Action("Import ZIP pack",!s.busy,click=importPack);FilterChip(favorites,{favorites=!favorites},label={Text("★ Favorites")})}
-    Text("Select multiple audio files, or a ZIP pack. Mono/stereo WAV and formats supported by Android. 512 MiB decoded audio per project.",fontSize=12.sp,color=Muted)
+    Text("Select multiple audio files, or a ZIP pack. Mono/stereo WAV and formats supported by Android. 2 GiB per file; 8 GiB stereo-float-equivalent sources per project. Large samples stream through fixed audio pages.",fontSize=12.sp,color=Muted)
     OutlinedTextField(query,{query=it},label={Text("Search samples")},singleLine=true,modifier=Modifier.fillMaxWidth().testTag("Sample search"))
     Tools{FilterChip(group=="",{group=""},label={Text("All")});s.project.assets.map{it.group}.distinct().sorted().forEach{label->FilterChip(group==label,{group=label},label={Text(label.ifBlank{"Unsorted"})})}}
     val matches=s.project.assets.filter{(!favorites||it.favorite)&&(group.isEmpty()||it.group==group)&&it.name.contains(query,true)}
@@ -131,6 +131,8 @@ import kotlin.math.roundToInt
     Tools{FilterChip(!whole,{whole=false},label={Text("Selected clip")});FilterChip(whole,{whole=true},label={Text("Arrangement")})}
     Text(if(whole)"Render the full arrangement once, including effects and sends." else "Render ${s.project.clip(slot)?.name?:"the selected clip"} once in isolation, including its effects, sends and master processing. Other tracks do not drive sidechains in an isolated bounce.",fontSize=13.sp)
     NumberField("Effect tail · seconds (0–30)",tail,{tail=it})
+    Text("Bounce instrument creates one clip cycle before insert effects, mixer, sends and master. The new clip stays on this track, retains automation and can follow tempo with Warp. Original notes/audio stay available. Instrument release across repeated cycles may differ; this is a phrase bounce, not full-track freeze.",fontSize=12.sp,color=Muted)
+    Action("Bounce instrument to clip",!s.busy&&s.project.clip(slot)!=null,"Bounce instrument"){service.bounceInstrument(slot)}
     Action("Resample to browser",!s.busy&&tail.toFloatOrNull()?.let{it.isFinite()&&it in 0f..30f}==true&&(if(whole)s.project.regions.isNotEmpty()else s.project.clip(slot)!=null),"Render resample"){service.resample(slot,whole,tail.toFloat())}
     Text(s.message,color=Green,modifier=Modifier.padding(vertical=12.dp))
     Action("Open samples",click=browse)

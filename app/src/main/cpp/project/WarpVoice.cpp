@@ -11,10 +11,10 @@ struct WarpVoice::State {
     double rate{},sourceRatio{},origin{},end{},anchorBeat{},anchorPhase{},framesPerBeat{},bpm{},consumed{};
     int band{},cursor{block},available{},latency{};
     int64_t generated{},first{},last{};
-    bool identity{};
+    bool identity{};SampleCursor reader;
     void read(const Sample& sample,double position,int count) noexcept {
         for(int i=0;i<count;++i){const double p=(position+i)*sourceRatio;
-            const auto value=p<end&&p>=first?kernel->read(sample.stereo.data(),p,first,last,band,sample.rate==rate):fx::Stereo{};
+            const auto value=p<end&&p>=first?kernel->read(sample,reader,p,first,last,band,sample.rate==rate):fx::Stereo{};
             in[0][i]=value.l;in[1][i]=value.r;
         }
     }
@@ -64,7 +64,7 @@ void WarpVoice::start(const Clip& clip,const Sample& sample,double beat,double p
 fx::Stereo WarpVoice::tick(const Sample& sample,const TempoMap* map) noexcept {
     auto& s=*state_;
     if(s.identity){const double p=s.consumed*s.sourceRatio;s.consumed+=1;
-        return p<s.end?s.kernel->read(sample.stereo.data(),p,s.first,s.last,s.band,sample.rate==s.rate):fx::Stereo{};}
+        return p<s.end?s.kernel->read(sample,s.reader,p,s.first,s.last,s.band,sample.rate==s.rate):fx::Stereo{};}
     if(s.cursor>=s.available)s.process(sample,map,State::block);
     const int at=s.cursor++;const double l=s.out[0][at],r=s.out[1][at];
     return {std::isfinite(l)?static_cast<float>(l):0.f,std::isfinite(r)?static_cast<float>(r):0.f};

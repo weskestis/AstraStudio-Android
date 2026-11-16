@@ -1,3 +1,9 @@
+# Phase 10 validation in progress
+
+Development **0.10.0-phase10 / versionCode 10**, Android 14+. Local assembly, lint and unit tests pass. Native streaming fixtures and full regression suites are passing; final CI/Android results and the verified APK identity will be recorded after the interface run. See [streaming, bounce and sharing scope](STREAMING.md).
+
+---
+
 # Phase 9 validation
 
 Development **0.9.0-phase9 / versionCode 9**, Android 14+.

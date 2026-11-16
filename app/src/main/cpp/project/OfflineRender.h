@@ -8,5 +8,5 @@ constexpr int kMixValues=4+16*6;
 // stereo PCM. Return 0 success, 1 invalid configuration, 2 I/O, 3 cancellation.
 int renderWave(const char* path,std::span<const double> wire,const Samples& samples,
     const std::array<synth::Patch,16>& patches,const std::array<fx::Config,16>& effects,
-    const std::array<float,kMixValues>& mix,int rate,float tail,std::atomic<bool>& cancel,std::atomic<float>& progress,bool floating=false);
+    const std::array<float,kMixValues>& mix,int rate,float tail,std::atomic<bool>& cancel,std::atomic<float>& progress,bool floating=false,int sourceTrack=-1);
 }

@@ -42,7 +42,7 @@ object StretchSettings {
         require(bpm.isFinite()&&bpm in 30f..300f&&beats.isFinite()&&beats in .0625..65536.0&&semitones.isFinite()&&semitones in -24.0..24.0){"Choose a valid length and pitch (−24 to +24 semitones)."}
         val frames=(beats*60/bpm*a.rate).roundToLong();val input=clip.last-clip.first
         require(frames>0&&frames>=input*.5&&frames<=input*2.0){"Stretch length must be 50–200% of the trimmed source."}
-        require(project.assets.size<64&&frames+project.assets.sumOf{it.frames}<=67108864){"This render exceeds the 64-sample / 512 MiB audio budget."}
+        require(AudioStorage.canAdd(project,frames)){"This render exceeds the 2 GiB WAV, 8 GiB source-frame or 64 sample limits."}
         return frames
     }
 }

@@ -25,10 +25,10 @@ Use as sampler creates a float stereo cut at the source rate and loads it into t
 
 ## Storage and remaining limits
 
-- 16 tracks, 8 scenes, 128 voices, 64 project assets and 512 MiB decoded stereo audio remain unchanged.
-- Extracting must fit alongside existing project audio. A long take can be inspected without loading all of it, but this is not arbitrary disk-streamed multitrack playback.
+- Track/scene/voice/asset limits remain 16/8/128/64. Phase 10 replaces full decoded-project loading with bounded streaming; see [current project storage limits](STREAMING.md).
+- Extracting must fit alongside retained sources under the project storage limits. Both Sample Lab and Phase 10 project playback read large sources through bounded windows/pages.
 - Takes are shared across projects on the device. Portable `.astra` archives include extracted project samples, not unselected originals. App data removal/uninstall removes private takes. Use Save original WAV or Save selection WAV to back them up directly to a chosen Android document location without loading them into the engine. Direct selection export copies frames without edge fades; the fade toggle applies only to project extraction.
-- Version 3 project format is unchanged. Automatic live tempo warping and disk-streamed arrangement voices remain future work; existing Stretch still renders a new fixed-duration clip.
+- Phase 9 adds live Warp, and Phase 10 adds streamed project playback and schema-v5 saves. Existing Stretch still renders a new fixed-duration clip.
 
 ## Platform sources
 
