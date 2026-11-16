@@ -587,8 +587,8 @@ class AudioService : Service() {
         val a=requireNotNull(d.project.asset(asset));val track=slot%ProjectLimits.TRACKS
         var p=d.project.instrument(track){Slicing.instrument(a,it)}
         if(midi){val target=if(p.clip(slot)==null)slot else p.emptySlot(track)?:error("This track needs an empty clip slot.");p=p.put(Slicing.clip(a,target,d.bpm))}
-        d.copy(project=p)
-    };message("Slices assigned to pads on Track ${slot%ProjectLimits.TRACKS+1}. Original audio retained; Undo restores the previous kit.")}}
+        val next=d.copy(project=p);require(next.valid());message("Slices assigned to pads on Track ${slot%ProjectLimits.TRACKS+1}. Original audio retained; Undo restores the previous kit.");next
+    }}}
     fun recordingForSlices(path: String){work("Opening recording for slicing",{d->
         val source=labFile(path);val out=File(files.audioDir,"${java.util.UUID.randomUUID()}.wav")
         try{WaveFile(source).use{w->require(AudioStorage.canAdd(d.project,w.frames));w.extract(out,0,w.frames){check(!cancelled.get()){"Cancelled."}}}

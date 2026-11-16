@@ -87,8 +87,8 @@ import kotlin.math.*
     Text("Slice ${slice+1}: frames ${markers[slice]}–${markers[slice+1]} · MIDI ${36+slice}",fontSize=12.sp,color=Muted)
     Tools{Action("Preview slice",!s.busy&&!capture.active,"Preview slice"){service.previewSelection(service.samplePath(asset),markers[slice],markers[slice+1])};Action("Stop preview"){service.stopSelectionPreview()}}
     Text("Replaces Track ${slot%ProjectLimits.TRACKS+1}'s pad assignments. Each pad references this source with editable trim and short fades. Undo restores the previous kit.",fontSize=13.sp)
-    Tools{Action("Send slices to pads",!s.busy,"Apply slices"){if(asset.slices.isEmpty())service.sliceMarkers(asset.id,markers);service.applySlices(asset.id,slot,false)}
-        Action("Pads + MIDI clip",!s.busy,"Slices with MIDI"){if(asset.slices.isEmpty())service.sliceMarkers(asset.id,markers);service.applySlices(asset.id,slot,true)}}
+    Action("Send slices to pads",!s.busy,"Apply slices"){if(asset.slices.isEmpty())service.sliceMarkers(asset.id,markers);service.applySlices(asset.id,slot,false)}
+        Action("Pads + MIDI clip",!s.busy,"Slices with MIDI"){if(asset.slices.isEmpty())service.sliceMarkers(asset.id,markers);service.applySlices(asset.id,slot,true)}
     Text("The MIDI clip follows source timing at the current BPM. One-shot slices play their full range; changing BPM changes their trigger timing, not their audio duration.",fontSize=12.sp,color=Muted)
 }
 

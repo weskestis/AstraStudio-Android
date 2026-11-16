@@ -61,9 +61,11 @@ class WorkspaceSmokeTest {
     // Fetch after synchronization, then measure and request scrolling on the UI thread.
     private fun SemanticsNodeInteraction.scrollOnUiThread(): SemanticsNodeInteraction {
         val node=fetchSemanticsNode()
-        compose.runOnUiThread {
-            val parent=generateSequence(node.parent){it.parent}.firstOrNull{it.config.contains(SemanticsActions.ScrollBy)}
-                ?: throw AssertionError("No scrollable parent")
+        val parents=generateSequence(node.parent){it.parent}.filter{it.config.contains(SemanticsActions.ScrollBy)}.toList().asReversed()
+        check(parents.isNotEmpty()){"No scrollable parent"}
+        // Bring the row into its vertical viewport first, then scroll within it.
+        // Each layout pass must finish before measuring the next ancestor.
+        for(parent in parents){compose.runOnUiThread {
             val coordinates=parent.layoutInfo.coordinates
             val viewport=coordinates.boundsInParent().translate(coordinates.parentLayoutCoordinates?.positionInRoot()?:Offset.Zero)
             val bounds=Rect(node.positionInRoot,node.size.toSize())
@@ -75,9 +77,10 @@ class WorkspaceSmokeTest {
             if(parent.config.getOrNull(SemanticsProperties.HorizontalScrollAxisRange)?.reverseScrolling==true)dx=-dx
             if(parent.layoutInfo.layoutDirection==LayoutDirection.Rtl)dx=-dx
             if(parent.config.getOrNull(SemanticsProperties.VerticalScrollAxisRange)?.reverseScrolling==true)dy=-dy
+            if(!parent.config.contains(SemanticsProperties.HorizontalScrollAxisRange))dx=0f
+            if(!parent.config.contains(SemanticsProperties.VerticalScrollAxisRange))dy=0f
             if(dx!=0f||dy!=0f)check(parent.config[SemanticsActions.ScrollBy].action?.invoke(dx,dy)==true)
-        }
-        compose.waitForIdle()
+        };compose.waitForIdle()}
         return this
     }
     private fun click(tag: String){val node=compose.onNodeWithTag(tag);runCatching{node.scrollOnUiThread()};node.assertIsDisplayed().performClick()}
@@ -103,6 +106,10 @@ class WorkspaceSmokeTest {
             click("Slice marker 1");click("Remove slice marker");compose.waitUntil(10000){service.state.value.project.assets.single().slices.size==16}
             click("Slices with MIDI");compose.waitUntil(20000){service.state.value.project.clip(0)?.notes?.size==15&&service.state.value.project.instruments[0].mode==2}
             assertEquals(1,service.state.value.project.assets.size);val slices=service.state.value.project.assets.single().slices
+            service.projectEdit{p->p.copy(clips=p.clips+(1..7).map{Clip(it*ProjectLimits.TRACKS)})};compose.waitUntil(10000){service.state.value.project.clips.size==8}
+            val full=service.state.value.project;service.applySlices(asset.id,0,true)
+            compose.waitUntil(10000){service.state.value.message.contains("empty clip slot")};assertEquals(full,service.state.value.project)
+
             back();compose.onNodeWithTag("Slice source search").scrollOnUiThread().assertExists();back()
             click("Edit pad");click("Add sample layer");compose.waitUntil(10000){service.state.value.project.instruments[0].zones(0).size==2}
             click("Choose sample");click("Sample ${asset.id}");click("Assign sample");compose.waitUntil(10000){service.state.value.project.instruments[0].zone(0,1).asset==asset.id}
