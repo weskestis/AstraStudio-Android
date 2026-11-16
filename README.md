@@ -1,10 +1,14 @@
-# Astra Studio — Phase 13 / Sound packs and imported wavetables
+# Astra Studio — Phase 14 / Advanced sampling and layered instruments
 
-Android 14+ native music workstation, built for **Sony Xperia 1 IV** first. Package `com.weskestis.astrastudio`, version **0.13.0-soundpacks**, green and black throughout. This is a development DAW, with implemented editing/playback features and explicit limits below; it is not yet a production-certified replacement for a desktop workstation.
+Android 14+ native music workstation, built for **Sony Xperia 1 IV** first. Package `com.weskestis.astrastudio`, version **0.14.0-sampling**, green and black throughout. This is a development DAW, with implemented editing/playback features and explicit limits below; it is not yet a production-certified replacement for a desktop workstation.
 
 ## Full workstation development goal
 
-The goal is a professional Android DAW with Ableton Live-level workflow depth and sound-design capability. Phase 13 adds the reusable sound library within that goal. The [full roadmap and capability ledger](docs/ROADMAP.md) records the remaining scope, current limitations and completion criteria. Phase 10 adds bounded project audio streaming, instrument phrase bounces and finished-track sharing. Phase 12 adds full Arrangement source freeze/unfreeze, three-generation autosave recovery and on-device performance reports. Physical device measurements and the broader capability ledger remain open.
+The goal is a professional Android DAW with Ableton Live-level workflow depth and sound-design capability. Phase 14 adds slicing, sample layers and reusable instruments within that goal. The [full roadmap and capability ledger](docs/ROADMAP.md) records the remaining scope, current limitations and completion criteria. Phase 10 adds bounded project audio streaming, instrument phrase bounces and finished-track sharing. Phase 12 adds full Arrangement source freeze/unfreeze, three-generation autosave recovery and on-device performance reports. Physical device measurements and the broader capability ledger remain open.
+
+## Advanced sampling and reusable instruments
+
+**File → Slice to pads** opens transient detection, equal/manual slice markers and source-frame waveform zoom. Send up to **16 slices** to pads, optionally with a timed MIDI clip. **Sampler / Drum rack → Add layer** combines up to **four independent samples per pad or sampler**, with pitch, envelope, reverse, fades, quiet-edge snap and loop crossfade. **Saved instruments** keeps kits with independent audio across projects. **Resample directly to sampler** renders a processed phrase or Arrangement at 48/96/192 kHz into a different track, with Undo. Original recordings and installed pack files remain intact. [Controls, limits and compatibility](docs/SAMPLING.md).
 
 ## All Rift sound packs in Astra
 
@@ -20,7 +24,7 @@ Select a track, then **Freeze track** in its device rack. Render the full Arrang
 
 Phase 11 expands the complete project to **50 tracks**, **8 scenes / 400 clip slots** and **2,048 arrangement regions**. Every track supports the existing synth, sampler/drums, audio clips, mixer, inserts, sends, automation, Astra commands, resampling and master export. Tap **Track … / 50** beside Session/Arrangement to jump to any track. The grid and timeline compose only visible tracks and retain the selected track through rotation and Back navigation.
 
-Existing projects migrate automatically: old clip/scene positions, instruments, routing and arrangement regions stay together. New saves use JSON version 8 and native wire version 7; Phase 12 and earlier projects remain compatible. Keep an original portable copy if you also need to open it in an older APK, which cannot read the new format.
+Existing projects migrate automatically: old clip/scene positions, instruments, routing and arrangement regions stay together. New saves use JSON version 9 and native wire version 8; Phase 13 and earlier projects remain compatible. Keep an original portable copy if you also need to open it in an older APK, which cannot read the new format.
 
 The **128 shared instrument voices**, 64 audio assets and existing streamed-audio budgets are unchanged. Fifty stored tracks are not a guarantee of fifty simultaneous heavy synth/effects chains on a phone. Live playback uses the device rate; 192 kHz is an offline master option. Hardware MIDI channels still address tracks 1–16; clips, Keys and Astra address all 50. [Capacity, migration and measurements](docs/CAPACITY.md).
 

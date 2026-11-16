@@ -38,8 +38,8 @@ fx::Stereo Kernel::read(const project::Sample& sample,project::SampleCursor& cur
 }
 void Voice::start(const project::Sample* sample,const Zone& z,int note,float velocity,double outputRate,bool drum)noexcept {
     const auto stolen=active_?last_:fx::Stereo{};silence();tail_=stolen;tailFrames_=32;
-    if(!sample||z.first<0||z.last<=z.first||z.last>sample->frames()||!std::isfinite(outputRate)||outputRate<=0)return;
-    sample_=sample;zone_=z;rate_=outputRate;held_=true;active_=true;stage_=0;stageFrames_=age_=0;velocity_=velocity;
+    if(!sample||z.first<0||z.last<=z.first||z.last>sample->frames()||!std::isfinite(outputRate)||outputRate<=0||z.fadeIn<0||z.fadeOut<0||z.crossfade<0||z.fadeIn>z.last-z.first||z.fadeOut>z.last-z.first||z.loopFirst<z.first||z.loopLast>z.last||z.loopFirst>=z.loopLast||z.crossfade>(z.loopLast-z.loopFirst)/2)return;
+    sample_=sample;zone_=z;rate_=outputRate;held_=true;active_=true;travelled_=0;reader_={};loopReader_={};stage_=0;stageFrames_=age_=0;velocity_=velocity;
     step_=sample->rate/outputRate*std::exp2(((drum?0:note-z.root)+z.pitch)/12.0);
     band_=Kernel::bandFor(step_);
     position_=z.reverse?z.last-1.0:static_cast<double>(z.first);
@@ -65,19 +65,36 @@ fx::Stereo Voice::tick(const Kernel& kernel)noexcept {
     if(stage_==2&&env_<=1e-7f){silence();return {};}
     auto value=kernel.read(*sample_,reader_,position_,zone_.first,zone_.last,band_,step_==1);
     const bool looping=zone_.loop&&held_;
+    const double overlap=looping?static_cast<double>(zone_.crossfade):0;
+    if(overlap>0&&position_>=zone_.loopFirst&&position_<zone_.loopLast){
+        const double distance=zone_.reverse?position_-zone_.loopFirst:zone_.loopLast-position_;
+        if(distance<=overlap){
+            const double other=zone_.reverse?zone_.loopLast-overlap+(position_-zone_.loopFirst):zone_.loopFirst+(position_-(zone_.loopLast-overlap));
+            const auto head=kernel.read(*sample_,loopReader_,other,zone_.first,zone_.last,band_,step_==1);
+            const float mix=static_cast<float>(std::clamp(1-distance/overlap,0.,1.));
+            value=value*(1-mix)+head*mix;
+        }
+    }
     const double remaining=(zone_.reverse?position_-zone_.first+1:zone_.last-position_)/step_;
     if(age_<32)++age_;
     float fade=static_cast<float>(age_)/32;
     if(!looping)fade*=std::min(1.f,static_cast<float>(remaining)/32);
-    else if(position_>=zone_.loopFirst&&position_<zone_.loopLast){
+    else if(overlap==0&&position_>=zone_.loopFirst&&position_<zone_.loopLast){
         const double edge=std::min(position_-zone_.loopFirst+1,zone_.loopLast-position_);
         fade*=std::min(1.f,static_cast<float>(edge/std::min(32.0,(zone_.loopLast-zone_.loopFirst)/4.0)));}
+    if(zone_.fadeIn>0)fade*=static_cast<float>(std::min(1.,travelled_/zone_.fadeIn));
+    if(!looping&&zone_.fadeOut>0)fade*=static_cast<float>(std::clamp((zone_.reverse?position_-zone_.first:zone_.last-1-position_)/zone_.fadeOut,0.,1.));
+    travelled_+=step_;
     value.l*=env_*velocity_*left_*fade;value.r*=env_*velocity_*right_*fade;
     position_+=zone_.reverse?-step_:step_;
-    if(looping){const double span=static_cast<double>(zone_.loopLast-zone_.loopFirst);
-        if(!zone_.reverse&&position_>=zone_.loopLast)position_=zone_.loopFirst+std::fmod(position_-zone_.loopFirst,span);
-        if(zone_.reverse&&position_<zone_.loopFirst){const double remainder=std::fmod(zone_.loopFirst-position_,span);position_=remainder==0?zone_.loopFirst:zone_.loopLast-remainder;}}
+    if(looping){const double span=static_cast<double>(zone_.loopLast-zone_.loopFirst)-overlap;
+        if(!zone_.reverse&&position_>=zone_.loopLast)position_=zone_.loopFirst+overlap+std::fmod(position_-zone_.loopLast,span);
+        if(zone_.reverse&&position_<zone_.loopFirst){const double remainder=std::fmod(zone_.loopFirst-position_,span);position_=remainder==0?(overlap>0?zone_.loopLast-overlap:zone_.loopFirst):zone_.loopLast-overlap-remainder;}}
     if(tailFrames_>0){value=value+tail_*(tailFrames_/32.f);--tailFrames_;}
     last_=value;return value;
 }
+void LayerVoice::start(const Sources& sources,const Zone& base,const std::array<Zone,3>& extra,int note,float velocity,double rate,bool drum)noexcept {
+    for(int i=0;i<4;++i){const auto& z=i==0?base:extra[i-1];if(z.asset>=0&&z.asset<64&&sources[z.asset])voices_[i].start(sources[z.asset].get(),z,note,velocity,rate,drum);else voices_[i].silence();}
+}
+
 }

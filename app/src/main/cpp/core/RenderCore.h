@@ -80,7 +80,7 @@ private:
         int32_t track{};
         int32_t note{};
         synth::SynthVoice synth;
-        sampler::Voice sample;bool sampled{};
+        sampler::LayerVoice sample;bool sampled{};
         bool active{};
         uint64_t age{};
     };

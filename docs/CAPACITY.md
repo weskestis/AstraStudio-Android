@@ -1,6 +1,6 @@
 # Phase 11 — 50-track capacity
 
-Development 0.12.0-phase12, Android 14+, Sony Xperia 1 IV target.
+Development 0.14.0-sampling, Android 14+, Sony Xperia 1 IV target.
 
 ## Working with 50 tracks
 
@@ -8,13 +8,15 @@ Tap **Track … / 50** beside Session and Arrangement. Select a track to jump to
 
 A track can host the existing synth or sampler/drum instrument, audio clips, eight insert types, four automation lanes and two shared effect sends. Track count is distinct from device layering or unlimited parallel instrument racks. Multiple tracks can be arranged and mixed together. The virtual keyboard, clip editor, recorder extraction, stretch, bounce, Astra proposals and sidechain-source picker accept all 50 tracks. Physical MIDI channels retain the current 1–16 to Track 1–16 mapping; controller banks are future work.
 
-| Resource | Phase 12 limit |
+| Resource | Current limit |
 | --- | --- |
 | Mixer / arrangement tracks | 50 |
 | Session scenes | 8 |
 | Total clip slots | 400 |
 | Arrangement regions | 2,048, nonoverlapping within each track |
 | Instrument voices | 128 shared across the project |
+| Sample layers | 4 per sampler/pad; up to 512 players within the shared voice pool |
+| Slices / saved instruments | 16 per source / 256 local presets |
 | Notes / automation points | 256 notes per clip; 64 points per each of four lanes |
 | Source assets | 64 |
 | Imported source file | 2 GiB |
@@ -26,7 +28,7 @@ A track can host the existing synth or sampler/drum instrument, audio clips, eig
 
 ## Project compatibility
 
-JSON version 8 adds imported-table assignments and source cycle metadata; version 7 adds freeze metadata and includes an explicit track count of 50. Versions 1–5 require their original 16-track arrays, then expand new tracks with empty/default state. Clip and region slots migrate from `scene * 16 + track` to `scene * 50 + track`; simply increasing a list size would move old clips onto incorrect tracks. Older sample instruments, tempo maps and warp state retain their existing version migrations. Native wire version 7 also accepts versions 1–6 and remaps clip, region and warp slots.
+JSON version 9 adds sample layers, fades and slice markers; version 8 adds imported-table assignments and source cycle metadata; version 7 adds freeze metadata and includes an explicit track count of 50. Versions 1–5 require their original 16-track arrays, then expand new tracks with empty/default state. Clip and region slots migrate from `scene * 16 + track` to `scene * 50 + track`; simply increasing a list size would move old clips onto incorrect tracks. Older sample instruments, tempo maps and warp state retain their existing version migrations. Native wire version 8 adds sample layers/fades and also accepts versions 1–7 and remaps clip, region and warp slots.
 
 For example, old slot 127 (Scene 8, Track 16) becomes slot 365, while new slot 399 is Scene 8, Track 50. Malformed dimensions and out-of-range legacy slots are rejected. Portable archives and autosave use the same codec. New saves cannot open in the older APK; retain an original portable copy when backward compatibility is needed.
 
@@ -43,3 +45,5 @@ Phase 12 freezes consume one of the same 64 asset slots per track. Originals and
 See [validation evidence](VALIDATION.md) for the tested package and CI result.
 
 Phase 13 adds a separate on-disk sound-pack library, up to 20,000 sounds. Installed packs and previews do not occupy the project's 64 source slots. Imported oscillator tables share the 128 MiB active source-memory budget with PCM/pages. See [sound packs](SOUND_PACKS.md).
+
+Phase 14 details and CPU/storage implications: [advanced sampling](SAMPLING.md).

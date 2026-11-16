@@ -1,4 +1,4 @@
-name: Android Phase 13 - Sound Packs
+name: Android Phase 14 - Advanced Sampling
 on:
   push:
     branches: [main]
@@ -54,14 +54,14 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: AstraStudio-Phase13-SoundPacks-APK
+          name: AstraStudio-Phase14-Sampling-APK
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Phase13-SoundPacks-test-reports
+          name: Phase14-Sampling-test-reports
           path: |
             app/build/reports/tests/
             app/build/reports/lint-results-debug.html
@@ -104,7 +104,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Phase13-SoundPacks-interface-validation
+          name: Phase14-Sampling-interface-validation
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/

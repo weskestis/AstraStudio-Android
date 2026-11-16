@@ -23,7 +23,7 @@ import com.weskestis.astrastudio.audio.*
 import com.weskestis.astrastudio.project.*
 import kotlin.math.roundToInt
 
-@Composable internal fun SampleInstrumentPanel(s: StudioState,t: Int,slot: Int,service: AudioService,start: ()->Unit,browse: (Int)->Unit) {
+@Composable internal fun SampleInstrumentPanel(s: StudioState,t: Int,slot: Int,service: AudioService,start: ()->Unit,browse: (Int,Int)->Unit,library: ()->Unit,slice: ()->Unit) {
     val instrument=s.project.instruments[t]
     var selected by rememberSaveable(t){mutableIntStateOf(0)}
     var editing by rememberSaveable(t){mutableStateOf(false)}
@@ -31,32 +31,39 @@ import kotlin.math.roundToInt
     Tools{listOf("Synth","Sampler","Drum rack").forEachIndexed{i,label->FilterChip(instrument.mode==i,{service.instrument(t,i);editing=false},label={Text(label)},modifier=Modifier.testTag("Instrument $i"))}}
     Tools{Action(if(s.stats.running)"Audio on" else "Start audio",tag="Sample audio"){if(!s.stats.running)start()};Action("Stop notes"){service.panic()};Action(if(s.recording>=0)"Finish recording" else "Record MIDI",s.stats.running&&!s.busy,"Sample record"){service.record(slot)}}
     Text(s.message,color=Muted,fontSize=12.sp)
+    Tools{Action("Saved instruments",tag="Saved instruments",click=library);Action("Slice to pads",tag="Open slicer",click=slice)}
     if(instrument.mode==0){Text("Choose Sampler or Drum rack to play samples. Your synth patch is retained.");return}
     if(instrument.mode==2&&!editing){
         Text("DRUM RACK · MIDI 36–51",color=Green,fontWeight=FontWeight.Bold,modifier=Modifier.padding(vertical=8.dp))
         Text("Tap to play and select. Edit pad opens its sound settings. Record MIDI captures your performance.",fontSize=12.sp,color=Muted)
         for(row in 0..3)Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(6.dp)){
             for(col in 0..3){val pad=row*4+col;val zone=instrument.pads[pad];val asset=s.project.asset(zone.asset)
-                val label="Pad ${pad+1}: ${asset?.name?:"Empty"}"
+                val playable=instrument.zones(pad).any{it.asset>=0}
+                val label="Pad ${pad+1}: ${asset?.name?:if(playable)"Layered"else "Empty"}"
                 Box(Modifier.weight(1f).heightIn(min=76.dp).padding(vertical=3.dp).background(if(selected==pad)Color(0xFF174D26)else Color(0xFF102016)).border(1.dp,if(selected==pad)Green else Color(0xFF32633E))
-                    .testTag("Pad $pad").semantics{contentDescription=label;role=Role.Button;onClick{selected=pad;if(s.stats.running&&asset!=null)service.hitPad(t,pad);true}}
-                    .pointerInput(t,pad,s.stats.running,asset?.id){detectTapGestures(onPress={selected=pad;if(s.stats.running&&asset!=null){val id=service.nextTouchId();service.noteOn(t,36+pad,id);try{tryAwaitRelease()}finally{service.noteOff(t,id)}}},onLongPress={selected=pad;editing=true})},contentAlignment=Alignment.Center){
+                    .testTag("Pad $pad").semantics{contentDescription=label;role=Role.Button;onClick{selected=pad;if(s.stats.running&&playable)service.hitPad(t,pad);true}}
+                    .pointerInput(t,pad,s.stats.running,playable){detectTapGestures(onPress={selected=pad;if(s.stats.running&&playable){val id=service.nextTouchId();service.noteOn(t,36+pad,id);try{tryAwaitRelease()}finally{service.noteOff(t,id)}}},onLongPress={selected=pad;editing=true})},contentAlignment=Alignment.Center){
                     Column(Modifier.padding(5.dp),horizontalAlignment=Alignment.CenterHorizontally){Text("${pad+1} · ${36+pad}",fontSize=11.sp,color=Green);Text(asset?.name?:"Empty",fontSize=11.sp,maxLines=2)}
                 }
             }
         }
-        Tools{Action("Edit pad ${selected+1}",tag="Edit pad"){editing=true};Action("Load sample",!s.busy){browse(selected)};Action("Load starter kit",!s.busy,"Starter kit"){service.factoryKit(t)}}
+        Tools{Action("Edit pad ${selected+1}",tag="Edit pad"){editing=true};Action("Load sample",!s.busy){browse(selected,0)};Action("Load starter kit",!s.busy,"Starter kit"){service.factoryKit(t)}}
         Text("The starter kit contains 16 original drums and an 808. Loading it replaces this track's pad assignments; Undo restores them.",fontSize=12.sp,color=Muted)
     } else {
         val pad=if(instrument.mode==2)selected else -1
-        val zone=instrument.zone(pad)
+        var selectedLayer by rememberSaveable(t,pad){mutableIntStateOf(0)}
+        val layer=selectedLayer.coerceIn(0,instrument.zones(pad).lastIndex)
+        val zone=instrument.zone(pad,layer)
+        Tools{instrument.zones(pad).indices.forEach{i->FilterChip(layer==i,{selectedLayer=i},label={Text("Layer ${i+1}")},modifier=Modifier.testTag("Sample layer $i"))}
+            Action("Add layer",instrument.zones(pad).size<4&&!s.busy,"Add sample layer"){service.addSampleLayer(t,pad);selectedLayer=instrument.zones(pad).size}
+            Action(if(layer==0)"Clear layer" else "Remove layer",!s.busy,"Remove sample layer"){service.removeSampleLayer(t,pad,layer);selectedLayer=0}}
         if(pad>=0)Text("PAD ${pad+1} · MIDI ${36+pad}",color=Green,modifier=Modifier.testTag("Pad editor"))
-        ZoneEditor(zone,s.project.asset(zone.asset),pad,change={edit->service.sampleEdit(t,pad,edit)},browse={browse(pad)})
+        ZoneEditor(zone,s.project.asset(zone.asset),pad,change={edit->service.sampleLayerEdit(t,pad,layer,edit)},browse={browse(pad,layer)},snap={service.snapSample(t,pad,layer)})
         if(pad<0){Text("PLAY THE SAMPLER",color=Green,modifier=Modifier.padding(top=12.dp));Keyboard(t,s.stats.running,service)}
     }
 }
 
-@Composable private fun ZoneEditor(z: SampleZone,a: AudioAsset?,pad: Int,change: ((SampleZone)->SampleZone)->Unit,browse: ()->Unit) {
+@Composable private fun ZoneEditor(z: SampleZone,a: AudioAsset?,pad: Int,change: ((SampleZone)->SampleZone)->Unit,browse: ()->Unit,snap: ()->Unit) {
     Text(a?.name?:"No sample assigned",color=Green,fontWeight=FontWeight.Bold)
     Action(if(a==null)"Choose sample" else "Replace sample",tag="Choose sample",click=browse)
     if(a==null)return
@@ -75,9 +82,16 @@ import kotlin.math.roundToInt
     if(ranges){
         NumberField("Start frame",first,{first=it});NumberField("End frame (exclusive)",last,{last=it});NumberField("Loop start frame",loopFirst,{loopFirst=it});NumberField("Loop end frame",loopLast,{loopLast=it})
         val f=first.toLongOrNull();val l=last.toLongOrNull();val lf=loopFirst.toLongOrNull();val ll=loopLast.toLongOrNull()
-        Action("Apply sample range",f!=null&&l!=null&&lf!=null&&ll!=null&&f>=0&&l<=a.frames&&f<l&&lf>=f&&ll<=l&&lf<ll,"Apply sample range"){change{it.copy(first=f!!,last=l!!,loopFirst=lf!!,loopLast=ll!!)}}
-        Action("Reset full range"){change{it.copy(first=0,last=a.frames,loopFirst=0,loopLast=a.frames)}}
+        Action("Apply sample range",f!=null&&l!=null&&lf!=null&&ll!=null&&f>=0&&l<=a.frames&&f<l&&lf>=f&&ll<=l&&lf<ll,"Apply sample range"){change{it.range(f!!,l!!,lf!!,ll!!)}}
+        Action("Reset full range"){change{it.range(0,a.frames,0,a.frames)}}
     }
+    Action("Snap edges near zero",tag="Snap sample edges",click=snap)
+    val trimMs=(z.last-z.first).toFloat()/a.rate*1000
+    ValueSlider("Fade in · ms",z.fadeIn.toFloat()/a.rate*1000,0f..trimMs.coerceAtMost(1000f),change={v->change{it.copy(fadeIn=(v*a.rate/1000).toLong().coerceIn(0,it.last-it.first))}})
+    ValueSlider("Fade out · ms",z.fadeOut.toFloat()/a.rate*1000,0f..trimMs.coerceAtMost(1000f),change={v->change{it.copy(fadeOut=(v*a.rate/1000).toLong().coerceIn(0,it.last-it.first))}})
+    if(z.loop){val limit=((z.loopLast-z.loopFirst)/2).toFloat()/a.rate*1000
+        if(limit>0)ValueSlider("Loop crossfade · ms",z.crossfade.toFloat()/a.rate*1000,0f..limit.coerceAtMost(1000f),change={v->change{it.copy(crossfade=(v*a.rate/1000).toLong().coerceIn(0,(it.loopLast-it.loopFirst)/2))}})
+        Text("Crossfade overlaps the loop end and beginning. Each repeat is shorter by the overlap; use 0 for unchanged loop timing.",fontSize=12.sp,color=Muted)}
     if(pad<0)ValueSlider("Root MIDI note",z.root.toFloat(),0f..127f,change={v->change{it.copy(root=v.roundToInt())}})
     ValueSlider("Pitch · semitones",z.pitch,-48f..48f,change={v->change{it.copy(pitch=v)}})
     ValueSlider("Volume",z.gain,0f..2f,change={v->change{it.copy(gain=v)}})
@@ -98,11 +112,11 @@ import kotlin.math.roundToInt
     }
 }
 
-@Composable internal fun SampleBrowser(s: StudioState,t: Int,slot: Int,targetPad: Int?,service: AudioService,start: ()->Unit,importFiles: ()->Unit,importPack: ()->Unit,editSynth: ()->Unit,assigned: ()->Unit){
+@Composable internal fun SampleBrowser(s: StudioState,t: Int,slot: Int,targetPad: Int?,service: AudioService,start: ()->Unit,importFiles: ()->Unit,importPack: ()->Unit,editSynth: ()->Unit,layer: Int=0,assigned: ()->Unit){
     var query by rememberSaveable{mutableStateOf("")};var favorites by rememberSaveable{mutableStateOf(false)};var group by rememberSaveable{mutableStateOf("")};var selected by rememberSaveable{mutableIntStateOf(-1)}
     var library by rememberSaveable{mutableStateOf(false)}
     Tools{FilterChip(!library,{library=false;service.stopPreview()},label={Text("Project samples")});FilterChip(library,{library=true;service.stopPreview()},label={Text("Sound packs")},modifier=Modifier.testTag("Sound packs tab"))}
-    if(library){PackBrowser(s,t,slot,targetPad,service,importPack,assigned,editSynth);return}
+    if(library){PackBrowser(s,t,slot,targetPad,service,importPack,assigned,editSynth,layer);return}
     PanelBackHandler(selected>=0){selected=-1;service.stopPreview()}
     val asset=s.project.asset(selected)
     if(asset!=null){
@@ -110,7 +124,7 @@ import kotlin.math.roundToInt
         Text("${number(asset.frames.toDouble()/asset.rate)} seconds · ${asset.rate} Hz · ${asset.frames} frames",fontSize=12.sp,color=Muted)
         Tools{Action("▶ Preview",s.stats.running&&!s.busy,"Preview sample"){service.previewSample(asset.id)};Action("Stop preview"){service.stopPreview()};Action(if(asset.favorite)"★ Favorite" else "☆ Favorite",tag="Favorite sample"){service.sampleFavorite(asset.id)}}
         if(!s.stats.running)Action("Start audio to preview",click=start)
-        if(targetPad!=null)Action(if(targetPad<0)"Use in sampler" else "Use on pad ${targetPad+1}",!s.busy,"Assign sample"){service.assignSample(t,targetPad,asset.id);assigned()}
+        if(targetPad!=null)Action(if(targetPad<0)"Use in sampler" else "Use on pad ${targetPad+1}",!s.busy,"Assign sample"){service.assignSample(t,targetPad,asset.id,layer);assigned()}
         else Tools{Action("Use in sampler",!s.busy){service.assignSample(t,-1,asset.id);assigned()};Action("Add audio clip",!s.busy){service.sampleClip(asset.id,slot)}}
         var name by remember(asset.id,asset.group){mutableStateOf(asset.group)}
         OutlinedTextField(name,{name=it.take(64)},label={Text("Collection")},singleLine=true,modifier=Modifier.fillMaxWidth())
@@ -129,6 +143,8 @@ import kotlin.math.roundToInt
 }
 
 @Composable internal fun ResamplePanel(s: StudioState,slot: Int,service: AudioService,browse: ()->Unit){
+    var rate by rememberSaveable{mutableIntStateOf(48000)}
+    var destination by rememberSaveable(slot){mutableStateOf(((0 until ProjectLimits.TRACKS).firstOrNull{it!=slot%ProjectLimits.TRACKS&&s.project.clips.none{c->c.track==it}&&s.project.instruments[it].assets().isEmpty()}?:((slot+1)%ProjectLimits.TRACKS)).plus(1).toString())}
     var whole by rememberSaveable{mutableStateOf(false)};var tail by rememberSaveable{mutableStateOf("1")}
     Text("TURN A PHRASE INTO A SAMPLE",color=Green,fontWeight=FontWeight.Bold)
     Tools{FilterChip(!whole,{whole=false},label={Text("Selected clip")});FilterChip(whole,{whole=true},label={Text("Arrangement")})}
@@ -136,8 +152,13 @@ import kotlin.math.roundToInt
     NumberField("Effect tail · seconds (0–30)",tail,{tail=it})
     Text("Bounce instrument creates one clip cycle before insert effects, mixer, sends and master. The new clip stays on this track, retains automation and can follow tempo with Warp. Original notes/audio stay available. Instrument release across repeated cycles may differ; this is a phrase bounce, not full-track freeze.",fontSize=12.sp,color=Muted)
     Action("Bounce instrument to clip",!s.busy&&s.project.clip(slot)!=null,"Bounce instrument"){service.bounceInstrument(slot)}
-    Action("Resample to browser",!s.busy&&tail.toFloatOrNull()?.let{it.isFinite()&&it in 0f..30f}==true&&(if(whole)s.project.regions.isNotEmpty()else s.project.clip(slot)!=null),"Render resample"){service.resample(slot,whole,tail.toFloat())}
+    Tools{listOf(48000,96000,192000).forEach{hz->FilterChip(rate==hz,{rate=hz},label={Text("${hz/1000} kHz")})}}
+    Action("Resample to browser",!s.busy&&tail.toFloatOrNull()?.let{it.isFinite()&&it in 0f..30f}==true&&(if(whole)s.project.regions.isNotEmpty()else s.project.clip(slot)!=null),"Render resample"){service.resample(slot,whole,tail.toFloat(),rate)}
+    NumberField("Destination track · 1–50",destination,{destination=it})
+    val target=destination.toIntOrNull()?.minus(1)
+    Action("Resample directly to sampler",!s.busy&&target!=null&&target in 0 until ProjectLimits.TRACKS&&target!=slot%ProjectLimits.TRACKS&&tail.toFloatOrNull()?.let{it.isFinite()&&it in 0f..30f}==true&&(if(whole)s.project.regions.isNotEmpty()else s.project.clip(slot)!=null),"Resample to sampler"){service.resample(slot,whole,tail.toFloat(),rate,target!!)}
+    Text("Replaces the destination instrument; Undo restores it. Pick a fresh track with neutral effects. The original track is preserved.",fontSize=12.sp,color=Muted)
     Text(s.message,color=Green,modifier=Modifier.padding(vertical=12.dp))
     Action("Open samples",click=browse)
-    Text("Creates a 48 kHz, 32-bit float WAV in the Resampled collection. The source remains editable. Use the result on a fresh track to avoid processing its effects twice.",fontSize=12.sp,color=Muted)
+    Text("Creates a 32-bit float WAV at the selected rate in the Resampled collection. The source remains editable. Use the result on a fresh track to avoid processing its effects twice.",fontSize=12.sp,color=Muted)
 }

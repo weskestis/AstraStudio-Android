@@ -207,11 +207,14 @@ void RenderCore::noteOn(const Command& c) noexcept {
     const project::Plan* plan=activePlan_>=0?planSlots_[activePlan_].plan.get():nullptr;
     if(plan&&plan->mode==1&&plan->frozen[c.track].asset>=0)return;
     const sampler::Instrument* instrument=plan?&plan->instruments[c.track]:nullptr;
-    const sampler::Zone* zone=nullptr;
+    const sampler::Zone* zone=nullptr;const std::array<sampler::Zone,3>* extra=nullptr;
     if(instrument&&instrument->mode){
         if(instrument->mode==2){if(c.note<36||c.note>=52)return;zone=&instrument->pads[c.note-36];}else zone=&instrument->sample;
-        if(zone->asset<0||!plan->samples[zone->asset])return;
-        if(instrument->mode==2&&zone->choke)for(auto& v:voices_)if(v.active&&v.sampled&&v.track==c.track&&v.sample.group()==zone->choke)v.sample.choke();
+        extra=&instrument->layers[instrument->mode==2?c.note-35:0];
+        bool hasSource=false;unsigned chokeMask=0;
+        const auto inspect=[&](const sampler::Zone& z){if(z.asset>=0&&plan->samples[z.asset]){hasSource=true;if(z.choke>0)chokeMask|=1u<<z.choke;}};
+        inspect(*zone);for(const auto& z:*extra)inspect(z);if(!hasSource)return;
+        if(instrument->mode==2&&chokeMask)for(auto& v:voices_)if(v.active&&v.sampled&&v.track==c.track)v.sample.choke(chokeMask);
     }
     Voice* selected = nullptr;
     for (auto& voice : voices_) {
@@ -235,7 +238,7 @@ void RenderCore::noteOn(const Command& c) noexcept {
     selected->note = c.note;
     const auto& track = tracks_[c.track];
     selected->sampled=zone!=nullptr;
-    if(zone){selected->synth.silence();selected->sample.start(plan->samples[zone->asset].get(),*zone,c.note,c.value,sampleRate_,instrument->mode==2);}
+    if(zone){selected->synth.silence();selected->sample.start(plan->samples,*zone,*extra,c.note,c.value,sampleRate_,instrument->mode==2);}
     else {selected->sample.silence();selected->synth.tables(plan?plan->table(c.track,0):nullptr,plan?plan->table(c.track,1):nullptr);selected->synth.start(c.note, c.value, c.noteId * 2654435761U, track.renderPatch, sampleRate_, track.freePhases, bpm_);}
     selected->active = true;
     selected->age = voiceAge_++;
@@ -272,7 +275,7 @@ void RenderCore::apply(const Command& c) noexcept {
             // Retire every raw sample pointer before its owning old plan can be reclaimed.
             for(auto& v:voices_)if(v.active){const int mode=next->instruments[v.track].mode;
                 const int oldMode=activePlan_>=0?planSlots_[activePlan_].plan->instruments[v.track].mode:0;
-                if((next->mode==1&&next->frozen[v.track].asset>=0)||mode!=oldMode||(!v.sampled&&!v.synth.usesTables(next->table(v.track,0),next->table(v.track,1)))||(v.sampled&&(v.sample.asset()<0||next->samples[v.sample.asset()].get()!=v.sample.source()))){v.active=false;v.sample.silence();v.synth.silence();}}
+                if((next->mode==1&&next->frozen[v.track].asset>=0)||mode!=oldMode||(!v.sampled&&!v.synth.usesTables(next->table(v.track,0),next->table(v.track,1)))||(v.sampled&&!v.sample.references(next->samples))){v.active=false;v.sample.silence();v.synth.silence();}}
             sequence_.activate(next);tempoClock_.reset();const int old=activePlan_;activePlan_=c.note;
             if(old>=0)planSlots_[old].busy.store(false,std::memory_order_release);
             break;

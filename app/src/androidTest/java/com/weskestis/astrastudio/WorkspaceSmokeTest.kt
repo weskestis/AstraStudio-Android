@@ -81,6 +81,71 @@ class WorkspaceSmokeTest {
         return this
     }
     private fun click(tag: String){val node=compose.onNodeWithTag(tag);runCatching{node.scrollOnUiThread()};node.assertIsDisplayed().performClick()}
+    @Test fun slicesLayersLibraryAndPortableProject(){
+        compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
+        click("File");click("New project");click("Confirm project")
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val binding=ServiceTestRule();val service=(binding.bindService(Intent(context,AudioService::class.java)) as AudioService.LocalBinder).service
+        val fixture=File(context.cacheDir,"phase14-transients.wav");val archive=File(context.cacheDir,"phase14-kit.astra");val output=File(context.cacheDir,"phase14-master.wav")
+        FloatWaveWriter(fixture,48000,1).use{w->val data=FloatArray(48000){i->val n=i%12000;if(n<6000)(.4*kotlin.math.sin(2*Math.PI*55*n/48000)*(1-n/6000.0)).toFloat()else 0f};w.write(data,data.size)}
+        var presetId=""
+        fun document()=service.state.value.let{ProjectDocument(it.project,it.bpm,it.master,it.limiterDrive,it.limiterRelease,it.tracks,it.patches,it.effects)}
+        try{
+            service.importToLab(Uri.fromFile(fixture));compose.waitUntil(30000){!service.state.value.busy&&service.recorder.state.value.latest.contains("phase14")}
+            val original=service.recorder.state.value.latest
+            service.recordingForSlices(original);compose.waitUntil(30000){!service.state.value.busy&&service.state.value.project.assets.size==1}
+            val asset=service.state.value.project.assets.single();assertTrue(File(original).isFile)
+            click("Choose track");compose.onNodeWithTag("Track picker").performScrollToIndex(0);click("Select track 1")
+            click("Sample instrument");click("Open slicer");compose.waitUntil(10000){compose.onAllNodesWithTag("Slice source title").fetchSemanticsNodes().isNotEmpty()}
+            click("Detect slices");compose.waitUntil(30000){!service.state.value.busy&&service.state.value.project.assets.single().slices.size>=4}
+            compose.onNodeWithTag("Slice waveform").scrollOnUiThread();shot("38-slicer-transients-phone")
+            click("Equal slices");compose.waitUntil(10000){service.state.value.project.assets.single().slices.size==17}
+            click("Slice marker 1");click("Remove slice marker");compose.waitUntil(10000){service.state.value.project.assets.single().slices.size==16}
+            click("Slices with MIDI");compose.waitUntil(20000){service.state.value.project.clip(0)?.notes?.size==15&&service.state.value.project.instruments[0].mode==2}
+            assertEquals(1,service.state.value.project.assets.size);val slices=service.state.value.project.assets.single().slices
+            back();compose.onNodeWithTag("Slice source search").scrollOnUiThread().assertExists();back()
+            click("Edit pad");click("Add sample layer");compose.waitUntil(10000){service.state.value.project.instruments[0].zones(0).size==2}
+            click("Choose sample");click("Sample ${asset.id}");click("Assign sample");compose.waitUntil(10000){service.state.value.project.instruments[0].zone(0,1).asset==asset.id}
+            compose.onNodeWithTag("Sample layer 1").scrollOnUiThread().assertIsSelected()
+            click("Sample reverse");service.sampleLayerEdit(0,0,1){it.copy(pitch=-12f,fadeIn=48,fadeOut=96,gain=.2f)}
+            compose.waitUntil(10000){service.state.value.project.instruments[0].zone(0,1).pitch == -12f}
+            assertFalse(service.state.value.project.instruments[0].zone(0).reverse)
+            shot("39-layered-pad-phone")
+            click("Saved instruments");compose.onNodeWithTag("Instrument preset name").scrollOnUiThread().performTextReplacement("Phase14 kit")
+            compose.onNodeWithTag("Instrument preset name").performImeAction();click("Save instrument")
+            compose.waitUntil(30000){!service.state.value.busy&&service.state.value.instrumentPresets.any{it.name=="Phase14 kit"}}
+            presetId=service.state.value.instrumentPresets.last{it.name=="Phase14 kit"}.id
+            compose.onNodeWithTag("Instrument library").scrollOnUiThread();shot("40-instrument-library")
+            click("Close panel");click("File");click("New project");click("Confirm project");compose.waitUntil(10000){service.state.value.project.assets.isEmpty()}
+            click("Sample instrument");click("Saved instruments");click("Load instrument $presetId")
+            compose.waitUntil(30000){!service.state.value.busy&&service.state.value.project.instruments[0].zones(0).getOrNull(1)?.asset?.let{it>=0}==true}
+            assertEquals(slices,service.state.value.project.assets.single().slices);assertEquals(-12f,service.state.value.project.instruments[0].zone(0,1).pitch,0f)
+            val loaded=document();service.undo();compose.waitUntil(10000){service.state.value.project.assets.isEmpty()};service.redo();compose.waitUntil(10000){service.state.value.project.assets.isNotEmpty()&&!service.state.value.busy}
+            compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
+            compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
+            compose.onNodeWithTag("Instrument library").scrollOnUiThread().assertExists();shot("41-library-landscape");back();compose.onNodeWithTag("Instrument 2").assertExists();click("Close panel");compose.onNodeWithTag("Session grid").assertExists()
+            val d=loaded.copy(project=loaded.project.put(Clip(0,length=1.0).add(0.0,36,.5)).place(0,0.0))
+            val files=ProjectFiles(context);files.saveArchive(d,Uri.fromFile(archive),AtomicBoolean(false));val restored=files.openArchive(Uri.fromFile(archive),AtomicBoolean(false))
+            assertEquals(d.project.instruments,restored.project.instruments);assertEquals(slices,restored.project.assets.single().slices)
+            val bridge=AudioBridge();try{assertTrue(bridge.loadAssets(restored.project.assets.map{it.id to files.audioFile(it)}));assertEquals(0,bridge.export(output,restored,192000,.1f,false));WaveFile(output).use{w->assertEquals(192000,w.rate);val b=FloatArray(19200*2);w.read(0,19200,b);assertTrue(b.any{kotlin.math.abs(it)>1e-5})}}finally{bridge.close();restored.project.assets.forEach{files.audioFile(it).delete()}}
+        }finally{if(presetId.isNotEmpty())service.deleteInstrument(presetId);fixture.delete();archive.delete();output.delete();compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_PORTRAIT};binding.unbindService()}
+    }
+    @Test fun direct192kResamplePreservesSourceAndSupportsUndo(){
+        compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
+        click("File");click("New project");click("Confirm project")
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val binding=ServiceTestRule();val service=(binding.bindService(Intent(context,AudioService::class.java)) as AudioService.LocalBinder).service
+        val fixture=File(context.cacheDir,"phase14-bounce.wav")
+        FloatWaveWriter(fixture,48000,1).use{w->val b=FloatArray(12000){(.3*kotlin.math.sin(2*Math.PI*110*it/48000)).toFloat()};w.write(b,b.size)}
+        try{
+            service.importAudio(Uri.fromFile(fixture),0);compose.waitUntil(30000){!service.state.value.busy&&service.state.value.project.clip(0)!=null};val original=service.state.value.project.clip(0)
+            click("Choose track");compose.onNodeWithTag("Track picker").performScrollToIndex(0);click("Select track 1")
+            click("Resample");compose.onNodeWithText("192 kHz").scrollOnUiThread().performClick();click("Resample to sampler")
+            compose.waitUntil(60000){!service.state.value.busy&&service.state.value.project.assets.size==2}
+            val p=service.state.value.project;assertEquals(original,p.clip(0));assertEquals(1,p.instruments[1].mode);assertEquals(192000,p.asset(p.instruments[1].sample.asset)!!.rate)
+            shot("42-resample-direct-192k");back();service.undo();compose.waitUntil(15000){service.state.value.project.assets.size==1&&!service.state.value.busy};assertEquals(0,service.state.value.project.instruments[1].mode)
+        }finally{fixture.delete();binding.unbindService()}
+    }
     @Test fun installedPacksBrowseEditUndoTablesAndPortableProjects(){
         compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
         click("File");click("New project");click("Confirm project")

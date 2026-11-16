@@ -60,7 +60,7 @@ import java.util.Date
 @Composable internal fun PerformancePanel(s: StudioState,service: AudioService){
     val clipboard=LocalClipboardManager.current;val p=s.performance;val a=s.stats
     val report=buildString {
-        appendLine("Astra Studio 0.13.0 · ${Build.MANUFACTURER} ${Build.MODEL} · Android ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}")
+        appendLine("Astra Studio 0.14.0 · ${Build.MANUFACTURER} ${Build.MODEL} · Android ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}")
         appendLine("50 tracks; ${s.project.frozen.size} frozen Arrangement tracks; ${s.project.assets.size} source assets")
         appendLine("Audio: ${a.sampleRate} Hz; buffer ${number(a.bufferMs)} ms; ${if(a.exclusive)"exclusive" else "shared/idle"}")
         appendLine("DSP current ${number(a.cpuLoad*100)}%; highest polled ${number(p.peakCpu*100)}%; ${p.polls} active polls / ${p.elapsedSeconds}s")

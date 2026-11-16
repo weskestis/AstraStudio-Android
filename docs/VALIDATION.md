@@ -1,3 +1,11 @@
+# Phase 14 — advanced sampling (validation in progress)
+
+Development **0.14.0-sampling / versionCode 15**, Android 14+. [Workflow and limits](SAMPLING.md).
+
+Local APK assembly and Android lint pass. All 235 Kotlin tests pass, including 27 new sampling/preset cases. Native and Android integration evidence will be recorded after the current validation run completes. Historical results below describe their original versions, not this candidate.
+
+---
+
 # Phase 13 — sound packs and imported wavetables
 
 Development **0.13.0-soundpacks / versionCode 14**, Android 14+.

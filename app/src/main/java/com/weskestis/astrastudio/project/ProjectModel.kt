@@ -7,7 +7,7 @@ import kotlin.math.*
 
 data class MidiNote(val id: Int, val beat: Double, val length: Double, val pitch: Int, val velocity: Float=.85f)
 data class AutoPoint(val beat: Double,val value: Float)
-data class AudioAsset(val id: Int,val name: String,val file: String,val rate: Int,val frames: Long,val waveform: List<Float>,val favorite: Boolean=false,val group: String="Imports",val cycle: Int=0)
+data class AudioAsset(val id: Int,val name: String,val file: String,val rate: Int,val frames: Long,val waveform: List<Float>,val favorite: Boolean=false,val group: String="Imports",val cycle: Int=0,val slices: List<Long> = emptyList())
 data class Clip(val slot: Int,val name: String="MIDI clip",val length: Double=16.0,
     val notes: List<MidiNote> = emptyList(),val automation: List<List<AutoPoint>> = List(4){emptyList()},
     val asset: Int = -1,val first: Long = 0,val last: Long = 0,val root: Int = 5,val minor: Boolean = true,
@@ -75,7 +75,7 @@ data class Project(val name: String="Untitled",val numerator: Int=4,val denomina
         val next=copy(regions=regions.filter{it.id!=id}+r.copy(length=left)+b);require(next.valid());return next
     }
     fun nativeWire(): DoubleArray {
-        val data=ArrayList<Double>();data.addAll(listOf(7.0,mode.toDouble(),numerator.toDouble(),denominator.toDouble(),if(loop)1.0 else 0.0,loopStart,loopEnd,clips.size.toDouble(),regions.size.toDouble()))
+        val data=ArrayList<Double>();data.addAll(listOf(8.0,mode.toDouble(),numerator.toDouble(),denominator.toDouble(),if(loop)1.0 else 0.0,loopStart,loopEnd,clips.size.toDouble(),regions.size.toDouble()))
         for(c in clips.sortedBy{it.slot}) {
             data.addAll(listOf(c.slot.toDouble(),c.length,c.asset.toDouble(),c.first.toDouble(),c.last.toDouble(),c.notes.size.toDouble(),c.automation.sumOf{it.size}.toDouble()))
             for(n in c.notes)data.addAll(listOf(n.beat,n.length,n.pitch.toDouble(),n.velocity.toDouble()))
@@ -87,10 +87,12 @@ data class Project(val name: String="Untitled",val numerator: Int=4,val denomina
         val audio=clips.filter{it.isAudio};data.add(audio.size.toDouble());for(c in audio)data.addAll(listOf(c.slot.toDouble(),if(c.warp)1.0 else 0.0,c.sourceBpm,c.warpStart.toDouble(),c.pitch))
         data.add(frozen.size.toDouble());for(f in frozen)data.addAll(listOf(f.track.toDouble(),f.asset.toDouble(),f.musicFrames.toDouble()))
         for(t in tables)for(id in t)data.add(id.toDouble())
+        for(i in instruments)data.addAll(i.extensionWire())
         return data.toDoubleArray()
     }
     fun valid(): Boolean {
         if(!TempoMap.valid(tempoPoints,tempoEnabled))return false;
+        if(assets.any{!Slicing.valid(it.slices,it.frames)})return false
         if(tables.size!=ProjectLimits.TRACKS||tables.any{it.size!=2||it.any{id->id !in -1..63||(id>=0&&(asset(id)?.cycle?:0)==0)}})return false
         if(assets.any{it.cycle!=0&&(it.cycle !in 32..2048||it.cycle and (it.cycle-1)!=0||it.frames%it.cycle!=0L||it.frames/it.cycle !in 1..256)})return false
         if(frozen.size>ProjectLimits.TRACKS||frozen.map{it.track}.toSet().size!=frozen.size||frozen.map{it.asset}.toSet().size!=frozen.size)return false

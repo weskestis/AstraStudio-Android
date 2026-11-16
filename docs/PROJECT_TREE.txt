@@ -64,6 +64,7 @@ app/src/main/cpp/tests/CoreTests.cpp
 app/src/main/cpp/tests/FreezeTests.cpp
 app/src/main/cpp/tests/FxTests.cpp
 app/src/main/cpp/tests/ImportedTableTests.cpp
+app/src/main/cpp/tests/LayerSamplingTests.cpp
 app/src/main/cpp/tests/MasterTests.cpp
 app/src/main/cpp/tests/ProjectTests.cpp
 app/src/main/cpp/tests/QualityTests.cpp
@@ -103,6 +104,7 @@ app/src/main/java/com/weskestis/astrastudio/project/ExportFormats.kt
 app/src/main/java/com/weskestis/astrastudio/project/FactorySamples.kt
 app/src/main/java/com/weskestis/astrastudio/project/FinishedTracks.kt
 app/src/main/java/com/weskestis/astrastudio/project/FrozenTracks.kt
+app/src/main/java/com/weskestis/astrastudio/project/InstrumentLibrary.kt
 app/src/main/java/com/weskestis/astrastudio/project/ProjectCodec.kt
 app/src/main/java/com/weskestis/astrastudio/project/ProjectFiles.kt
 app/src/main/java/com/weskestis/astrastudio/project/ProjectLimits.kt
@@ -110,6 +112,7 @@ app/src/main/java/com/weskestis/astrastudio/project/ProjectModel.kt
 app/src/main/java/com/weskestis/astrastudio/project/RecoveryJournal.kt
 app/src/main/java/com/weskestis/astrastudio/project/Resampling.kt
 app/src/main/java/com/weskestis/astrastudio/project/SampleInstrument.kt
+app/src/main/java/com/weskestis/astrastudio/project/Slicing.kt
 app/src/main/java/com/weskestis/astrastudio/project/StarterProject.kt
 app/src/main/java/com/weskestis/astrastudio/project/TempoMap.kt
 app/src/main/java/com/weskestis/astrastudio/project/WarpSettings.kt
@@ -129,6 +132,7 @@ app/src/main/java/com/weskestis/astrastudio/workspace/RecordingPanel.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/ReliabilityPanels.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/SamplePanels.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/SharePanel.kt
+app/src/main/java/com/weskestis/astrastudio/workspace/SlicePanel.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/StudioWorkspace.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/TimelineViews.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/WarpPanel.kt
@@ -145,6 +149,7 @@ app/src/test/java/com/weskestis/astrastudio/project/LegacyFixture.kt
 app/src/test/java/com/weskestis/astrastudio/project/ProjectTests.kt
 app/src/test/java/com/weskestis/astrastudio/project/ReliabilityTests.kt
 app/src/test/java/com/weskestis/astrastudio/project/SamplerTests.kt
+app/src/test/java/com/weskestis/astrastudio/project/SamplingTests.kt
 app/src/test/java/com/weskestis/astrastudio/project/StorageTests.kt
 app/src/test/java/com/weskestis/astrastudio/project/TempoQualityTests.kt
 app/src/test/java/com/weskestis/astrastudio/project/WarpTests.kt
@@ -161,6 +166,7 @@ docs/RECORDING.md
 docs/RELIABILITY.md
 docs/ROADMAP.md
 docs/SAMPLER.md
+docs/SAMPLING.md
 docs/SOUND_PACKS.md
 docs/STREAMING.md
 docs/SYNTHESIS.md

@@ -12,7 +12,7 @@ class StorageTests {
     private fun doc(p: Project)=ProjectDocument(p,120f,.7f,0f,80f,List(ProjectLimits.TRACKS){TrackControls()},List(ProjectLimits.TRACKS){SynthPatch.initial()},List(ProjectLimits.TRACKS){FxConfig.initial()})
     private fun rejects(f: ()->Unit)=assertTrue(runCatching(f).isFailure)
     @Test fun largeSourceAndFrameOffsetsSurviveProjectRoundTrip(){val a=asset(0,100000000);val p=Project(assets=listOf(a),clips=listOf(Clip(0,asset=0,first=70000000,last=71000000)))
-        assertTrue(p.valid());val d=doc(p);val json=ProjectCodec.encode(d);assertEquals(8,JSONObject(json).getInt("version"));assertEquals(d,ProjectCodec.decode(json));assertEquals(70000000.0,p.nativeWire()[12],0.0)}
+        assertTrue(p.valid());val d=doc(p);val json=ProjectCodec.encode(d);assertEquals(9,JSONObject(json).getInt("version"));assertEquals(d,ProjectCodec.decode(json));assertEquals(70000000.0,p.nativeWire()[12],0.0)}
     @Test fun oldProjectFormatsRetainMetadata(){val d=doc(Project(assets=listOf(asset(0,48000))));for(version in 1..4){val json=legacyJson(d,version);assertEquals(d,ProjectCodec.decode(json.toString()))}}
     @Test fun perSourceAndTotalCapacityAreIndependent(){val full=Project(assets=List(4){asset(it,AudioStorage.MAX_ASSET_FRAMES)});assertTrue(full.valid());assertFalse(full.copy(assets=full.assets+asset(4,1)).valid());assertFalse(Project(assets=listOf(asset(0,AudioStorage.MAX_ASSET_FRAMES+1))).valid());assertFalse(AudioStorage.canAdd(full,1));assertTrue(AudioStorage.canAdd(Project(),100000000))}
     @Test fun sampleSlotsStillHaveAnExplicitBound(){val full=Project(assets=List(64){asset(it,1)});assertTrue(full.valid());assertFalse(AudioStorage.canAdd(full,1));assertFalse(full.copy(assets=full.assets+asset(64,1)).valid())}

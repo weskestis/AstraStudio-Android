@@ -44,6 +44,8 @@ data class StudioState(
     val revision: Long = 0,
     val packs: PackCatalog = PackCatalog(),
     val packDetail: PackDetail? = null,
+    val instrumentPresets: List<InstrumentPreset> = emptyList(),
+    val sliceAsset: Int = -1,
     val recovery: List<RecoveryEntry> = emptyList(),
     val autosavedAt: Long = 0,
     val performance: PerformanceSnapshot = PerformanceSnapshot(),
@@ -108,6 +110,7 @@ class AudioService : Service() {
     private var midi: MidiInputManager? = null
     private var presets = emptyList<SynthPatch>()
     private var fxPresets = emptyList<FxConfig>()
+    private lateinit var instrumentLibrary: InstrumentLibrary
     private lateinit var packs: SoundPacks
     private val packInspection=java.util.concurrent.atomic.AtomicLong()
     private lateinit var files: ProjectFiles
@@ -177,6 +180,7 @@ class AudioService : Service() {
         super.onCreate()
         files = ProjectFiles(this)
         packs = SoundPacks(File(filesDir,"sound-packs"))
+        instrumentLibrary = InstrumentLibrary(File(filesDir,"instrument-library"))
         geminiKeys = GeminiKeyStore(this)
         thread = HandlerThread("AstraControl").also { it.start() }
         control = Handler(thread.looper)
@@ -217,8 +221,9 @@ class AudioService : Service() {
                 var restored: ProjectDocument?=null;var error: String?=null
                 try { restored=files.load(::loadAssets) } catch(e: Exception){restored=null;error=e.message;bridge.loadAssets(emptyList())}
                 val exports=runCatching{FinishedTracks(this).list()}.getOrDefault(emptyList())
+                val instruments=runCatching{instrumentLibrary.repair();instrumentLibrary.list()}.getOrDefault(emptyList())
                 val catalog=runCatching{packs.repairInterruptedInstalls();packs.catalog()}.getOrDefault(PackCatalog(warning="Could not read installed sound packs."))
-                control.post { if(!destroyed){mutableState.value=mutableState.value.copy(finishedExports=exports,packs=catalog);if(restored!=null)adopt(restored);else adopt(fallback)
+                control.post { if(!destroyed){mutableState.value=mutableState.value.copy(finishedExports=exports,packs=catalog,instrumentPresets=instruments);if(restored!=null)adopt(restored);else adopt(fallback)
                     mutableState.value=mutableState.value.copy(ready=true,busy=false,work="",message=error?.let{"Could not restore project: $it"}?:files.recoveryNotice?:"Ready. Start audio, then launch a clip or build an arrangement.")
                     control.post(poll)
                 } }
@@ -564,7 +569,36 @@ class AudioService : Service() {
     },"Audio imported into the selected track. Select its clip to edit the waveform.")}
     fun instrument(track: Int,mode: Int){if(track in 0 until ProjectLimits.TRACKS&&mode in 0..2)projectEdit{it.instrument(track){i->i.copy(mode=mode)}}}
     fun sampleEdit(track: Int,pad: Int,edit: (SampleZone)->SampleZone){if(track in 0 until ProjectLimits.TRACKS&&pad in -1..15)projectEdit("sample-$track-$pad"){it.instrument(track){i->i.edit(pad,edit)}}}
-    fun assignSample(track: Int,pad: Int,asset: Int){if(track in 0 until ProjectLimits.TRACKS&&pad in -1..15)projectEdit{p->val a=p.asset(asset)?:error("Choose a sample.");p.instrument(track){i->i.edit(pad){it.load(a)}.copy(mode=if(pad<0)1 else 2)}}}
+    fun assignSample(track: Int,pad: Int,asset: Int,layer: Int=0){if(track in 0 until ProjectLimits.TRACKS&&pad in -1..15)projectEdit{p->val a=p.asset(asset)?:error("Choose a sample.");p.instrument(track){i->i.editLayer(pad,layer){it.load(a)}.copy(mode=if(pad<0)1 else 2)}}}
+    fun sampleLayerEdit(track: Int,pad: Int,layer: Int,edit: (SampleZone)->SampleZone){projectEdit("sample-$track-$pad-$layer"){it.instrument(track){i->i.editLayer(pad,layer,edit)}}}
+    fun addSampleLayer(track: Int,pad: Int){projectEdit{it.instrument(track){i->i.addLayer(pad)}}}
+    fun removeSampleLayer(track: Int,pad: Int,layer: Int){projectEdit{it.instrument(track){i->i.removeLayer(pad,layer)}}}
+    fun snapSample(track: Int,pad: Int,layer: Int){work("Finding quiet sample edges",{d->
+        val zone=d.project.instruments[track].zone(pad,layer);val asset=requireNotNull(d.project.asset(zone.asset))
+        val snapped=Slicing.snap(files.audioFile(asset),zone,cancelled)
+        d.copy(project=d.project.instrument(track){it.editLayer(pad,layer){snapped}})
+    },"Trim and loop boundaries moved near quiet zero crossings. Undo restores the previous positions.")}
+    fun sliceMarkers(asset: Int,markers: List<Long>){projectEdit{p->p.copy(assets=p.assets.map{if(it.id==asset){require(Slicing.valid(markers,it.frames));it.copy(slices=markers)}else it})}}
+    fun detectSlices(asset: Int,count: Int,sensitivity: Float){work("Finding transients",{d->
+        val a=requireNotNull(d.project.asset(asset));val markers=Slicing.detect(files.audioFile(a),count,sensitivity,cancelled){fraction->control.post{mutableState.value=mutableState.value.copy(progress=fraction)}}
+        d.copy(project=d.project.copy(assets=d.project.assets.map{if(it.id==asset)it.copy(slices=markers)else it}))
+    },"Transient markers ready. Adjust or add markers before sending slices to pads.")}
+    fun applySlices(asset: Int,slot: Int,midi: Boolean){control.post{commit{d->
+        val a=requireNotNull(d.project.asset(asset));val track=slot%ProjectLimits.TRACKS
+        var p=d.project.instrument(track){Slicing.instrument(a,it)}
+        if(midi){val target=if(p.clip(slot)==null)slot else p.emptySlot(track)?:error("This track needs an empty clip slot.");p=p.put(Slicing.clip(a,target,d.bpm))}
+        d.copy(project=p)
+    };message("Slices assigned to pads on Track ${slot%ProjectLimits.TRACKS+1}. Original audio retained; Undo restores the previous kit.")}}
+    fun recordingForSlices(path: String){work("Opening recording for slicing",{d->
+        val source=labFile(path);val out=File(files.audioDir,"${java.util.UUID.randomUUID()}.wav")
+        try{WaveFile(source).use{w->require(AudioStorage.canAdd(d.project,w.frames));w.extract(out,0,w.frames){check(!cancelled.get()){"Cancelled."}}}
+            addSamples(d,listOf(MicrophoneRecorder.displayName(source) to out),"Recordings to slice").also{next->control.post{mutableState.value=mutableState.value.copy(sliceAsset=next.project.assets.last().id)}}
+        }catch(e: Exception){out.delete();throw e}
+    },"Recording copied into the project. Its original take remains unchanged.")}
+    private fun refreshInstruments(){val entries=instrumentLibrary.list();control.post{mutableState.value=mutableState.value.copy(instrumentPresets=entries)}}
+    fun saveInstrument(name: String,track: Int){work("Saving instrument",{d->try{instrumentLibrary.save(name,d,track,files::audioFile,cancelled)}finally{refreshInstruments()};null},"Instrument saved with independent audio copies and insert effects. It is available in every project.")}
+    fun loadInstrument(id: String,track: Int){work("Loading instrument",{d->instrumentLibrary.apply(id,track,d,files.audioDir,cancelled,::loadAssets)},"Instrument loaded with its insert effects. Track fader and sends are retained. Undo restores the previous instrument.")}
+    fun deleteInstrument(id: String){work("Removing saved instrument",{_->try{instrumentLibrary.delete(id)}finally{refreshInstruments()};null},"Saved instrument removed. Copies already loaded into projects are retained.")}
     fun sampleFavorite(asset: Int){projectEdit{p->p.copy(assets=p.assets.map{if(it.id==asset)it.copy(favorite=!it.favorite)else it})}}
     fun sampleGroup(asset: Int,name: String){projectEdit{p->p.copy(assets=p.assets.map{if(it.id==asset)it.copy(group=name.trim().take(64))else it})}}
     fun sampleClip(asset: Int,slot: Int){projectEdit{p->val a=p.asset(asset)?:error("Choose a sample.");val target=if(p.clip(slot)==null)slot else p.emptySlot(slot%ProjectLimits.TRACKS)?:error("This track has no empty slots.")
@@ -614,7 +648,7 @@ class AudioService : Service() {
         }catch(e: Exception){message(e.message?:"Could not preview pack sound.")}
     }}
     // -1 sampler, 0..15 drum pad, 16 audio clip, 17/18 wavetable oscillators, 19 project browser.
-    fun usePackSound(key: String,track: Int,slot: Int,target: Int){work("Loading pack sound",{d->
+    fun usePackSound(key: String,track: Int,slot: Int,target: Int,layer: Int=0){work("Loading pack sound",{d->
         require(track in 0 until ProjectLimits.TRACKS&&slot in 0 until ProjectLimits.CLIPS&&slot%ProjectLimits.TRACKS==track&&target in -1..19)
         val catalog=packs.catalog();val sound=requireNotNull(catalog.sound(key)){"That sound is not installed."}
         val source=packs.file(catalog,sound);val prefix="pack_${sound.sha256}_"
@@ -636,7 +670,7 @@ class AudioService : Service() {
                         patches=next.patches.toMutableList().also{it[track]=it[track].parameter(SynthSchema.Instrument,0f)})}
                 19->next
                 else->{val root=PackPitch.root(sound.key)
-                    next.copy(project=next.project.instrument(track){i->i.edit(target){it.load(asset).copy(root=if(target<0)root else 36+target)}.copy(mode=if(target<0)1 else 2)})}
+                    next.copy(project=next.project.instrument(track){i->i.editLayer(target,layer){it.load(asset).copy(root=if(target<0)root else 36+target)}.copy(mode=if(target<0)1 else 2)})}
             }.also{require(it.valid())}
         }catch(e: Exception){if(created)file.delete();throw e}
     },"Sound loaded on Track ${track+1}. Trim, loop, pitch, envelopes, filters and effects are editable. Pack originals are unchanged.")}
@@ -651,18 +685,20 @@ class AudioService : Service() {
                 addSamples(d,created,"Astra starter kit")
             }
             val assets=if(existing.all{it!=null})existing.filterNotNull() else next.project.assets.takeLast(16)
-            next.copy(project=next.project.instrument(track){instrument->instrument.copy(mode=2,pads=assets.mapIndexed{i,a->SampleZone(root=36+i,decay=(a.frames.toFloat()/a.rate).coerceAtLeast(.001f),sustain=0f,oneShot=true,choke=if(i==6||i==10)1 else 0).load(a)})})
+            next.copy(project=next.project.instrument(track){instrument->instrument.copy(mode=2,layers=instrument.layers.mapIndexed{i,row->if(i==0)row else emptyList()},pads=assets.mapIndexed{i,a->SampleZone(root=36+i,decay=(a.frames.toFloat()/a.rate).coerceAtLeast(.001f),sustain=0f,oneShot=true,choke=if(i==6||i==10)1 else 0).load(a)})})
         }catch(e: Exception){created.forEach{it.second.delete()};throw e}
     },"Original 16-pad starter kit loaded. Pads 36–51 also play from MIDI and the piano roll.")}
-    fun resample(slot: Int,whole: Boolean,tail: Float){work("Resampling",{d->
-        val source=Resampling.source(d,slot,whole);Resampling.checkCapacity(d,source,48000,tail)
+    fun resample(slot: Int,whole: Boolean,tail: Float,rate: Int=48000,target: Int=-1){work("Resampling",{d->
+        val source=Resampling.source(d,slot,whole);Resampling.checkCapacity(d,source,rate,tail)
+        require(target in -1 until ProjectLimits.TRACKS&&target!=slot%ProjectLimits.TRACKS){"Choose a different destination track to preserve the source instrument."}
         val file=File(files.audioDir,"${java.util.UUID.randomUUID()}.wav")
-        try{check(!cancelled.get()){ "Cancelled." };val result=bridge.export(file,source,48000,tail,true)
+        try{check(!cancelled.get()){ "Cancelled." };val result=bridge.export(file,source,rate,tail,true)
             check(result==0){if(result==3)"Cancelled." else "Could not resample this phrase."}
             val name=(if(whole)d.project.name else d.project.clip(slot)!!.name)+" bounce"
-            addSamples(d,listOf(name.take(128) to file),"Resampled")
+            val next=addSamples(d,listOf(name.take(128) to file),"Resampled")
+            if(target<0)next else next.copy(project=next.project.instrument(target){SampleInstrument(mode=1,sample=SampleZone().load(next.project.assets.last()))})
         }catch(e: Exception){file.delete();throw e}
-    },"Bounce added to Samples → Resampled. Assign it to a pad, sampler or audio clip.")}
+    },if(target<0)"Bounce added to Samples → Resampled. Assign it to a pad, sampler or audio clip." else "Processed bounce loaded into the sampler on Track ${target+1}. Original sources preserved; Undo restores the previous instrument.")}
     fun bounceInstrument(slot: Int){work("Bouncing instrument",{d->
         val original=d.project.clip(slot)?:error("Select a clip first.")
         val target=d.project.emptySlot(original.track)?:error("This track needs an empty scene slot for the bounce.")

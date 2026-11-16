@@ -46,12 +46,13 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,rec
     var fxUnit by rememberSaveable { mutableIntStateOf(0) }
     var sheet by rememberSaveable { mutableStateOf("") }
     var parentSheet by rememberSaveable { mutableStateOf("") }
+    var browserLayer by rememberSaveable { mutableIntStateOf(0) }
     var browserPad by rememberSaveable { mutableIntStateOf(-2) }
     val panelNavigation=remember(sheet){PanelNavigation()}
     val panelStates=rememberSaveableStateHolder()
     fun closePanel(){service.stopSelectionPreview();service.releaseTouchNotes();sheet="";parentSheet=""}
     fun backPanel(){service.stopSelectionPreview();service.releaseTouchNotes();if(!panelNavigation.back()){if(parentSheet.isNotEmpty()){sheet=parentSheet;parentSheet=""}else closePanel()}}
-    fun browse(pad: Int=-2){parentSheet=sheet;browserPad=pad;sheet="samples"}
+    fun browse(pad: Int=-2,layer: Int=0){parentSheet=sheet;browserPad=pad;browserLayer=layer;sheet="samples"}
     BackHandler(enabled=sheet.isNotEmpty()||view!=0){if(sheet.isNotEmpty())backPanel()else view=0}
     var fileMenu by remember { mutableStateOf(false) }
     var confirm by remember { mutableStateOf("") }
@@ -87,6 +88,8 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,rec
                     DropdownMenuItem({Text("Export arrangement WAV")},{act{exportDialog=true}},modifier=Modifier.testTag("Export arrangement"))
                     DropdownMenuItem({Text("Share finished track")},{act{sheet="share"}},modifier=Modifier.testTag("Share finished track"))
                     DropdownMenuItem({Text("Sample browser")},{act{browserPad=-2;sheet="samples"}})
+                    DropdownMenuItem({Text("Slice to pads")},{act{sheet="slices"}},modifier=Modifier.testTag("Menu slicer"))
+                    DropdownMenuItem({Text("Saved instruments")},{act{sheet="instruments"}})
                     DropdownMenuItem({Text("Resample to audio")},{act{sheet="resample"}})
                     DropdownMenuItem({Text("Warp audio")},{act{sheet="warp"}})
                     DropdownMenuItem({Text("Stretch audio")},{act{sheet="stretch"}})
@@ -162,12 +165,14 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,rec
                 "performance"->PerformancePanel(state,service)
                 "recovery"->RecoveryPanel(editorState,service)
                 "share"->SharePanel(editorState,service)
-                "record"->RecordingPanel(editorState,service,slot,recordAudio,importLab,saveLab)
+                "record"->{Action("Slice recordings to pads",tag="Slice recordings"){parentSheet="record";sheet="slices"};RecordingPanel(editorState,service,slot,recordAudio,importLab,saveLab)}
+                "slices"->SlicePanel(editorState,slot,service)
+                "instruments"->InstrumentLibraryPanel(editorState,track,service)
                 "astra"->AstraPanel(editorState,service,slot)
                 "clip"->state.project.clip(slot)?.let{ClipEditor(it,editorState,service)}?:Text("Creating clip…")
                 "synth"->{Tools{Action("Use synth",state.project.instruments[track].mode!=0){service.instrument(track,0)};Action("Sampler / drums"){sheet="instrument"}};ImportedTables(editorState,track,service){browse()};SynthEditor(track,state.patches[track],service,state.stats.running)}
-                "instrument"->SampleInstrumentPanel(editorState,track,slot,service,start){browse(it)}
-                "samples"->SampleBrowser(editorState,track,slot,if(browserPad==-2)null else browserPad,service,start,importSamples,importPack,{service.stopPreview();sheet="synth";parentSheet=""}){service.stopPreview();if(parentSheet.isNotEmpty()){sheet=parentSheet;parentSheet=""}else sheet="instrument"}
+                "instrument"->SampleInstrumentPanel(editorState,track,slot,service,start,{pad,layer->browse(pad,layer)},{parentSheet="instrument";sheet="instruments"},{parentSheet="instrument";sheet="slices"})
+                "samples"->SampleBrowser(editorState,track,slot,if(browserPad==-2)null else browserPad,service,start,importSamples,importPack,{service.stopPreview();sheet="synth";parentSheet=""},browserLayer){service.stopPreview();if(parentSheet.isNotEmpty()){sheet=parentSheet;parentSheet=""}else sheet="instrument"}
                 "resample"->ResamplePanel(editorState,slot,service){browse()}
                 "tempo"->TempoPanel(editorState,service)
                 "warp"->WarpPanel(editorState,slot,service){sheet="resample"}

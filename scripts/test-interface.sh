@@ -51,3 +51,9 @@ adb shell test -s /sdcard/Pictures/AstraStudio/34-performance-landscape.png
 adb shell test -s /sdcard/Pictures/AstraStudio/35-pack-browser-phone.png
 adb shell test -s /sdcard/Pictures/AstraStudio/36-pack-detail-landscape.png
 adb shell test -s /sdcard/Pictures/AstraStudio/37-imported-wavetable.png
+
+adb shell test -s /sdcard/Pictures/AstraStudio/38-slicer-transients-phone.png
+adb shell test -s /sdcard/Pictures/AstraStudio/39-layered-pad-phone.png
+adb shell test -s /sdcard/Pictures/AstraStudio/40-instrument-library.png
+adb shell test -s /sdcard/Pictures/AstraStudio/41-library-landscape.png
+adb shell test -s /sdcard/Pictures/AstraStudio/42-resample-direct-192k.png

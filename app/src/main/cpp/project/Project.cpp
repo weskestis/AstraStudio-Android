@@ -16,7 +16,7 @@ void hash(uint64_t& h,double x){h^=std::bit_cast<uint64_t>(x);h*=1099511628211UL
 }
 bool Plan::decode(std::span<const double> data,const Samples& audio){
     if(data.size()>kProjectWireLimit)return false;
-    Reader r{data};const int version=r.integer(1,7);
+    Reader r{data};const int version=r.integer(1,8);
     const int wireTracks=version<5?16:kTracks;
     const int wireClips=wireTracks*kScenes;
     auto slot=[&](){const int old=r.integer(0,wireClips-1);return old%wireTracks+(old/wireTracks)*kTracks;};
@@ -85,9 +85,25 @@ bool Plan::decode(std::span<const double> data,const Samples& audio){
     }
     for(auto& t:tableAssets)t={-1,-1};
     if(version>=7)for(auto& t:tableAssets)for(auto& id:t){id=r.integer(-1,kAssets-1);if(id>=0&&(!samples[id]||!samples[id]->wavetable))return false;}
+    if(version>=8){
+        const auto edges=[&](sampler::Zone& z){z.fadeIn=r.frame();z.fadeOut=r.frame();z.crossfade=r.frame();return z.fadeIn<=z.last-z.first&&z.fadeOut<=z.last-z.first&&z.crossfade<=(z.loopLast-z.loopFirst)/2;};
+        for(auto& instrument:instruments)for(int row=0;row<17;++row){
+            auto& base=row==0?instrument.sample:instrument.pads[row-1];if(!edges(base))return false;
+            const int count=r.integer(0,3);
+            for(int layer=0;layer<count;++layer){auto& z=instrument.layers[row][layer];
+                z.asset=r.integer(-1,63);z.first=r.frame();z.last=r.frame();z.loopFirst=r.frame();z.loopLast=r.frame();z.root=r.integer(0,127);
+                z.pitch=static_cast<float>(r.get(-48,48));z.gain=static_cast<float>(r.get(0,2));z.pan=static_cast<float>(r.get(-1,1));
+                z.attack=static_cast<float>(r.get(0,5));z.decay=static_cast<float>(r.get(.00099999,30));z.sustain=static_cast<float>(r.get(0,1));z.release=static_cast<float>(r.get(.00499999,10));
+                z.reverse=r.integer(0,1);z.loop=r.integer(0,1);z.oneShot=r.integer(0,1);z.choke=r.integer(0,8);
+                if(z.asset<0){if(z.first||z.last||z.loopFirst||z.loopLast||z.loop)return false;}
+                else if(!samples[z.asset]||z.last<=z.first||z.last>samples[z.asset]->frames()||z.loopFirst<z.first||z.loopLast>z.last||z.loopLast<=z.loopFirst||(z.loop&&z.oneShot))return false;
+                if(!edges(z))return false;
+            }
+        }
+    }
     if(!r.ok||r.at!=data.size())return false;
     for(const auto& c:clips)if(c.present&&c.asset>=0)samples[c.asset]->prefetch(c.first+c.warpStart);
-    for(const auto& instrument:instruments){const auto warm=[&](const sampler::Zone& z){if(z.asset>=0)samples[z.asset]->prefetch(z.reverse?z.last-1:z.first);};warm(instrument.sample);for(const auto& pad:instrument.pads)warm(pad);}
+    for(const auto& instrument:instruments){const auto warm=[&](const sampler::Zone& z){if(z.asset>=0)samples[z.asset]->prefetch(z.reverse?z.last-1:z.first);};warm(instrument.sample);for(const auto& pad:instrument.pads)warm(pad);for(const auto& row:instrument.layers)for(const auto& z:row)warm(z);}
     return true;
 }
 std::unique_ptr<Plan> decodePlan(std::span<const double> data,const Samples& samples)noexcept{

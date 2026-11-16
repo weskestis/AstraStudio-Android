@@ -19,7 +19,7 @@ import com.weskestis.astrastudio.audio.StudioState
 import com.weskestis.astrastudio.packs.*
 import com.weskestis.astrastudio.project.AudioAsset
 
-@Composable internal fun PackBrowser(s: StudioState,track: Int,slot: Int,pad: Int?,service: AudioService,install: ()->Unit,edit: ()->Unit,editSynth: ()->Unit){
+@Composable internal fun PackBrowser(s: StudioState,track: Int,slot: Int,pad: Int?,service: AudioService,install: ()->Unit,edit: ()->Unit,editSynth: ()->Unit,layer: Int=0){
     val focus=LocalFocusManager.current;val keyboard=LocalSoftwareKeyboardController.current
     var query by rememberSaveable{mutableStateOf("")};var pack by rememberSaveable{mutableStateOf("")};var category by rememberSaveable{mutableStateOf("")}
     var favorites by rememberSaveable{mutableStateOf(false)};var selected by rememberSaveable{mutableStateOf("")};var page by rememberSaveable{mutableIntStateOf(0)}
@@ -40,7 +40,7 @@ import com.weskestis.astrastudio.project.AudioAsset
             Text("All cycles remain available to position, FM, warp, filters and LFO modulation. Loading selects the wavetable synth and retains its other settings; raise that oscillator's level if it is muted.",fontSize=12.sp,color=Muted)
             Action("Edit synth / modulation",!s.busy,click=editSynth)
         }else{
-            Tools{Action(if(pad!=null&&pad>=0)"Use on pad ${pad+1}"else "Use in sampler",!s.busy,"Use pack sound"){service.usePackSound(selected,track,slot,pad?:-1)}
+            Tools{Action(if(pad!=null&&pad>=0)"Use on pad ${pad+1}"else "Use in sampler",!s.busy,"Use pack sound"){service.usePackSound(selected,track,slot,pad?:-1,layer)}
                 Action("Add audio clip",!s.busy,"Pack audio clip"){service.usePackSound(selected,track,slot,16)}
                 Action("Add to project samples",!s.busy){service.usePackSound(selected,track,slot,19)}}
             Action("Edit sampler / drums",!s.busy,click=edit)

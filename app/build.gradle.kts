@@ -13,8 +13,8 @@ android {
         applicationId = "com.weskestis.astrastudio"
         minSdk = 34
         targetSdk = 34
-        versionCode = 14
-        versionName = "0.13.0-soundpacks"
+        versionCode = 15
+        versionName = "0.14.0-sampling"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         externalNativeBuild {
