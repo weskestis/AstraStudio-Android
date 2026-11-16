@@ -6,7 +6,7 @@ Build a professional Android DAW with Ableton Live-level workflow depth and soun
 
 Target device: Sony Xperia 1 IV (XQ-CT62), Android 14+. Preserve the green/black interface, phone-only installation and file workflows, hierarchical Back navigation, original recordings, and public source repository. EDM, riddim, dubstep, trance and house remain the production focus. Sound quality and repeatable project/export behavior take priority over adding controls that are disconnected from the engine.
 
-The current delivered baseline is Phase 9, version 0.9.0-phase9. Its verified executable/test commit is `c8de8f1f75ca4a8c4151a23faaedbcd3bfe63fce`; see [validation](VALIDATION.md). The existing implementation is a foundation with working features and explicit limits, not a claim of full parity.
+The current delivered baseline is Phase 10, version 0.10.0-phase10. Its verified executable/test commit is `de808a463b70abf117c1070f2d3574f8dca518b8`; see [validation](VALIDATION.md). The existing implementation is a foundation with working features and explicit limits, not a claim of full parity.
 
 ## Milestones and numbering
 

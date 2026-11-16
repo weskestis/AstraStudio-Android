@@ -1,6 +1,26 @@
-# Phase 10 validation in progress
+# Phase 10 validation
 
-Development **0.10.0-phase10 / versionCode 10**, Android 14+. Local assembly, lint and unit tests pass. Native streaming fixtures and full regression suites are passing; final CI/Android results and the verified APK identity will be recorded after the interface run. See [streaming, bounce and sharing scope](STREAMING.md).
+Development **0.10.0-phase10 / versionCode 10**, Android 14+.
+
+Verified executable/test source commit: `de808a463b70abf117c1070f2d3574f8dca518b8`.
+[Successful build and Android run](https://github.com/weskestis/AstraStudio-Android/actions/runs/43804330140).
+
+- All **143 Kotlin unit tests passed**, with zero failures or ignored tests. New checks cover large frame positions, per-source/project storage bounds, schema-v5 persistence and legacy loading, safe export filenames, exact export-size estimates and tempo-map duration.
+- All **eight native suites passed** in Release and with AddressSanitizer/UndefinedBehaviorSanitizer. Streaming fixtures cover exact float/PCM24 reads, page-boundary and distant seeks, sinc conversion parity, sixteen forward/reverse looping sampler voices, concurrent independent live/offline readers, exact streamed-versus-resident exports, source bounces before effects/master, independent time/pitch rendering, cancellation and truncated-source failures.
+- A sparse **600 MiB WAV used 2 MiB of audio page storage**, with a full waveform scan. The streaming fixture measured **zero audio-thread allocations, frees, file reads or file seeks**. Retired sample ownership is reclaimed on the serialized control thread after the renderer releases its plan; a lifetime fixture verifies that reclamation never occurs in the callback. These are bounded fixtures, not sustained-phone throughput measurements.
+- All **12 Android instrumentation tests passed**, zero failures/errors/skips, in **241.011 seconds**, on API 34 x86_64 at 1080 × 2520. New coverage includes streamed import diagnostics; exact dry instrument-to-audio bounce and Undo/Redo; non-silent PCM24 finished-track rendering; canonical export identity after reopening; FileProvider read grants, exact URI bytes and rejected out-of-folder paths; actual system share-sheet opening and Back; exact saved-file copies; and phone/landscape controls. Earlier recording, Warp, MIDI, project archive, Astra and navigation checks remain green.
+- APK assembly and lint passed: **0 lint errors**, 23 advisory warnings in CI (including dependency/update advisories). Green/black portrait and landscape screenshots were reviewed. Share/save/delete controls wrap and remain reachable through vertical scrolling.
+
+## Verified APK
+
+- File: `AstraStudio_Phase10_0.10.0.apk` — **28,447,586 bytes**.
+- SHA-256: `45c865c3d9be44ab65dbdebd186c00e271cb9724b184bfcee5e5f1998b116571`.
+- Certificate SHA-256: `1bff24ae64d74c99d9540a1ecc5acccc8479367f44772b305144d2c10ce4bd45`.
+- Package `com.weskestis.astrastudio`; minimum/target API 34; ARM64 and x86_64. Signature verification, 16 KiB ZIP alignment and native LOAD-segment alignment passed. The unchanged development certificate permits installing over Phase 9.
+
+Finished WAVs stay in the app until explicitly deleted, allowing receiving apps to read after the chooser closes. The app offers Android file sharing and document saving; no actual email or SoundCloud upload was sent during tests. The provider exposes only completed-export storage. [Streaming, bounce, sharing and current limits](STREAMING.md).
+
+Physical Xperia sustained capacity, storage-pressure behavior, route/USB performance, thermal limits and latency remain unmeasured. Cold seeks can miss cached frames and produce reported live silence; export uses separate complete-data readers. The current bounce is one source-clip cycle, not persistent full-track freeze/unfreeze. Track/scene/voice limits remain 16/8/128; 128 MiB is an active audio-page/resident-bank budget, not total application RAM. Version-5 projects open versions 1–4; older APKs cannot open the new format.
 
 ---
 
