@@ -4,6 +4,14 @@ import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import android.net.Uri
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInParent
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
@@ -46,7 +54,31 @@ class WorkspaceSmokeTest {
         requireNotNull(resolver.openOutputStream(uri)).use { bitmap.compress(Bitmap.CompressFormat.PNG,100,it) }
         values.clear();values.put(android.provider.MediaStore.Images.Media.IS_PENDING,0);resolver.update(uri,values,null,null)
     }
-    private fun click(tag: String){val node=compose.onNodeWithTag(tag);runCatching{node.performScrollTo()};node.assertIsDisplayed().performClick()}
+    // Compose 1.6's performScrollTo reads layout geometry on the instrumentation
+    // thread. Recording meters can invalidate that geometry between idle and read.
+    // Fetch after synchronization, then measure and request scrolling on the UI thread.
+    private fun SemanticsNodeInteraction.scrollOnUiThread(): SemanticsNodeInteraction {
+        val node=fetchSemanticsNode()
+        compose.runOnUiThread {
+            val parent=generateSequence(node.parent){it.parent}.firstOrNull{it.config.contains(SemanticsActions.ScrollBy)}
+                ?: throw AssertionError("No scrollable parent")
+            val coordinates=parent.layoutInfo.coordinates
+            val viewport=coordinates.boundsInParent().translate(coordinates.parentLayoutCoordinates?.positionInRoot()?:Offset.Zero)
+            val bounds=Rect(node.positionInRoot,node.size.toSize())
+            fun distance(before: Float,after: Float)=if(before*after>0) {
+                if(kotlin.math.abs(before)<kotlin.math.abs(after))before else after
+            } else 0f
+            var dx=distance(bounds.left-viewport.left,bounds.right-viewport.right)
+            var dy=distance(bounds.top-viewport.top,bounds.bottom-viewport.bottom)
+            if(parent.config.getOrNull(SemanticsProperties.HorizontalScrollAxisRange)?.reverseScrolling==true)dx=-dx
+            if(parent.layoutInfo.layoutDirection==LayoutDirection.Rtl)dx=-dx
+            if(parent.config.getOrNull(SemanticsProperties.VerticalScrollAxisRange)?.reverseScrolling==true)dy=-dy
+            if(dx!=0f||dy!=0f)check(parent.config[SemanticsActions.ScrollBy].action?.invoke(dx,dy)==true)
+        }
+        compose.waitForIdle()
+        return this
+    }
+    private fun click(tag: String){val node=compose.onNodeWithTag(tag);runCatching{node.scrollOnUiThread()};node.assertIsDisplayed().performClick()}
     @Test fun master192ControlsRenderAndShareExactPcm24(){
         compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
         click("File");click("New project");click("Confirm project")
@@ -62,18 +94,18 @@ class WorkspaceSmokeTest {
             compose.waitUntil(20000){service.state.value.project.clip(0)!=null&&!service.state.value.busy}
             service.projectEdit{it.place(0,0.0)};compose.waitUntil(10000){service.state.value.project.regions.isNotEmpty()}
             click("File");click("Export arrangement");click("Export 192 master")
-            compose.onNodeWithTag("Export rate 192000").performScrollTo().assertIsSelected()
-            compose.onNodeWithTag("Export PCM24").performScrollTo().assertIsSelected();shot("23-master192-export-phone")
+            compose.onNodeWithTag("Export rate 192000").scrollOnUiThread().assertIsSelected()
+            compose.onNodeWithTag("Export PCM24").scrollOnUiThread().assertIsSelected();shot("23-master192-export-phone")
             compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
             compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
-            compose.onNodeWithTag("Export 192 master").performScrollTo().assertIsSelected();shot("24-master192-export-landscape")
+            compose.onNodeWithTag("Export 192 master").scrollOnUiThread().assertIsSelected();shot("24-master192-export-landscape")
             back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
             click("File");click("Share finished track");click("Share 192 master")
-            compose.onNodeWithTag("Share rate 192000").performScrollTo().assertIsSelected()
-            compose.onNodeWithTag("Share PCM24").performScrollTo().assertIsSelected()
+            compose.onNodeWithTag("Share rate 192000").scrollOnUiThread().assertIsSelected()
+            compose.onNodeWithTag("Share PCM24").scrollOnUiThread().assertIsSelected()
             compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_PORTRAIT}
             compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_PORTRAIT}
-            compose.onNodeWithTag("Share 192 master").performScrollTo().assertIsSelected()
+            compose.onNodeWithTag("Share 192 master").scrollOnUiThread().assertIsSelected()
             val previous=service.state.value.finishedExports.map{it.path}.toSet();click("Render finished track")
             compose.waitUntil(60000){!service.state.value.busy&&service.state.value.finishedExports.any{it.path !in previous}}
             completed=service.state.value.finishedExports.first{it.path !in previous};val store=FinishedTracks(context);val f=store.file(completed!!.path)
@@ -82,7 +114,7 @@ class WorkspaceSmokeTest {
             assertEquals(5184044L,f.length())
             WaveFile(f).use{wave->assertEquals(192000,wave.rate);assertEquals(864000L,wave.frames);val data=FloatArray(96000);wave.read(19200,48000,data);assertTrue(data.any{kotlin.math.abs(it)>.01f})}
             compose.waitUntil(10000){compose.onAllNodesWithTag("Share WAV 0").fetchSemanticsNodes().isNotEmpty()}
-            compose.onNodeWithTag("Share WAV 0").performScrollTo().assertIsDisplayed();shot("25-master192-finished")
+            compose.onNodeWithTag("Share WAV 0").scrollOnUiThread().assertIsDisplayed();shot("25-master192-finished")
             val uri=store.sendIntent(f.absolutePath).getParcelableExtra(Intent.EXTRA_STREAM,Uri::class.java)!!
             context.contentResolver.openInputStream(uri)!!.use{assertArrayEquals(f.readBytes(),it.readBytes())}
             service.saveFinishedTrack(Uri.fromFile(saved),f.absolutePath);compose.waitUntil(10000){saved.length()==f.length()&&!service.state.value.busy};assertArrayEquals(f.readBytes(),saved.readBytes())
@@ -131,11 +163,11 @@ class WorkspaceSmokeTest {
             assertTrue(runCatching{store.sendIntent(source.absolutePath)}.isFailure)
             assertTrue("Finished exports keep the same canonical identity when the store is reopened",FinishedTracks(context).list().any{it.path==f.absolutePath})
             compose.waitUntil(10000){compose.onAllNodesWithTag("Share WAV 0").fetchSemanticsNodes().isNotEmpty()}
-            compose.onNodeWithTag("Share WAV 0").performScrollTo().assertIsDisplayed()
+            compose.onNodeWithTag("Share WAV 0").scrollOnUiThread().assertIsDisplayed()
             shot("21-finished-track-phone")
             compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
             compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
-            compose.onNodeWithTag("Share WAV 0").performScrollTo().assertIsDisplayed();shot("22-finished-track-landscape")
+            compose.onNodeWithTag("Share WAV 0").scrollOnUiThread().assertIsDisplayed();shot("22-finished-track-landscape")
             click("Share WAV 0")
             val automation=InstrumentationRegistry.getInstrumentation().uiAutomation
             compose.waitUntil(10000){automation.rootInActiveWindow?.packageName?.let{it!=context.packageName}==true}
@@ -165,16 +197,16 @@ class WorkspaceSmokeTest {
             service.importAudio(Uri.fromFile(source),0)
             compose.waitUntil(20000){service.state.value.project.clip(0)!=null&&!service.state.value.busy}
             click("Warp");click("Warp enabled")
-            compose.onNodeWithTag("Warp source BPM").performScrollTo().performTextReplacement("120")
-            compose.onNodeWithTag("Warp downbeat").performScrollTo().performTextReplacement("24000")
-            compose.onNodeWithTag("Warp pitch").performScrollTo().performTextReplacement("7")
+            compose.onNodeWithTag("Warp source BPM").scrollOnUiThread().performTextReplacement("120")
+            compose.onNodeWithTag("Warp downbeat").scrollOnUiThread().performTextReplacement("24000")
+            compose.onNodeWithTag("Warp pitch").scrollOnUiThread().performTextReplacement("7")
             click("Apply warp")
             compose.waitUntil(10000){service.state.value.project.clip(0)?.warp==true}
-            compose.onNodeWithTag("Warp enabled").performScrollTo().assertIsSelected();shot("19-warp-phone")
+            compose.onNodeWithTag("Warp enabled").scrollOnUiThread().assertIsSelected();shot("19-warp-phone")
             compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
             compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
-            compose.onNodeWithTag("Warp downbeat").performScrollTo().assertTextContains("24000",substring=true)
-            compose.onNodeWithTag("Warp pitch").performScrollTo().assertTextContains("7",substring=true);shot("20-warp-landscape")
+            compose.onNodeWithTag("Warp downbeat").scrollOnUiThread().assertTextContains("24000",substring=true)
+            compose.onNodeWithTag("Warp pitch").scrollOnUiThread().assertTextContains("7",substring=true);shot("20-warp-landscape")
             compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_PORTRAIT}
             compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_PORTRAIT}
             back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
@@ -224,22 +256,22 @@ class WorkspaceSmokeTest {
             val original=service.recorder.state.value.latest
             assertArrayEquals(fixture.readBytes(),File(original).readBytes())
             click("Record audio")
-            compose.onNodeWithTag("Lab waveform").performScrollTo().assertIsDisplayed()
+            compose.onNodeWithTag("Lab waveform").scrollOnUiThread().assertIsDisplayed()
             click("Lab zoom in");compose.onNodeWithTag("Lab view range").assertTextContains("0.25000 s",substring=true)
-            compose.onNodeWithTag("Lab start frame").performScrollTo().performTextReplacement("4800")
+            compose.onNodeWithTag("Lab start frame").scrollOnUiThread().performTextReplacement("4800")
             compose.onNodeWithTag("Lab end frame").performTextReplacement("14400")
             click("Lab apply range");click("Lab fit selection")
             compose.onNodeWithTag("Lab selection").assertTextContains("9600 frames",substring=true)
-            compose.onNodeWithTag("Lab waveform").performScrollTo();shot("15-recording-waveform")
+            compose.onNodeWithTag("Lab waveform").scrollOnUiThread();shot("15-recording-waveform")
             click("Lab analyze")
             compose.waitUntil(15000){compose.onAllNodesWithTag("Lab pitch").fetchSemanticsNodes().isNotEmpty()}
-            compose.onNodeWithTag("Lab pitch").performScrollTo().assertTextContains("A1",substring=true)
-            compose.onNodeWithTag("Lab spectrum").performScrollTo();shot("16-bass-analysis")
+            compose.onNodeWithTag("Lab pitch").scrollOnUiThread().assertTextContains("A1",substring=true)
+            compose.onNodeWithTag("Lab spectrum").scrollOnUiThread();shot("16-bass-analysis")
             compose.onNodeWithTag("Lab root note").assertTextContains("33",substring=true)
             click("Lab choose source");back();compose.onNodeWithTag("Lab waveform").assertExists()
             compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
             compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
-            compose.onNodeWithTag("Lab selection").performScrollTo().assertTextContains("9600 frames",substring=true);shot("17-recording-landscape")
+            compose.onNodeWithTag("Lab selection").scrollOnUiThread().assertTextContains("9600 frames",substring=true);shot("17-recording-landscape")
             compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_PORTRAIT}
             compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_PORTRAIT}
             click("Lab use sampler")
@@ -258,7 +290,7 @@ class WorkspaceSmokeTest {
             compose.waitUntil(10000){service.state.value.project.instruments[0].mode==1}
             click("Record audio");click("Lab add clip")
             compose.waitUntil(20000){service.state.value.project.clip(0)?.asset?.let{it>=0}==true&&!service.state.value.busy}
-            back();compose.onNodeWithTag("Launch 0").performScrollTo().assertExists()
+            back();compose.onNodeWithTag("Launch 0").scrollOnUiThread().assertExists()
         }finally{fixture.delete();binding.unbindService()}
     }
     @Test fun microphoneSurvivesBackAndSavesWave(){
@@ -298,7 +330,7 @@ class WorkspaceSmokeTest {
         click("■ Stop")
         shot("01-session-portrait")
         click("Edit clip")
-        compose.onNodeWithTag("Piano roll").performScrollTo().assertIsDisplayed().performTouchInput{click(Offset(width*.4f,height*.55f))}
+        compose.onNodeWithTag("Piano roll").scrollOnUiThread().assertIsDisplayed().performTouchInput{click(Offset(width*.4f,height*.55f))}
         compose.waitForIdle();shot("02-piano-roll")
         click("Close panel");click("Undo");click("Redo")
         click("Arrangement");compose.onNodeWithTag("Arrangement timeline").assertIsDisplayed();shot("03-arrangement-portrait")
@@ -343,10 +375,10 @@ class WorkspaceSmokeTest {
     @Test fun astraPreviewApplyUndoAndRejectStale(){
         compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
         click("Astra")
-        compose.onNodeWithTag("Astra prompt").performScrollTo().performTextReplacement("Create a rolling 138 BPM Psytrance bassline in F minor on track 6")
+        compose.onNodeWithTag("Astra prompt").scrollOnUiThread().performTextReplacement("Create a rolling 138 BPM Psytrance bassline in F minor on track 6")
         click("Astra offline")
         compose.waitUntil(15000){compose.onAllNodesWithTag("Astra apply").fetchSemanticsNodes().isNotEmpty()}
-        compose.onNodeWithTag("Astra apply").performScrollTo().assertIsEnabled()
+        compose.onNodeWithTag("Astra apply").scrollOnUiThread().assertIsEnabled()
         shot("05-astra-preview")
         click("Astra apply")
         compose.waitUntil(10000){compose.onAllNodes(hasTestTag("Astra status") and hasText("Applied. One Undo restores the whole proposal.")).fetchSemanticsNodes().isNotEmpty()}
@@ -354,14 +386,14 @@ class WorkspaceSmokeTest {
         click("Astra offline")
         compose.waitUntil(10000){compose.onAllNodes(hasTestTag("Astra apply") and isEnabled()).fetchSemanticsNodes().isNotEmpty()}
         click("Close panel");click("Redo");click("Astra")
-        compose.onNodeWithTag("Astra stale").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("Astra stale").scrollOnUiThread().assertIsDisplayed()
         compose.onNodeWithTag("Astra apply").assertIsNotEnabled()
         click("Astra dismiss")
         click("Astra settings")
-        compose.onNodeWithTag("Astra key status").performScrollTo().assertTextContains("No key saved",substring=true)
+        compose.onNodeWithTag("Astra key status").scrollOnUiThread().assertTextContains("No key saved",substring=true)
         shot("06-astra-settings")
         click("Astra settings")
-        compose.onNodeWithTag("Astra prompt").performScrollTo().performTextReplacement("Listen to the bass")
+        compose.onNodeWithTag("Astra prompt").scrollOnUiThread().performTextReplacement("Listen to the bass")
         click("Astra Gemini")
         compose.waitUntil(10000){compose.onAllNodes(hasTestTag("Astra status") and hasText("Open Gemini settings and add your Google AI Studio free-tier key first.")).fetchSemanticsNodes().isNotEmpty()}
         click("Close panel")
@@ -393,32 +425,32 @@ class WorkspaceSmokeTest {
         click("File");click("New project");click("Confirm project")
         compose.waitUntil(10000){compose.onAllNodesWithTag("Empty 0").fetchSemanticsNodes().isNotEmpty()}
         click("Tempo map")
-        compose.onNodeWithTag("Tempo beat").performScrollTo().performTextReplacement("4")
-        compose.onNodeWithTag("Tempo bpm").performScrollTo().performTextReplacement("90")
+        compose.onNodeWithTag("Tempo beat").scrollOnUiThread().performTextReplacement("4")
+        compose.onNodeWithTag("Tempo bpm").scrollOnUiThread().performTextReplacement("90")
         click("Save tempo point")
         compose.waitUntil(10000){compose.onAllNodesWithTag("Tempo point 1").fetchSemanticsNodes().isNotEmpty()}
         click("Tempo point 0");click("Tempo ramp");click("Save tempo point")
-        compose.onNodeWithTag("Tempo map enabled").performScrollTo().assertIsSelected()
+        compose.onNodeWithTag("Tempo map enabled").scrollOnUiThread().assertIsSelected()
         shot("12-tempo-map")
         compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
         compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
-        compose.onNodeWithTag("Tempo map enabled").performScrollTo().assertIsSelected()
+        compose.onNodeWithTag("Tempo map enabled").scrollOnUiThread().assertIsSelected()
         compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_PORTRAIT}
         compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_PORTRAIT}
         back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
         click("Sample instrument");click("Instrument 2");click("Starter kit")
         compose.waitUntil(30000){compose.onAllNodesWithText("Sub kick").fetchSemanticsNodes().isNotEmpty()}
         back();click("Samples");click("Sample 0");click("Add audio clip");back();back()
-        compose.onNodeWithTag("Launch 0").performScrollTo().assertExists()
+        compose.onNodeWithTag("Launch 0").scrollOnUiThread().assertExists()
         click("Stretch")
-        compose.onNodeWithTag("Stretch pitch").performScrollTo().performTextReplacement("7")
+        compose.onNodeWithTag("Stretch pitch").scrollOnUiThread().performTextReplacement("7")
         click("Render stretch")
         compose.waitUntil(30000){compose.onAllNodesWithText("Stretched audio added as a new clip and in Samples → Stretched. Original preserved; Undo removes the new version.").fetchSemanticsNodes().isNotEmpty()}
         shot("13-stretch");back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
-        compose.onNodeWithTag("Launch 16").performScrollTo().assertExists()
-        click("Undo");compose.onNodeWithTag("Empty 16").performScrollTo().assertExists()
+        compose.onNodeWithTag("Launch 16").scrollOnUiThread().assertExists()
+        click("Undo");compose.onNodeWithTag("Empty 16").scrollOnUiThread().assertExists()
         compose.onNodeWithTag("Launch 0").assertExists()
-        click("Redo");compose.onNodeWithTag("Launch 16").performScrollTo().assertExists()
+        click("Redo");compose.onNodeWithTag("Launch 16").scrollOnUiThread().assertExists()
         click("File");click("Export arrangement")
         compose.onNodeWithTag("Export float").assertIsSelected();shot("14-float-export")
         back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
@@ -449,26 +481,26 @@ class WorkspaceSmokeTest {
         click("Sample audio")
         compose.waitUntil(15000){compose.onAllNodes(hasTestTag("Sample audio") and hasText("Audio on")).fetchSemanticsNodes().isNotEmpty()}
         click("Pad 0");shot("07-drum-rack")
-        click("Edit pad");compose.onNodeWithTag("Pad editor").performScrollTo().assertIsDisplayed()
+        click("Edit pad");compose.onNodeWithTag("Pad editor").scrollOnUiThread().assertIsDisplayed()
         click("Sample reverse");click("Trim / loop frames")
-        compose.onNodeWithTag("Apply sample range").performScrollTo().assertIsDisplayed()
-        back();compose.onNodeWithTag("Pad editor").performScrollTo().assertIsDisplayed();compose.onNodeWithTag("Apply sample range").assertDoesNotExist()
-        shot("08-pad-editor");back();compose.onNodeWithTag("Pad 0").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("Apply sample range").scrollOnUiThread().assertIsDisplayed()
+        back();compose.onNodeWithTag("Pad editor").scrollOnUiThread().assertIsDisplayed();compose.onNodeWithTag("Apply sample range").assertDoesNotExist()
+        shot("08-pad-editor");back();compose.onNodeWithTag("Pad 0").scrollOnUiThread().assertIsDisplayed()
         // Browser opened from a pad returns to that pad's instrument panel.
         click("Load sample");click("Sample 0");click("Favorite sample");shot("09-sample-browser")
-        back();compose.onNodeWithTag("Sample search").performScrollTo().assertIsDisplayed()
-        back();compose.onNodeWithTag("Pad 0").performScrollTo().assertIsDisplayed()
+        back();compose.onNodeWithTag("Sample search").scrollOnUiThread().assertIsDisplayed()
+        back();compose.onNodeWithTag("Pad 0").scrollOnUiThread().assertIsDisplayed()
         back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
         click("Astra");click("Astra settings");back()
-        compose.onNodeWithTag("Astra key input").assertDoesNotExist();compose.onNodeWithTag("Astra prompt").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("Astra key input").assertDoesNotExist();compose.onNodeWithTag("Astra prompt").scrollOnUiThread().assertIsDisplayed()
         back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
-        click("Edit clip");click("Name / length");back();compose.onNodeWithTag("Piano roll").performScrollTo().assertIsDisplayed()
+        click("Edit clip");click("Name / length");back();compose.onNodeWithTag("Piano roll").scrollOnUiThread().assertIsDisplayed()
         back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
         click("Arrangement");back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
         click("Resample");click("Render resample")
         compose.waitUntil(30000){compose.onAllNodesWithText("Bounce added to Samples → Resampled. Assign it to a pad, sampler or audio clip.").fetchSemanticsNodes().isNotEmpty()}
         shot("10-resample");click("Open samples");click("Sample 16")
-        compose.onNodeWithTag("Sample details").performScrollTo().assertTextEquals("Kick 1 bounce")
+        compose.onNodeWithTag("Sample details").scrollOnUiThread().assertTextEquals("Kick 1 bounce")
         click("Use in sampler");back() // return from browser to resampling, then close
         click("Sample instrument")
         compose.waitUntil(10000){compose.onAllNodes(hasTestTag("Instrument 1") and isSelected()).fetchSemanticsNodes().isNotEmpty()}
