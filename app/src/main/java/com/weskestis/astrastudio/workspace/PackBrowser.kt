@@ -1,11 +1,16 @@
 package com.weskestis.astrastudio.workspace
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -15,6 +20,7 @@ import com.weskestis.astrastudio.packs.*
 import com.weskestis.astrastudio.project.AudioAsset
 
 @Composable internal fun PackBrowser(s: StudioState,track: Int,slot: Int,pad: Int?,service: AudioService,install: ()->Unit,edit: ()->Unit,editSynth: ()->Unit){
+    val focus=LocalFocusManager.current;val keyboard=LocalSoftwareKeyboardController.current
     var query by rememberSaveable{mutableStateOf("")};var pack by rememberSaveable{mutableStateOf("")};var category by rememberSaveable{mutableStateOf("")}
     var favorites by rememberSaveable{mutableStateOf(false)};var selected by rememberSaveable{mutableStateOf("")};var page by rememberSaveable{mutableIntStateOf(0)}
     PanelBackHandler(selected.isNotEmpty()){selected="";service.stopPreview()}
@@ -56,7 +62,9 @@ import com.weskestis.astrastudio.project.AudioAsset
         val collections=catalog.packs.groupBy{it.id}
         Text(collections.values.joinToString("\n"){p->"${p[0].name}: ${p.size}/${p[0].parts} parts · ${p.sumOf{it.sounds.size}} sounds"},fontSize=12.sp,color=Muted)
     }
-    OutlinedTextField(query,{query=it.take(160);page=0},label={Text("Search packs, sounds, BPM or key")},singleLine=true,modifier=Modifier.fillMaxWidth().testTag("Pack search"))
+    OutlinedTextField(query,{query=it.take(160);page=0},label={Text("Search packs, sounds, BPM or key")},singleLine=true,
+        keyboardOptions=KeyboardOptions(imeAction=ImeAction.Search),keyboardActions=KeyboardActions(onSearch={focus.clearFocus();keyboard?.hide()}),
+        modifier=Modifier.fillMaxWidth().testTag("Pack search"))
     PackFilter("Pack",pack,catalog.packs.distinctBy{it.id}.map{it.id to it.name}){pack=it;category="";page=0}
     val all=remember(catalog.packs){catalog.sounds}
     PackFilter("Category",category,all.filter{pack.isBlank()||it.packId==pack}.map{it.category}.distinct().sorted().map{it to it}){category=it;page=0}
@@ -67,7 +75,7 @@ import com.weskestis.astrastudio.project.AudioAsset
     val pages=maxOf(1,(matches.size+39)/40);val current=page.coerceIn(0,pages-1)
     Text("${matches.size} matches · page ${current+1}/$pages",fontSize=12.sp,color=Muted,modifier=Modifier.testTag("Pack result count"))
     Tools{Action("Previous",current>0){page=current-1};Action("Next",current+1<pages){page=current+1}}
-    matches.drop(current*40).take(40).forEach{a->OutlinedButton({service.stopPreview();selected=a.keyId},modifier=Modifier.fillMaxWidth().heightIn(min=56.dp).testTag("Pack sound ${a.keyId}")){
+    matches.drop(current*40).take(40).forEach{a->OutlinedButton({focus.clearFocus();keyboard?.hide();service.stopPreview();selected=a.keyId},modifier=Modifier.fillMaxWidth().heightIn(min=56.dp).testTag("Pack sound ${a.keyId}")){
         Column(Modifier.fillMaxWidth()){Text((if(a.keyId in catalog.favorites)"★ "else "")+a.name,maxLines=2);Text("${a.category} · ${if(a.isTable)"Wavetable"else "${number(a.seconds)} s"}",fontSize=11.sp,color=Muted)}
     }}
     if(matches.isEmpty())Text("No matching sounds. Install a pack or change the filters.",color=Muted,modifier=Modifier.padding(vertical=12.dp))

@@ -104,6 +104,7 @@ class WorkspaceSmokeTest {
             click("Choose track");compose.onNodeWithTag("Track picker").performScrollToIndex(0);click("Select track 1")
             click("Samples");click("Sound packs tab");compose.onNodeWithTag("Sound pack browser").assertTextContains("2 sounds",substring=true);shot("35-pack-browser-phone")
             compose.onNodeWithTag("Pack search").scrollOnUiThread().performTextReplacement("bass")
+            compose.onNodeWithTag("Pack search").performImeAction()
             compose.onNodeWithTag("Pack result count").assertTextContains("1 matches",substring=true)
             click("Pack sound astra-pack-test:tone");click("Preview pack sound");service.stopPreview()
             click("Use pack sound");compose.waitUntil(30000){!service.state.value.busy&&service.state.value.project.instruments[0].mode==1}
@@ -118,7 +119,9 @@ class WorkspaceSmokeTest {
             compose.onNodeWithTag("Pack sound details").scrollOnUiThread();shot("36-pack-detail-landscape")
             back();compose.onNodeWithTag("Sound pack browser").assertExists()
             compose.onNodeWithTag("Pack search").scrollOnUiThread().performTextReplacement("wavetable")
-            click("Pack sound astra-pack-test:table");click("Load table A")
+            compose.onNodeWithTag("Pack search").performImeAction()
+            click("Pack sound astra-pack-test:table")
+            click("Load table A")
             compose.waitUntil(30000){!service.state.value.busy&&service.state.value.project.tables[0][0]>=0};assertEquals(0,service.state.value.project.instruments[0].mode)
             val tableAsset=service.state.value.project.asset(service.state.value.project.tables[0][0])!!;assertEquals(2048,tableAsset.cycle)
             click("Edit synth / modulation");compose.onNodeWithText("IMPORTED WAVETABLES").scrollOnUiThread().assertExists();shot("37-imported-wavetable")
@@ -196,7 +199,8 @@ class WorkspaceSmokeTest {
             click("File");click("Open performance");compose.onNodeWithTag("Performance readings").assertTextContains("50 tracks",substring=true);shot("33-performance-phone")
             compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
             compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
-            compose.onNodeWithTag("Performance readings").scrollOnUiThread().assertTextContains("Astra Studio 0.12.0",substring=true);shot("34-performance-landscape")
+            val version=requireNotNull(context.packageManager.getPackageInfo(context.packageName,0).versionName).substringBefore('-')
+            compose.onNodeWithTag("Performance readings").scrollOnUiThread().assertTextContains("Astra Studio $version",substring=true);shot("34-performance-landscape")
             back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
         }finally{binding.unbindService();compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_PORTRAIT}}
     }
