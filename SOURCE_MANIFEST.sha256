@@ -129,7 +129,7 @@ b8ced27333837379ec02d8ed945a266a70919419a9163906875647b4387bc7d3  app/src/main/j
 013db1fe4997a24901be95e6740e4972977117056245204b14a61d369aced27e  app/src/main/java/com/weskestis/astrastudio/workspace/QualityPanels.kt
 ad7f74a3abb3b06b82ad95bc102923d69b400894734968e5960923bb0f0642c9  app/src/main/java/com/weskestis/astrastudio/workspace/RecordingPanel.kt
 cec7524b250ca660b04b43226503550c7eb12668521c2df5833df5bac1863369  app/src/main/java/com/weskestis/astrastudio/workspace/ReliabilityPanels.kt
-585c5cba1e11d4cb9085068c5ca72cf406ba4265c99339fa2283a05e41b6e7dc  app/src/main/java/com/weskestis/astrastudio/workspace/SamplePanels.kt
+ab5c6f2175ac2cc154770a4559e55b798a1cbccfe0d4f217cb1a57ee632bf3e5  app/src/main/java/com/weskestis/astrastudio/workspace/SamplePanels.kt
 30bca1ad83692fc2fa49b4092b7d9feb961af31da920c1036e05e8e3de0eb01f  app/src/main/java/com/weskestis/astrastudio/workspace/SharePanel.kt
 19860d4d32b95c457536a07f117340a97f26904952b06eb687e9a78a610bc929  app/src/main/java/com/weskestis/astrastudio/workspace/SlicePanel.kt
 3b9126e3de7feb2104d996d84622ae02df0cc96f20673e2c9b6e4eb3c4ade899  app/src/main/java/com/weskestis/astrastudio/workspace/StudioWorkspace.kt

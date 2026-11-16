@@ -116,7 +116,7 @@ import kotlin.math.roundToInt
     var query by rememberSaveable{mutableStateOf("")};var favorites by rememberSaveable{mutableStateOf(false)};var group by rememberSaveable{mutableStateOf("")};var selected by rememberSaveable{mutableIntStateOf(-1)}
     var library by rememberSaveable{mutableStateOf(false)}
     Tools{FilterChip(!library,{library=false;service.stopPreview()},label={Text("Project samples")});FilterChip(library,{library=true;service.stopPreview()},label={Text("Sound packs")},modifier=Modifier.testTag("Sound packs tab"))}
-    if(library){PackBrowser(s,t,slot,targetPad,service,importPack,assigned,editSynth,layer);return}
+    if(library){PackBrowser(s,t,slot,targetPad,service,importPack,assigned,editSynth,if(targetPad==null)0 else layer);return}
     PanelBackHandler(selected>=0){selected=-1;service.stopPreview()}
     val asset=s.project.asset(selected)
     if(asset!=null){
