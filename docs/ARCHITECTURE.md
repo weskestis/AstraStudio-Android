@@ -26,7 +26,7 @@ All capacities are allocated before starting a stream:
 - 4,096 command slots in a fixed SPSC ring.
 - 8,192 slots in a fixed binary event heap, ordered by frame then submission order.
 - Maximum 256 commands accepted from the queue and 512 scheduled events dispatched per callback.
-- One metronome sine table, shared immutable wavetable banks, 64 patch-transfer slots and fixed per-voice filter/FIR/operator state. All are constructed off the callback.
+- One metronome sine table, shared immutable wavetable banks, 128 patch-transfer slots and fixed per-voice filter/FIR/operator state. All are constructed off the callback.
 - 128 effects mailbox slots, preallocated delay storage for all 50 racks, fixed limiter/compensation buffers and a 32,768-frame analyzer queue. FFT runs on the control thread.
 - A fixed 50-track stereo stack accumulator per sample. No callback-sized scratch allocation.
 
@@ -58,7 +58,7 @@ The control handler owns its current StudioState; a main-thread handler publishe
 
 The dedicated project I/O worker performs archive operations, Android MediaCodec decoding, atomic autosave and offline export. Long I/O never holds the Kotlin audio monitor or native registry mutex. Offline export snapshots assets and uses a separate RenderCore with the same synth/rack/send/limiter path. It trims fixed algorithmic latency and writes float32 WAV or deterministic-dithered 24-bit WAV outside render calls. A dataSync foreground service covers user-started file jobs.
 
-Undo/Redo stores 64 immutable project snapshots; continuous controls coalesce and MIDI takes form one group. Audio files are immutable and retained privately for safe Undo; opening/new-project clears history as appropriate. Phase 6 portable archives retain all browser audio, including unused samples and inactive pad assignments. Audio import is capped by a 512 MiB decoded asset budget, not a 60-second duration limit.
+Undo/Redo stores 64 immutable project snapshots; continuous controls coalesce and MIDI takes form one group. Audio files are immutable and retained privately for safe Undo; opening/new-project clears history as appropriate. Phase 6 portable archives retain all browser audio, including unused samples and inactive pad assignments. Current imports use the Phase 10 bounded streaming budgets: 2 GiB per file, 8 GiB stereo-float-equivalent source frames and a 128 MiB active audio-page/resident bank. There is no 60-second duration limit. See STREAMING.md and CAPACITY.md.
 
 ## Android integration
 

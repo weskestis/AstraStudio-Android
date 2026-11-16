@@ -1,3 +1,26 @@
+# Phase 11 — 50-track validation
+
+Development **0.11.0-phase11 / versionCode 12**, Android 14+.
+
+Verified executable/test source commit: `9c07adc9512e0756615258232c0fe6d6f7f07096`.
+[Successful build and Android run](https://github.com/weskestis/AstraStudio-Android/actions/runs/43817116783). [Capacity, migration and use](CAPACITY.md).
+
+- All **156 Kotlin tests passed**, zero failures, errors or skips. Capacity tests cover all 128 old clip positions across JSON versions 1–5; instrument/sidechain/warp migration; 400 dense clips and 2,048 regions; Track 50 editing and Undo; Astra pattern/routing commands; and malformed dimensions. A full project exceeds the previous 400,000-value native ceiling and round-trips within the new limits.
+- All **10 native suites passed** in Release and with AddressSanitizer/UndefinedBehaviorSanitizer, locally and in CI. The capacity suite completed **1,339 checks**, with **zero render-thread allocations or frees**. It verifies native legacy migration, all 400 dense clips, all 50 patch/effects publications before callback consumption, 50 simultaneous instrument voices, Track 50 sidechain detection, Scene 8 / Track 50 launch and stop, track/master meters, and high-track resampling. The 50-layer PCM24 master sum matches 50 copies of an isolated Track 50 export to final quantization precision.
+- All **14 Android instrumentation tests passed**, zero failures, errors or skips, in **225.613 seconds** on API 34 x86_64 at **1080 × 2520**. The new test selects Track 50 directly, checks picker Back, imports audio into that track, builds 50 arrangement layers, rotates portrait/landscape, returns to Session with Back, saves/reopens a portable project, renders all layers through JNI and checks native playback/50-track meters. The output is actual stereo PCM24 at **192,000 Hz**, **48,000 frames** and **288,044 bytes**, with signal above the dither floor. Earlier recording, Sample Lab, Warp, synth/sampler, Astra, sharing, navigation and 192 kHz tests remain green.
+- APK assembly and lint passed: **0 lint errors**, 24 advisory warnings in CI. Green/black screenshots for Track 50 Session and Arrangement were reviewed in portrait and landscape. The track picker remains reachable, and the timeline keeps the selected high-numbered row visible through rotation.
+
+## Verified APK
+
+- File: `AstraStudio_0.11.0_50Tracks.apk` — **28,496,738 bytes**, taken from the successful CI build.
+- SHA-256: `99c38ab1f05a15458e702ffc32c51c0b26de2c83a7650d55d3f04ce3245576af`.
+- Certificate SHA-256: `1bff24ae64d74c99d9540a1ecc5acccc8479367f44772b305144d2c10ce4bd45`.
+- Package `com.weskestis.astrastudio`; minimum/target API 34; ARM64 and x86_64. Signature verification, 16 KiB ZIP alignment and all six native libraries' LOAD-segment alignment passed. The unchanged development certificate supports updating the earlier Astra APK without uninstalling.
+
+Fifty is the project track capacity, not a measured guarantee of fifty heavy live DSP chains on the Xperia. The global 128 instrument voices, 64 source assets and 128 MiB active audio-page/resident budget remain; DSP, UI and temporary export memory are additional. Basic 50-layer 192 kHz export is tested, while physical Xperia speed, memory pressure, thermals and hardware routing remain unmeasured. Hardware MIDI channels still address Tracks 1–16. JSON version 6 migrates versions 1–5, but older APKs cannot open newly saved projects. Full-track freeze, flexible buses, deeper device layering and the other capability-ledger gaps remain future work.
+
+---
+
 # 192 kHz master validation
 
 Development **0.10.1-master192 / versionCode 11**, Android 14+.
