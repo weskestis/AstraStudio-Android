@@ -22,6 +22,8 @@ The seven downloads total about 2.41 GB. Installed original content occupies abo
 
 Search by sound, collection, category, filename key or BPM. Filter by collection/category or favorite sounds. The list displays 40 results per page so thousands of sounds do not create thousands of Compose views. Parts installed/expected and sound counts are visible. Favorite choices persist independently of projects.
 
+After typing, tap the keyboard's **Search** action to dismiss it and browse the results, especially in landscape. Opening a sound also clears keyboard focus.
+
 Open a sound to see its waveform, duration, source rate and stereo/mono status. Preview reads from disk for up to 10 seconds, pauses the transport and does not consume a project asset slot or change the composition. Preview volume is reduced according to source peak; the audio file itself is unchanged. Back and Stop preview end audition. Wavetable source preview plays its stored cycles; load an oscillator and use Keys to audition it as a pitched instrument.
 
 - **Use in sampler** loads an independent project source, ready for MIDI/Keys. **Sampler / drums** provides exact frame trim/loop points, reverse, pitch, root note, attack, decay, sustain, release, gain and pan. Filename keys initialize the sampler root in octave 4; this is metadata, not detected pitch, and stays editable.

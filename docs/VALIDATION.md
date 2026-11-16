@@ -1,6 +1,24 @@
-# Phase 13 validation in progress
+# Phase 13 — sound packs and imported wavetables
 
-Version **0.13.0-soundpacks / versionCode 14**. The new pack installer and imported oscillator tests are being checked against all seven supplied packs, native sanitizers and Android instrumentation. [Scope and editing workflow](SOUND_PACKS.md). Earlier sections below retain their historical results.
+Development **0.13.0-soundpacks / versionCode 14**, Android 14+.
+
+Verified executable/test source commit: `6a6d70e8ffd73768129003950ca56a33275597c3`.
+[Successful build and Android run](https://github.com/weskestis/AstraStudio-Android/actions/runs/43909666350). [Install and editing instructions](SOUND_PACKS.md).
+
+- The actual Kotlin installer verified **all seven supplied Rift pack parts: 1,194 samples and six wavetables**. Every entry passed ZIP CRC, declared SHA-256, PCM/finite-value and metadata checks. The native reader separately opened all **1,200 unique WAVs**, including all six original wavetables. Original WAV content totals **2,654,987,088 bytes**; source bytes are unchanged. Ten MAYGE WAVs have bytes beyond their declared RIFF container; both readers respect that boundary while retaining the complete original files.
+- All **208 Kotlin tests passed**, zero failures or ignored tests. New coverage includes catalog persistence, parts/reinstall, favorites, cancellation/recovery, archive integrity and paths, headroom, wavetable metadata, older projects, Track 50 assignments and freeze invalidation.
+- All **12 native suites passed** in Release and with AddressSanitizer/UndefinedBehaviorSanitizer. Final logs have zero ASan/UBSan error diagnostics. The imported-wavetable suite passed **51,757 checks**, with **zero render-thread allocations or frees**. It covers retained cycles, position and mip interpolation, spectral behavior, bank memory, invalid assignments, Track 50, pointer retirement and 192 kHz PCM24 export changes after editing position.
+- All **17 Android instrumentation tests passed**, zero failures/errors/skips, in **170.247 seconds**, on API 34 x86_64 at **1080 × 2520**. The new workflow installs a synthetic pack, searches/previews, assigns and edits a sampler, exercises Undo/Redo and favorites, rotates and uses Back, imports an oscillator, preserves every wavetable byte in a portable project and renders audible 192 kHz audio through JNI after reopening. Earlier recording, Warp, sharing, 50-track, freeze and recovery checks remain green.
+- APK assembly and lint passed: **0 lint errors**, 26 advisory warnings. Portrait pack-browser and landscape detail/imported-oscillator screenshots were reviewed. Search dismisses the keyboard, and opening a sound clears focus. The full private collection was audited locally; public emulator CI uses original synthetic fixtures.
+
+## Verified APK
+
+- File: `AstraStudio_0.13.0_SoundPacks.apk` — **28,808,038 bytes**, from the successful CI build.
+- SHA-256: `db31fe62b2588ff82479defb1915941836d3d9021b93bc92e1a99d13c3e7e2c5`.
+- Certificate SHA-256: `1bff24ae64d74c99d9540a1ecc5acccc8479367f44772b305144d2c10ce4bd45`.
+- Package `com.weskestis.astrastudio`; minimum/target API 34; ARM64 and x86_64. Signature verification, 16 KiB ZIP alignment and all six native libraries' LOAD-segment alignment passed. The unchanged development certificate supports updating Astra 12 without uninstalling.
+
+Installed packs are separate from project/native source slots. The library supports up to 20,000 sounds; projects still have 50 tracks, 128 shared voices and 64 source assets. Selected table PCM and mip levels count toward the 128 MiB active bank. Portable saves include selected sounds. Original external-plugin presets are not converted. Physical Xperia sustained CPU, heat, storage throughput and audio latency remain unmeasured; emulator results do not establish those limits.
 
 ---
 
