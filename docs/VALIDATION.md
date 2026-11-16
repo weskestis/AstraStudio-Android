@@ -1,6 +1,26 @@
-# Phase 9 validation in progress
+# Phase 9 validation
 
-Development **0.9.0-phase9 / versionCode 9**, Android 14+. Local unit tests, assembly and lint are passing; final CI results and the verified APK identity will be recorded after the Android interface run. Phase 8 remains the previous delivered reference below. Phase 9 adds bounded tempo-following audio; see [warp implementation and limits](WARP.md).
+Development **0.9.0-phase9 / versionCode 9**, Android 14+.
+
+Verified executable/test source commit: `c8de8f1f75ca4a8c4151a23faaedbcd3bfe63fce`.
+[Successful build and Android run](https://github.com/weskestis/AstraStudio-Android/actions/runs/43777003969).
+
+- All **135 Kotlin unit tests passed**, with zero failures or ignored tests. Coverage includes warp settings, source-frame mapping, trimming/splitting, schema-v4 persistence, legacy migration, bounds and Undo.
+- All **seven native suites passed** in Release and with AddressSanitizer/UndefinedBehaviorSanitizer. The warp suite completed **729,659 assertions**; measured render-thread allocations and frees were both **zero**. Fixtures cover 55 Hz bass and 220 Hz tones, independent octave shifts, 44.1-to-48 kHz source conversion, antiphase stereo, tempo steps/ramps, seeks/loops/downbeat offsets, sixteen mixed tone/noise processors and extreme supported tempo ratios. Unchanged Session speed/pitch bypass is sample-exact, and adjacent warped splits match the unsplit render sample-for-sample.
+- Drum-fixture landmarks were within approximately **2 ms** of their analytic positions through the tested tempo steps and ramps. This is a fixture result, not a universal transient/timing guarantee. Export frame counts matched their musical duration.
+- All **11 Android instrumentation tests passed**, with zero failures/errors/skips, in **138.463 seconds**, on API 34 x86_64 at 1080 × 2520. New coverage includes Warp controls, rotation, hierarchical Back, Undo/Redo, portable archive metadata and unchanged original media, actual Oboe playback with an advancing transport and active warped clip, and non-silent float WAV export. Earlier recording, Sample Lab, sampler, editor and navigation checks remain green.
+- APK assembly and lint passed: **0 lint errors**, 14 advisory warnings. Green/black phone and landscape screenshots were reviewed; Warp controls remain accessible by vertical scrolling.
+
+## Verified APK
+
+- File: `AstraStudio_Phase9_0.9.0.apk` — **28,348,610 bytes**.
+- SHA-256: `ab972c555fc8187c2a28d860c33fc3e1ebf310f5845c8dd68b9ebfe9c5ecd160`.
+- Certificate SHA-256: `1bff24ae64d74c99d9540a1ecc5acccc8479367f44772b305144d2c10ce4bd45`.
+- Package `com.weskestis.astrastudio`; minimum/target API 34; ARM64 and x86_64. Signature verification and 16 KiB ZIP alignment passed. The unchanged development certificate permits installing over Phase 8.
+
+Warp uses the same processing in playback, export and resampling. Original media is retained; settings are saved in project schema v4. Versions 1–3 load with Warp disabled. Older APKs cannot read schema-v4 saves.
+
+Physical Xperia latency, thermal behavior, sustained capacity, USB routing and listening quality remain unmeasured. This is a development release with one warp algorithm; extreme ratios can soften transients or add artifacts. Detailed warp markers, automatic tempo detection, material-specific modes and disk-streamed project playback remain planned. Existing track/sample budgets are unchanged. See [warp implementation and limits](WARP.md).
 
 ---
 

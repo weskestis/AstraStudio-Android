@@ -6,7 +6,7 @@ Build a professional Android DAW with Ableton Live-level workflow depth and soun
 
 Target device: Sony Xperia 1 IV (XQ-CT62), Android 14+. Preserve the green/black interface, phone-only installation and file workflows, hierarchical Back navigation, original recordings, and public source repository. EDM, riddim, dubstep, trance and house remain the production focus. Sound quality and repeatable project/export behavior take priority over adding controls that are disconnected from the engine.
 
-The current delivered baseline is Phase 8, version 0.8.0-phase8. Its verified executable commit is `258c83f5c8d5bdf14f9f365f885b479499c203a4`; see [validation](VALIDATION.md). The existing implementation is a foundation with working features and explicit limits, not a claim of full parity.
+The current delivered baseline is Phase 9, version 0.9.0-phase9. Its verified executable/test commit is `c8de8f1f75ca4a8c4151a23faaedbcd3bfe63fce`; see [validation](VALIDATION.md). The existing implementation is a foundation with working features and explicit limits, not a claim of full parity.
 
 ## Milestones and numbering
 
@@ -26,7 +26,7 @@ Phase 9 implementation now adds source-tempo/downbeat warp, independent pitch, s
 
 These are project requirements and acceptance criteria. “Partial” means an implemented starting point exists, not that the full capability is done. The Live 12 documentation is the reference baseline for the comparison; changes in the reference product should be recorded explicitly rather than silently moving the target.
 
-| Area | Phase 8 baseline | Required development / acceptance |
+| Area | Current baseline (Phase 9) | Required development / acceptance |
 | --- | --- | --- |
 | Session performance | Partial: launch grid, scenes, quantization | More flexible scene/clip capacity, launch behaviors, follow actions, capture of a Session performance into Arrangement, and reliable live editing with deterministic timing. |
 | Arrangement editing | Partial: regions, splits, duplicates and basic zoom | Multiselection and linked editing, fades/crossfades, consolidation, detailed clip properties, flexible lanes, group organization, and touch editing without accidental panel closure. |
