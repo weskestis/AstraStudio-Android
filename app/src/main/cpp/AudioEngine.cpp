@@ -97,6 +97,7 @@ EngineSnapshot AudioEngine::snapshot() const noexcept {
     EngineSnapshot s;
     s.error = lastError_;
     if (!stream_ || !callback_) return s;
+    callback_->core.reclaimRetiredPlans();
     s.core = callback_->core.snapshot();
     s.error = callback_->error.load(std::memory_order_acquire);
     s.running = s.error == 0 && !callback_->halt.load(std::memory_order_acquire);

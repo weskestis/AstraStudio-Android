@@ -20,7 +20,7 @@ object ExportNames {
 }
 /** Completed exports are kept until the user deletes them; share recipients may read later. */
 class FinishedTracks(private val context: Context) {
-    val directory=File(context.filesDir,"finished-tracks").also{check(it.isDirectory||it.mkdirs()){"Could not create finished-track folder."}}
+    val directory=File(context.filesDir,"finished-tracks").canonicalFile.also{check(it.isDirectory||it.mkdirs()){"Could not create finished-track folder."}}
     fun list()=directory.listFiles().orEmpty().filter{it.isFile&&it.extension=="wav"}.sortedByDescending{it.lastModified()}
         .map{FinishedExport(it.name,it.absolutePath,it.length(),it.lastModified())}
     fun begin(title: String,bytes: Long): File {

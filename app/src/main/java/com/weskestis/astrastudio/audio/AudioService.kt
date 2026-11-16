@@ -626,7 +626,7 @@ class AudioService : Service() {
     fun saveProject(uri: Uri){work("Saving project",{files.saveArchive(it,uri,cancelled);null},"Project saved with synths, effects and audio.")}
     fun openProject(uri: Uri){control.post{if(!mutableState.value.busy)stopAudio("Opening project…")};work("Opening project",{val d=files.openArchive(uri,cancelled);loadAssets(d);d},"Project opened. Start audio to play.",true)}
     fun starter(){control.post{if(!mutableState.value.ready||mutableState.value.busy)return@post;stopTransport();commit{old->StarterProject.create(presets).let{it.copy(project=it.project.copy(assets=old.project.assets))}};message("Green circuit loaded. Start audio and press Play, or launch individual clips.")}}
-    fun newProject(){control.post{if(mutableState.value.busy)return@post;stopTransport();history.clear();adopt(document().copy(project=Project(),tracks=List(16){TrackControls()}));syncEngine();message("New project. Your synth patches and effects are retained.")}}
+    fun newProject(){control.post{if(mutableState.value.busy)return@post;stopTransport();history.clear();bridge.loadAssets(emptyList());adopt(document().copy(project=Project(),tracks=List(16){TrackControls()}));syncEngine();message("New project. Your synth patches and effects are retained.")}}
     fun exportWave(uri: Uri,rate: Int=48000,tail: Float=4f,floating: Boolean=false){work("Rendering WAV",{d->
         require(d.project.regions.isNotEmpty()){ "Place clips in Arrangement before exporting." }
         val file=File(cacheDir,"export-${System.nanoTime()}.wav")

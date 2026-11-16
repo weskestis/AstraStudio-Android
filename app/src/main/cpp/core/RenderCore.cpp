@@ -87,7 +87,11 @@ bool RenderCore::setEffects(int track, const fx::Config& config) noexcept {
         fxSlots_[i].busy.store(false,std::memory_order_release);return false;}
     return false;
 }
+void RenderCore::reclaimRetiredPlans()noexcept{
+    for(auto& slot:planSlots_)if(!slot.busy.load(std::memory_order_acquire))slot.plan.reset();
+}
 bool RenderCore::setProject(std::span<const double> data,const project::Samples& samples) noexcept {
+    reclaimRetiredPlans();
     for(int i=0;i<3;++i){bool expected=false;if(!planSlots_[i].busy.compare_exchange_strong(expected,true,std::memory_order_acquire))continue;
         auto plan=project::decodePlan(data,samples);if(!plan){planSlots_[i].busy.store(false,std::memory_order_release);return false;}
         planSlots_[i].plan=std::move(plan);

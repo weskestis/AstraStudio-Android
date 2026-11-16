@@ -1,4 +1,5 @@
 #include "project/Project.h"
+#include "core/RenderCore.h"
 #include "project/OfflineRender.h"
 #include "project/StretchRender.h"
 #include "project/WaveWriter.h"
@@ -80,6 +81,14 @@ int main(){
     auto broken=offlineSample(large);check(truncate(huge.c_str(),44)==0,"truncate fixture after reader creation");check(!broken->read(500000,block.data(),512,cursor)&&broken->failed(),"read failures are exposed instead of successful silent export");
     check(renderWave(out.c_str(),wire(500000,530000),Samples{large},patches,effects,m,48000,0,cancel,progress,true)==2,"export fails on truncated media");
     cancel=true;check(renderWave(out.c_str(),w,a,patches,effects,m,48000,0,cancel,progress,true)==3,"streamed export cancellation");
+    {auto core=std::make_unique<RenderCore>();check(core->prepare(48000),"reclamation renderer prepare");
+        auto owned=std::make_shared<Sample>();owned->rate=48000;owned->stereo.resize(2048);std::weak_ptr<const Sample> weak=owned;
+        Samples bank{};bank[0]=owned;check(core->setProject(wire(0,1024),bank),"publish owned sample plan");owned.reset();bank={};
+        inRender=true;core->render(block.data(),512);inRender=false;
+        const std::vector<double> empty{1,0,4,4,0,0,16,0,0};check(core->setProject(empty,bank),"replace with empty project");
+        inRender=true;core->render(block.data(),512);inRender=false;
+        check(!weak.expired(),"callback retains retired owner for control-thread destruction");core->reclaimRetiredPlans();check(weak.expired(),"retired source ownership promptly reclaimed off callback");
+    }
     check(realtimeAllocations==0&&realtimeDeallocations==0,"no callback allocation/free while streaming and seeking");
     check(realtimeFileReads==0,"no file reads or seeks on real-time thread");
     std::printf("Streaming tests passed: %d assertions; realtime allocations=%d frees=%d file operations=%d; 600 MiB source / 2 MiB pages.\n",assertions,realtimeAllocations.load(),realtimeDeallocations.load(),realtimeFileReads.load());

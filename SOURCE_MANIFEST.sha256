@@ -3,14 +3,14 @@
 49782ac0906cb89fac78c8015510142825923a5041be17d6afc24ce127edcc95  README.md
 e220881d4dd80178bfe73f68162a3c0798524a8e96663b8a1e956b6eee08b6ae  app/build.gradle.kts
 691a8fb364968d0cebe2742f22f483e14f4cb1f9ee530ddebd0f8cde13806ddd  app/proguard-rules.pro
-072b2bf43d2af6942bcb15a12e9b01d85a731620e3320feb59dae8e298b2652a  app/src/androidTest/java/com/weskestis/astrastudio/WorkspaceSmokeTest.kt
+a14d54671f869657ec7f9c6f0c11c477454b1366f052208f3b38fb9a7e0483a1  app/src/androidTest/java/com/weskestis/astrastudio/WorkspaceSmokeTest.kt
 fac74e22e603b552cb711a25c179cb5a959171fb176fec833a3a906db6be1f51  app/src/main/AndroidManifest.xml
 49112e1ca676994a4a3ff42ead5b751cdd324fd52ed35287afb0996019e69bda  app/src/main/assets/THIRD_PARTY_LICENSES.txt
-268a4aaaf4eed9f16ae56692e94958cbe623f11de76d8fa205441814cef02475  app/src/main/cpp/AudioEngine.cpp
+0a5d5075c1f892c0f795ced2bef4cf9f2c263a52fe2ccf0408196f8cebdd02be  app/src/main/cpp/AudioEngine.cpp
 1e692697d363bdbe9aa5dbd89a75d748a7355ed013bed2e38f6d809d67d667d6  app/src/main/cpp/AudioEngine.h
 ff1d0b2056a40649f2711ffb079e1f44719e0cfddac469c77b5266b49a1ee066  app/src/main/cpp/CMakeLists.txt
-57cc5699ec2f8406472065fd857fb0b77018e99153789fa21b96e3f34ad69717  app/src/main/cpp/core/RenderCore.cpp
-18807275d92990b22db455388411465051972e4d822b2b0f631c7357e2c36e4e  app/src/main/cpp/core/RenderCore.h
+447b557a1309feda1225b674ff3503d93920fb7a45dda02d87946e154a82d45c  app/src/main/cpp/core/RenderCore.cpp
+f240a29b40d8f9a176479950f17ddb735de86c1eec09c75c742becb4429734b7  app/src/main/cpp/core/RenderCore.h
 c3ccbbaff12b262e3c13955aa9d5dca535097811a37874cb63a85a205fad553c  app/src/main/cpp/core/SpscRing.h
 9a68745dfe26c9d9caa4df3262ed25c74e6b7bed54aa4b413d20f8633fd43bb5  app/src/main/cpp/dsp/DspMath.h
 05a1a7979193204af874aabd8d81c3348d9c956903d928bd9088395f51d6e1e2  app/src/main/cpp/dsp/FMOperator.h
@@ -60,7 +60,7 @@ da833c1230daa6607bcc36fcf0a2cbeb06f9cd61a7bad27c7705b29c45dc5b06  app/src/main/c
 e20e618e1039bf2a18a38298d465baa6313138d2a577c8b4e95567650d2b097c  app/src/main/cpp/tests/QualityTests.cpp
 45e7344075b32bb3824fa15b11608dadec406f370d9d7f6b14a03641bec1e34c  app/src/main/cpp/tests/RenderPresets.cpp
 25256d399bfe39f0dc48bb3be251d465cbdb7f64c976a0b6a9ad194be7006427  app/src/main/cpp/tests/SamplerTests.cpp
-1cd778c4bdfafc284bf04f3bd2138b00d22c18ab114bb62b3b2963715ec1d287  app/src/main/cpp/tests/StreamingTests.cpp
+bf604838dcf2ccf32871ccbc72b1fe531edfbfce97887351d8dad055930658cb  app/src/main/cpp/tests/StreamingTests.cpp
 1febc17f1ef85767e9d1bbcd7a2de626a1e073713f78d159367ce0d06b019deb  app/src/main/cpp/tests/SynthTests.cpp
 eeff11352dca8a7cbfefc1ba60e85ff6debe73db68f660f1c8c2b7a080b7fc0e  app/src/main/cpp/tests/WarpTests.cpp
 072b5e9eb5b22880bdf6256324654cf3ce53dba828edb911921121e1be09d9c3  app/src/main/cpp/third_party/signalsmith-linear-LICENSE.txt
@@ -79,7 +79,7 @@ abd1683a861f6b113412e1e28c9bd2b56569f6bc75be9755476d7785ccb334f7  app/src/main/j
 ad043f13cce0264c7a7bba97423f48fa256d821a9be3953225601decf4fbe621  app/src/main/java/com/weskestis/astrastudio/astra/PatternGenerator.kt
 2a8250c36a44945e041284dac88b562e6b4076f6ce8bb0ef72977ec5ec2a5f01  app/src/main/java/com/weskestis/astrastudio/astra/StrictJson.kt
 1ccc70cfe007109291111c7e481cd3ef97cdfc88ed9112da96e58ddebfe214d6  app/src/main/java/com/weskestis/astrastudio/audio/AudioBridge.kt
-6f7e4a80997298968874f70d3130f09850b066c31dfee2a0e0a9c4cd0156890e  app/src/main/java/com/weskestis/astrastudio/audio/AudioService.kt
+6a5614c334022a78cae9dc11d2f0d55263935919e2f418583be04b57ce4d78f0  app/src/main/java/com/weskestis/astrastudio/audio/AudioService.kt
 bc35416b2fddbe2e79fa4a18202784c2e001fa584fb040cd8b2713de24e576a7  app/src/main/java/com/weskestis/astrastudio/audio/UiSnapshots.kt
 f89e936bb0a2cfb12d378ad51c99b3a201871940d94a89e1bdea7506bb35d014  app/src/main/java/com/weskestis/astrastudio/fx/EqResponse.kt
 effca2913d034dd6078c16bad7a765985a0e88215925ba28556487cfec468db3  app/src/main/java/com/weskestis/astrastudio/fx/FxConfig.kt
@@ -89,7 +89,7 @@ a1af110752f85724858139470f1142d8b88a9172bb846b5909272bda9f50b6dd  app/src/main/j
 e46bd31ac6d7d4d43c973f415fead17e0c7e0eb48d9f46e164ea139c1fb21f27  app/src/main/java/com/weskestis/astrastudio/midi/MidiInputManager.kt
 d759c64be3d9a883039fcaf937df920fd5a594980503a9bff0d0178b5f57f52c  app/src/main/java/com/weskestis/astrastudio/project/AudioStorage.kt
 6d6d999e357f138fb084d800ab2d597bf5626423a726efa574ca9100eff30837  app/src/main/java/com/weskestis/astrastudio/project/FactorySamples.kt
-a171772b2c1acda25e3572a2c36c616ef9e59471d6d7092a7a2bd029fff14414  app/src/main/java/com/weskestis/astrastudio/project/FinishedTracks.kt
+e8954891b10198964d4d08b121ea74655fdac728cb09329fb6a1be5cb006d509  app/src/main/java/com/weskestis/astrastudio/project/FinishedTracks.kt
 fa52278367e10256edff771ee18386f5d19e46eb6448276beecf8803f8dbd14a  app/src/main/java/com/weskestis/astrastudio/project/ProjectCodec.kt
 def63ac6867d3cf84a7a4847b4bf878bcdefb967c5b70dff3c070e3061cfd004  app/src/main/java/com/weskestis/astrastudio/project/ProjectFiles.kt
 fba95f39d65a1a101c67e055c4aa0b6d0deb8afaf0acec72281c2ee470c0ba88  app/src/main/java/com/weskestis/astrastudio/project/ProjectModel.kt

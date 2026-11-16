@@ -63,6 +63,7 @@ public:
     bool setPatch(int track, const synth::Patch& patch) noexcept;
     bool setEffects(int track, const fx::Config& config) noexcept;
     bool setProject(std::span<const double> data,const project::Samples& samples) noexcept;
+    void reclaimRetiredPlans()noexcept; // Serialized control thread only.
     project::Snapshot sequenceSnapshot() const noexcept;
     FxSnapshot effectsSnapshot() noexcept;
     int outputLatencyFrames() const noexcept { return sourceTrack_>=0?0:fx::Rack::latency + limiter_.latency(); }

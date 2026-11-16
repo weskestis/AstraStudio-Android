@@ -82,14 +82,16 @@ class WorkspaceSmokeTest {
             assertEquals("content",uri.scheme);assertTrue(send.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION!=0);assertEquals(uri,send.clipData!!.getItemAt(0).uri)
             context.contentResolver.openInputStream(uri)!!.use{input->assertArrayEquals(f.readBytes(),input.readBytes())}
             assertTrue(runCatching{store.sendIntent(source.absolutePath)}.isFailure)
-            assertTrue(FinishedTracks(context).list().any{it.path==f.absolutePath})
+            assertTrue("Finished exports keep the same canonical identity when the store is reopened",FinishedTracks(context).list().any{it.path==f.absolutePath})
             shot("21-finished-track-phone")
             compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
             compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
             compose.onNodeWithTag("Share WAV 0").performScrollTo().assertIsDisplayed();shot("22-finished-track-landscape")
             click("Share WAV 0")
-            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
-            InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+            val automation=InstrumentationRegistry.getInstrumentation().uiAutomation
+            compose.waitUntil(10000){automation.rootInActiveWindow?.packageName?.let{it!=context.packageName}==true}
+            assertTrue("Android share sheet accepts Back",automation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK))
+            compose.waitUntil(10000){automation.rootInActiveWindow?.packageName==context.packageName}
             compose.waitUntil(10000){compose.onAllNodesWithTag("Share WAV 0").fetchSemanticsNodes().isNotEmpty()}
             service.saveFinishedTrack(Uri.fromFile(saved),f.absolutePath)
             compose.waitUntil(10000){saved.exists()&&saved.length()==f.length()&&!service.state.value.busy}
