@@ -16,7 +16,7 @@ void hash(uint64_t& h,double x){h^=std::bit_cast<uint64_t>(x);h*=1099511628211UL
 }
 bool Plan::decode(std::span<const double> data,const Samples& audio){
     if(data.size()>kProjectWireLimit)return false;
-    Reader r{data};const int version=r.integer(1,5);
+    Reader r{data};const int version=r.integer(1,6);
     const int wireTracks=version<5?16:kTracks;
     const int wireClips=wireTracks*kScenes;
     auto slot=[&](){const int old=r.integer(0,wireClips-1);return old%wireTracks+(old/wireTracks)*kTracks;};
@@ -76,6 +76,13 @@ bool Plan::decode(std::span<const double> data,const Samples& audio){
             hash(c.hash,c.warp);hash(c.hash,c.sourceBpm);hash(c.hash,double(c.warpStart));hash(c.hash,c.pitch);
         }
     }
+    frozen={};
+    if(version>=6){const int count=r.integer(0,kTracks);std::array<bool,kTracks> seen{};std::array<bool,kAssets> assets{};
+        for(int i=0;i<count&&r.ok;++i){const int track=r.integer(0,kTracks-1);auto& f=frozen[track];f.asset=r.integer(0,kAssets-1);f.musicFrames=r.frame();
+            if(seen[track]||assets[f.asset]||!samples[f.asset]||f.musicFrames<=0||f.musicFrames>samples[f.asset]->frames())return false;
+            seen[track]=true;assets[f.asset]=true;samples[f.asset]->prefetch(0);
+        }
+    }
     if(!r.ok||r.at!=data.size())return false;
     for(const auto& c:clips)if(c.present&&c.asset>=0)samples[c.asset]->prefetch(c.first+c.warpStart);
     for(const auto& instrument:instruments){const auto warm=[&](const sampler::Zone& z){if(z.asset>=0)samples[z.asset]->prefetch(z.reverse?z.last-1:z.first);};warm(instrument.sample);for(const auto& pad:instrument.pads)warm(pad);}
@@ -87,20 +94,24 @@ std::unique_ptr<Plan> decodePlan(std::span<const double> data,const Samples& sam
 double Plan::endBeat()const noexcept{double end=0;for(const auto& list:regions)if(!list.empty())end=std::max(end,list.back().start+list.back().length);return end;}
 uint32_t Sequencer::nextId()noexcept{if(++id_>=0x7ffffffeU)id_=kSequenceId;return id_;}
 bool Sequencer::prepare(double rate,const sampler::Kernel* kernel)noexcept{
-    rate_=rate;kernel_=kernel;
+    rate_=rate;kernel_=kernel;resetFrozen();
     if(kernel)for(auto& warp:warps_)if(!warp.prepare(rate,kernel))return false;
     return true;
 }
 void Sequencer::release(int track)noexcept{auto& t=tracks_[track];if(note_)for(auto& id:t.held)if(id){note_(owner_,track,0,0,id,false);id=0;}t.slot=t.region=-1;t.previous=-1;t.cursor=0;}
 void Sequencer::clearAutomation(int track)noexcept{auto& t=tracks_[track];for(int lane=0;lane<4;++lane)if(t.automated[lane]){t.automated[lane]=false;if(automation_)automation_(owner_,track,lane,0,false);}}
 void Sequencer::activate(const Plan* next)noexcept{
-    for(int i=0;i<kTracks;++i){auto& t=tracks_[i];if(!next||!plan_||next->mode!=plan_->mode||(next->mode==1&&next->regions[i]!=plan_->regions[i])||
+    for(int i=0;i<kTracks;++i){auto& t=tracks_[i];if(!next||!plan_||next->mode!=plan_->mode||(next->mode==1&&(next->regions[i]!=plan_->regions[i]||next->frozen[i]!=plan_->frozen[i]))||
         (t.slot>=0&&(!next->clips[t.slot].present||next->clips[t.slot].hash!=t.hash||
             (plan_->clips[t.slot].asset>=0&&next->samples[plan_->clips[t.slot].asset]!=plan_->samples[plan_->clips[t.slot].asset])||
             (plan_->clips[t.slot].warp&&(next->tempo.enabled!=plan_->tempo.enabled||next->tempo.points!=plan_->tempo.points))))){release(i);clearAutomation(i);}}
+    for(int i=0;i<kTracks;++i)if(!plan_||!next||plan_->mode!=next->mode||plan_->frozen[i]!=next->frozen[i]||
+        (next->frozen[i].asset>=0&&(plan_->samples[next->frozen[i].asset]!=next->samples[next->frozen[i].asset]||plan_->tempo.enabled!=next->tempo.enabled||plan_->tempo.points!=next->tempo.points)))frozen_[i]={};
     plan_=next;automationClock_=0;
 }
-void Sequencer::stop(bool clear)noexcept{for(int i=0;i<kTracks;++i){release(i);clearAutomation(i);tracks_[i].phase=0;if(clear){tracks_[i].scene=-1;tracks_[i].queued=-2;}}
+void Sequencer::stop(bool clear)noexcept{for(int i=0;i<kTracks;++i){
+    if(clear||!plan_||plan_->frozen[i].asset<0||frozen_[i].position+plan_->samples[plan_->frozen[i].asset]->rate/rate_<plan_->frozen[i].musicFrames)frozen_[i]={};
+    release(i);clearAutomation(i);tracks_[i].phase=0;if(clear){tracks_[i].scene=-1;tracks_[i].queued=-2;}}
     previousBeat_=-1;automationClock_=0;
 }
 void Sequencer::launch(int track,int sceneIndex,double beat,double quantum)noexcept{
@@ -117,7 +128,7 @@ void Sequencer::event(int track,const Clip& c,const Event& e)noexcept{
 void Sequencer::enter(int track,int slot,int region,double phase,double audioOffset,double elapsed,float bpm)noexcept{
     release(track);auto& t=tracks_[track];const auto& c=plan_->clips[slot];t.slot=slot;t.region=region;t.hash=c.hash;t.previous=phase;
     if(c.asset>=0){const auto& a=*plan_->samples[c.asset];t.audioPosition=c.first+audioOffset+(elapsed>=0?elapsed:phase*60/bpm)*a.rate;t.audioBand=sampler::Kernel::bandFor(a.rate/rate_);}
-    else{
+    else if(plan_->mode!=1||plan_->frozen[track].asset<0){
         for(std::size_t n=0;n<c.notes.size();++n){const auto& x=c.notes[n];if(x.start<=phase+1e-10&&x.start+x.length>phase+1e-10)event(track,c,{x.start,static_cast<int>(n),true});}
         while(t.cursor<c.events.size()&&c.events[t.cursor].beat<=phase+1e-10)++t.cursor;
     }
@@ -125,7 +136,7 @@ void Sequencer::enter(int track,int slot,int region,double phase,double audioOff
 bool Sequencer::loop(double& beat)const noexcept{if(plan_&&plan_->mode==1&&plan_->loop&&beat>=plan_->loopEnd){beat=plan_->loopStart+std::fmod(beat-plan_->loopEnd,plan_->loopEnd-plan_->loopStart);return true;}return false;}
 void Sequencer::tick(double beat,float bpm,std::array<fx::Stereo,kTracks>& audio)noexcept{
     if(!plan_)return;
-    if(previousBeat_>=0&&beat<previousBeat_)for(int i=0;i<kTracks;++i)release(i);
+    if(previousBeat_>=0&&beat<previousBeat_){resetFrozen();for(int i=0;i<kTracks;++i)release(i);}
     previousBeat_=beat;
     for(int i=0;i<kTracks;++i){auto& t=tracks_[i];int slot=-1,region=-1;double phase=0,audioOffset=0,elapsed=-1;
         if(plan_->mode==0){if(t.queued!=-2&&beat+1e-10>=t.due){release(i);t.scene=t.queued;t.queued=-2;t.launchBeat=t.due;}
@@ -140,7 +151,9 @@ void Sequencer::tick(double beat,float bpm,std::array<fx::Stereo,kTracks>& audio
             audioOffset==t.lastAudioOffset&&std::abs((phase-t.previous)-(beat-t.previousAbsolute))<1e-7;
         if(entered){if(c.asset>=0&&plan_->mode==1){const double cycleStart=beat-phase;elapsed=plan_->tempo.seconds(std::max(0.0,cycleStart),beat,bpm);if(cycleStart<0)elapsed+=-cycleStart*60/plan_->tempo.bpmAt(0,bpm);}
             enter(i,slot,region,phase,audioOffset,elapsed,bpm);}
-        if(c.asset<0){while(t.cursor<c.events.size()&&c.events[t.cursor].beat<=phase+1e-10)event(i,c,c.events[t.cursor++]);}
+        const bool frozen=plan_->mode==1&&plan_->frozen[i].asset>=0;
+        if(frozen){}
+        else if(c.asset<0){while(t.cursor<c.events.size()&&c.events[t.cursor].beat<=phase+1e-10)event(i,c,c.events[t.cursor++]);}
         else{const auto& sample=*plan_->samples[c.asset];if(c.warp&&kernel_){const auto* map=plan_->mode==1?&plan_->tempo:nullptr;
                 if(entered&&!continueWarp){warps_[i].start(c,sample,beat,phase,audioOffset,bpm,map);t.warpBpm=bpm;}
                 audio[i]=warps_[i].tick(sample,map);
@@ -153,6 +166,18 @@ void Sequencer::tick(double beat,float bpm,std::array<fx::Stereo,kTracks>& audio
             if(enabled!=t.automated[lane]||(enabled&&value!=t.automation[lane])){t.automated[lane]=enabled;t.automation[lane]=value;if(automation_)automation_(owner_,i,lane,value,enabled);}}
         t.previous=phase;t.previousAbsolute=beat;t.lastAudioOffset=audioOffset;t.phase=static_cast<float>(phase/c.length);
     }automationClock_=(automationClock_+1)&31;
+}
+void Sequencer::renderFrozen(double beat,float bpm,bool playing,std::array<fx::Stereo,kTracks>& audio)noexcept{
+    if(!plan_||plan_->mode!=1||!kernel_)return;
+    for(int i=0;i<kTracks;++i){const auto& f=plan_->frozen[i];if(f.asset<0)continue;
+        auto& state=frozen_[i];const auto& sample=*plan_->samples[f.asset];
+        if(playing&&!state.active){state.position=plan_->tempo.seconds(0,beat,bpm)*sample.rate;state.step=sample.rate/rate_;state.band=sampler::Kernel::bandFor(state.step);state.active=true;}
+        if(!state.active)continue;
+        if(state.position<sample.frames())audio[i]=kernel_->read(sample,state.reader,state.position,0,sample.frames(),state.band,sample.rate==rate_);
+        else audio[i]={};
+        state.position+=state.step;
+        if(!playing&&state.position>=sample.frames())state.active=false;
+    }
 }
 Snapshot Sequencer::snapshot()const noexcept{Snapshot s;s.mode=plan_?plan_->mode:0;for(int i=0;i<kTracks;++i){s.active[i]=tracks_[i].slot;s.queued[i]=tracks_[i].queued;s.phase[i]=tracks_[i].phase;}return s;}
 } // namespace astra::project

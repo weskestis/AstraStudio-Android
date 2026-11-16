@@ -59,6 +59,7 @@ app/src/main/cpp/sampler/Sampler.h
 app/src/main/cpp/tests/AllocationTracker.cpp
 app/src/main/cpp/tests/CapacityTests.cpp
 app/src/main/cpp/tests/CoreTests.cpp
+app/src/main/cpp/tests/FreezeTests.cpp
 app/src/main/cpp/tests/FxTests.cpp
 app/src/main/cpp/tests/MasterTests.cpp
 app/src/main/cpp/tests/ProjectTests.cpp
@@ -85,6 +86,7 @@ app/src/main/java/com/weskestis/astrastudio/astra/PatternGenerator.kt
 app/src/main/java/com/weskestis/astrastudio/astra/StrictJson.kt
 app/src/main/java/com/weskestis/astrastudio/audio/AudioBridge.kt
 app/src/main/java/com/weskestis/astrastudio/audio/AudioService.kt
+app/src/main/java/com/weskestis/astrastudio/audio/PerformanceMeter.kt
 app/src/main/java/com/weskestis/astrastudio/audio/UiSnapshots.kt
 app/src/main/java/com/weskestis/astrastudio/fx/EqResponse.kt
 app/src/main/java/com/weskestis/astrastudio/fx/FxConfig.kt
@@ -96,10 +98,12 @@ app/src/main/java/com/weskestis/astrastudio/project/AudioStorage.kt
 app/src/main/java/com/weskestis/astrastudio/project/ExportFormats.kt
 app/src/main/java/com/weskestis/astrastudio/project/FactorySamples.kt
 app/src/main/java/com/weskestis/astrastudio/project/FinishedTracks.kt
+app/src/main/java/com/weskestis/astrastudio/project/FrozenTracks.kt
 app/src/main/java/com/weskestis/astrastudio/project/ProjectCodec.kt
 app/src/main/java/com/weskestis/astrastudio/project/ProjectFiles.kt
 app/src/main/java/com/weskestis/astrastudio/project/ProjectLimits.kt
 app/src/main/java/com/weskestis/astrastudio/project/ProjectModel.kt
+app/src/main/java/com/weskestis/astrastudio/project/RecoveryJournal.kt
 app/src/main/java/com/weskestis/astrastudio/project/Resampling.kt
 app/src/main/java/com/weskestis/astrastudio/project/SampleInstrument.kt
 app/src/main/java/com/weskestis/astrastudio/project/StarterProject.kt
@@ -117,6 +121,7 @@ app/src/main/java/com/weskestis/astrastudio/workspace/ExportFormatControls.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/PanelNavigation.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/QualityPanels.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/RecordingPanel.kt
+app/src/main/java/com/weskestis/astrastudio/workspace/ReliabilityPanels.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/SamplePanels.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/SharePanel.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/StudioWorkspace.kt
@@ -132,6 +137,7 @@ app/src/test/java/com/weskestis/astrastudio/midi/MidiDecoderTest.kt
 app/src/test/java/com/weskestis/astrastudio/project/CapacityTests.kt
 app/src/test/java/com/weskestis/astrastudio/project/LegacyFixture.kt
 app/src/test/java/com/weskestis/astrastudio/project/ProjectTests.kt
+app/src/test/java/com/weskestis/astrastudio/project/ReliabilityTests.kt
 app/src/test/java/com/weskestis/astrastudio/project/SamplerTests.kt
 app/src/test/java/com/weskestis/astrastudio/project/StorageTests.kt
 app/src/test/java/com/weskestis/astrastudio/project/TempoQualityTests.kt
@@ -146,6 +152,7 @@ docs/EFFECTS.md
 docs/PROJECT_TREE.txt
 docs/QUALITY.md
 docs/RECORDING.md
+docs/RELIABILITY.md
 docs/ROADMAP.md
 docs/SAMPLER.md
 docs/STREAMING.md

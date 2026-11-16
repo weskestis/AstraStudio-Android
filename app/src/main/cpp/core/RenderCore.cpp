@@ -205,6 +205,7 @@ void RenderCore::releaseVoice(Voice& voice,bool force) noexcept {
 
 void RenderCore::noteOn(const Command& c) noexcept {
     const project::Plan* plan=activePlan_>=0?planSlots_[activePlan_].plan.get():nullptr;
+    if(plan&&plan->mode==1&&plan->frozen[c.track].asset>=0)return;
     const sampler::Instrument* instrument=plan?&plan->instruments[c.track]:nullptr;
     const sampler::Zone* zone=nullptr;
     if(instrument&&instrument->mode){
@@ -271,14 +272,14 @@ void RenderCore::apply(const Command& c) noexcept {
             // Retire every raw sample pointer before its owning old plan can be reclaimed.
             for(auto& v:voices_)if(v.active){const int mode=next->instruments[v.track].mode;
                 const int oldMode=activePlan_>=0?planSlots_[activePlan_].plan->instruments[v.track].mode:0;
-                if(mode!=oldMode||(v.sampled&&(v.sample.asset()<0||next->samples[v.sample.asset()].get()!=v.sample.source()))){v.active=false;v.sample.silence();v.synth.silence();}}
+                if((next->mode==1&&next->frozen[v.track].asset>=0)||mode!=oldMode||(v.sampled&&(v.sample.asset()<0||next->samples[v.sample.asset()].get()!=v.sample.source()))){v.active=false;v.sample.silence();v.synth.silence();}}
             sequence_.activate(next);tempoClock_.reset();const int old=activePlan_;activePlan_=c.note;
             if(old>=0)planSlots_[old].busy.store(false,std::memory_order_release);
             break;
         }
         case CommandType::LaunchClip: sequence_.launch(c.track,c.note,beat_,c.value);break;
         case CommandType::LaunchScene: sequence_.scene(c.note,beat_,c.value);break;
-        case CommandType::Seek: beat_=c.value;nextClickBeat_=std::ceil(beat_/sequence_.beatUnit())*sequence_.beatUnit();sequence_.stop();break;
+        case CommandType::Seek: beat_=c.value;nextClickBeat_=std::ceil(beat_/sequence_.beatUnit())*sequence_.beatUnit();sequence_.stop();sequence_.resetFrozen();break;
         case CommandType::SendA: track.targetSendA=c.value;break;
         case CommandType::SendB: track.targetSendB=c.value;break;
         case CommandType::PatchSnapshot:
@@ -351,6 +352,7 @@ void RenderCore::render(float* output, int32_t frames) noexcept {
             if((frame_&31)==0||std::abs(live-bpm_)>.1f)updateTempo(live);
             sequence_.tick(beat_,baseBpm_,clipAudio);}
         else if(bpm_!=baseBpm_)updateTempo(baseBpm_);
+        sequence_.renderFrozen(beat_,baseBpm_,playing_,clipAudio);
         std::array<float, kTrackCount> mono{};
         for (auto& voice : voices_) {
             if (!voice.active) continue;
@@ -360,6 +362,13 @@ void RenderCore::render(float* output, int32_t frames) noexcept {
         }
         std::array<fx::Stereo,kTrackCount> dry{};
         for(int t=0;t<kTrackCount;++t)dry[t]=clipAudio[t]+fx::Stereo{mono[t],mono[t]};
+        if(sourceTrack_>=0&&sourceTrack_<kTrackCount){
+            // Source bounces exclude inserts/sends/master; avoid doing their DSP only to discard it.
+            for(auto& track:tracks_)for(int l=0;l<4;++l)track.freePhases[l]=synth::wrap(track.freePhases[l]+track.lfoSteps[l]);
+            if(playing_)beat_=tempoClock_.tick(tempo,beat_,baseBpm_,sampleRate_);
+            const auto value=dry[sourceTrack_];output[2*i]=value.l;output[2*i+1]=value.r;
+            peakL=std::max(peakL,std::abs(value.l));peakR=std::max(peakR,std::abs(value.r));++frame_;continue;
+        }
         fx::Stereo sendA{},sendB{};
         float left = 0.0f;
         float right = 0.0f;
@@ -402,7 +411,6 @@ void RenderCore::render(float* output, int32_t frames) noexcept {
         if (std::abs(left) > kCeiling || std::abs(right) > kCeiling) ++clipped_;
         const auto limited=limiter_.tick({left,right});left=limited.l;right=limited.r;
         if(meterTrack_==kTrackCount)analyzer_.push(limited,kTrackCount);
-        if(sourceTrack_>=0&&sourceTrack_<kTrackCount){left=dry[sourceTrack_].l;right=dry[sourceTrack_].r;}
         output[2 * i] = left;
         output[2 * i + 1] = right;
         peakL = std::max(peakL, std::abs(left));

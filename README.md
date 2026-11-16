@@ -1,16 +1,22 @@
-# Astra Studio — Phase 11 / 50 tracks
+# Astra Studio — Phase 12 / Freeze and recovery
 
-Android 14+ native music workstation, built for **Sony Xperia 1 IV** first. Package `com.weskestis.astrastudio`, version **0.11.0-phase11**, green and black throughout. This is a development DAW, with implemented editing/playback features and explicit limits below; it is not yet a production-certified replacement for a desktop workstation.
+Android 14+ native music workstation, built for **Sony Xperia 1 IV** first. Package `com.weskestis.astrastudio`, version **0.12.0-phase12**, green and black throughout. This is a development DAW, with implemented editing/playback features and explicit limits below; it is not yet a production-certified replacement for a desktop workstation.
 
 ## Full workstation development goal
 
-The goal is a professional Android DAW with Ableton Live-level workflow depth and sound-design capability. Phase 13 is a possible release milestone within that goal, not the finish line. The [full roadmap and capability ledger](docs/ROADMAP.md) records the remaining scope, current limitations and completion criteria. Phase 10 adds bounded project audio streaming, instrument phrase bounces and finished-track sharing. Device measurements and full-track freezing remain open; the next feature increments continue closing the capability ledger.
+The goal is a professional Android DAW with Ableton Live-level workflow depth and sound-design capability. Phase 13 is a possible release milestone within that goal, not the finish line. The [full roadmap and capability ledger](docs/ROADMAP.md) records the remaining scope, current limitations and completion criteria. Phase 10 adds bounded project audio streaming, instrument phrase bounces and finished-track sharing. Phase 12 adds full Arrangement source freeze/unfreeze, three-generation autosave recovery and on-device performance reports. Physical device measurements and the broader capability ledger remain open.
+
+## Freeze, recover and measure
+
+Select a track, then **Freeze track** in its device rack. Render the full Arrangement source at **48 / 96 / 192 kHz, stereo float32**, with an instrument tail. Original clips stay editable; mixer, effects, sidechains and sends stay live. **Unfreeze track** restores the source; source/tempo edits automatically invalidate stale freezes. Session still uses the original instruments. Undo reloads the correct audio when cache slots are reused.
+
+**File → Recovery** restores one of three previous autosaves, with Undo. Startup tries the newest usable backup if the current save or audio is unreadable. **File → Performance** shows real device CPU, memory, voice, xrun and disk-read readings and copies a report. Back and rotation preserve these panels. [Controls, fidelity, storage costs and exact limits](docs/RELIABILITY.md).
 
 ## 50 tracks and layers
 
 Phase 11 expands the complete project to **50 tracks**, **8 scenes / 400 clip slots** and **2,048 arrangement regions**. Every track supports the existing synth, sampler/drums, audio clips, mixer, inserts, sends, automation, Astra commands, resampling and master export. Tap **Track … / 50** beside Session/Arrangement to jump to any track. The grid and timeline compose only visible tracks and retain the selected track through rotation and Back navigation.
 
-Existing projects migrate automatically: old clip/scene positions, instruments, routing and arrangement regions stay together. New saves use JSON version 6 and native wire version 5. Keep an original portable copy if you also need to open it in an older APK, which cannot read the new format.
+Existing projects migrate automatically: old clip/scene positions, instruments, routing and arrangement regions stay together. New saves use JSON version 7 and native wire version 6; Phase 11 projects remain compatible. Keep an original portable copy if you also need to open it in an older APK, which cannot read the new format.
 
 The **128 shared instrument voices**, 64 audio assets and existing streamed-audio budgets are unchanged. Fifty stored tracks are not a guarantee of fifty simultaneous heavy synth/effects chains on a phone. Live playback uses the device rate; 192 kHz is an offline master option. Hardware MIDI channels still address tracks 1–16; clips, Keys and Astra address all 50. [Capacity, migration and measurements](docs/CAPACITY.md).
 
@@ -26,7 +32,7 @@ Large project samples now stream through **2 MiB audio-page caches per asset**, 
 
 **File → Share finished track → Render finished track** keeps a completed WAV ready for **Share WAV** or **Save WAV as…**. The Android share sheet supports compatible installed apps. For SoundCloud, save the WAV and choose it from SoundCloud's Upload screen if it is absent from the share sheet. The app does not upload automatically. Exports remain available until you delete them.
 
-**Resample → Bounce instrument to clip** adds a float audio version on the same track while preserving the original. Insert effects, mixer, sends and master stay live. This is a one-cycle phrase bounce; full-track freeze/unfreeze remains planned.
+**Resample → Bounce instrument to clip** adds a float audio version on the same track while preserving the original. Insert effects, mixer, sends and master stay live. This is a one-cycle phrase bounce; use **Freeze track** for full Arrangement source freeze/unfreeze.
 
 [Streaming behavior, memory accounting, sharing and limits](docs/STREAMING.md).
 
@@ -74,7 +80,7 @@ Full workflow, command reference and limitations: [Astra Phase 5](docs/ASTRA.md)
 
 ## Install and make a track
 
-Install `AstraStudio_0.11.0_50Tracks.apk` over Phase 10 or an earlier Astra build. The development signing certificate is unchanged. GitHub fallback: **Actions → Android Phase 11 - 50 Tracks → a successful run → AstraStudio-Phase11-50Tracks-APK**.
+Install `AstraStudio_0.12.0_FreezeRecovery.apk` over Phase 11 or an earlier Astra build. The development signing certificate is unchanged. GitHub fallback: **Actions → Android Phase 12 - Freeze and Recovery → a successful run → AstraStudio-Phase12-FreezeRecovery-APK**.
 
 1. **File → Load starter song** opens Green circuit: original, editable MIDI drums, bass and lead, two scenes and a 16-bar arrangement. Save your current project first.
 2. Tap **Start audio**, then **Play**. Session Play launches Scene 1; Arrangement Play begins at the white cursor. Clip/scene launch buttons follow the selected bar, quarter-note or eighth-note quantization.

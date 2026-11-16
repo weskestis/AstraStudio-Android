@@ -24,7 +24,7 @@ Open **Resample → Bounce instrument to clip**. A new 48 kHz float audio clip a
 
 This taps one clip cycle **before insert effects, track faders, sends and master**. The new audio clip retains clip automation and uses the existing track rack/mixer, so the effects and master are not baked twice. Source BPM and Warp are set on the bounce so its timing can follow later tempo changes. Playing the bounced clip avoids regenerating that clip's instrument/voices. Original source/preset changes do not regenerate an already bounced file.
 
-This is a phrase bounce. It is not persistent whole-track freeze/unfreeze, and instrument release tails that cross repeated cycle boundaries can differ. The existing **Resample to browser** still renders a selected phrase or the whole Arrangement through the complete mix, with an optional tail. Full-track freeze remains in the roadmap.
+This is a phrase bounce. It is not persistent whole-track freeze/unfreeze, and instrument release tails that cross repeated cycle boundaries can differ. The existing **Resample to browser** still renders a selected phrase or the whole Arrangement through the complete mix, with an optional tail. Phase 12 adds full Arrangement source freeze/unfreeze separately; see [freeze and recovery](RELIABILITY.md).
 
 ## Share finished track
 

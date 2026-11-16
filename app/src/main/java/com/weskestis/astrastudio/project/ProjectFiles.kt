@@ -23,12 +23,16 @@ class ProjectFiles(private val context: Context) {
     val audioDir=File(context.filesDir,"audio").also{it.mkdirs()}
     private val autosave=AtomicFile(File(context.filesDir,"current.astra.json"))
     fun audioFile(asset: AudioAsset)=File(audioDir,asset.file)
-    fun load(): ProjectDocument? = if(!autosave.baseFile.exists())null else autosave.openRead().use{ProjectCodec.decode(readLimited(it,ProjectCodec.MAX_JSON_BYTES.toLong()).toString(Charsets.UTF_8))}
-    fun preserveFailedAutosave(){if(autosave.baseFile.exists())autosave.baseFile.copyTo(File(context.filesDir,"recovery-${System.currentTimeMillis()}.astra.json"))}
-    fun save(d: ProjectDocument) {
-        val out=autosave.startWrite()
-        try{out.write(ProjectCodec.encode(d).toByteArray(Charsets.UTF_8));autosave.finishWrite(out)}catch(e: Exception){autosave.failWrite(out);throw e}
+    private val recovery=RecoveryJournal(context.filesDir)
+    val recoveryNotice get()=recovery.notice
+    fun load(accept: (ProjectDocument)->Unit={}): ProjectDocument? {
+        // Let Android repair a pre-Phase-12 AtomicFile backup before migration.
+        if(autosave.baseFile.exists()||File(autosave.baseFile.path+".bak").exists())runCatching{autosave.openRead().close()}
+        return recovery.load(accept)
     }
+    fun save(d: ProjectDocument)=recovery.save(d)
+    fun recoveryEntries()=recovery.entries()
+    fun restoreRecovery(token: String,accept: (ProjectDocument)->Unit={})=recovery.restore(token,accept)
     fun displayName(uri: Uri): String=runCatching{context.contentResolver.query(uri,arrayOf(OpenableColumns.DISPLAY_NAME),null,null,null)?.use{if(it.moveToFirst())it.getString(0)else null}}.getOrNull()?:uri.lastPathSegment?:"Imported audio"
     fun importAudio(uri: Uri,cancel: AtomicBoolean,limit: Long=MAX_MEDIA_BYTES,directory: File=audioDir): Pair<String,File> {
         val name=displayName(uri)

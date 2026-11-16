@@ -1,4 +1,4 @@
-name: Android Phase 11 - 50 Tracks
+name: Android Phase 12 - Freeze and Recovery
 on:
   push:
     branches: [main]
@@ -54,14 +54,14 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: AstraStudio-Phase11-50Tracks-APK
+          name: AstraStudio-Phase12-FreezeRecovery-APK
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Phase11-50Tracks-test-reports
+          name: Phase12-FreezeRecovery-test-reports
           path: |
             app/build/reports/tests/
             app/build/reports/lint-results-debug.html
@@ -104,7 +104,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Phase11-50Tracks-interface-validation
+          name: Phase12-FreezeRecovery-interface-validation
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/

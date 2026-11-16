@@ -41,6 +41,9 @@ import kotlinx.coroutines.flow.asStateFlow
 data class TrackControls(val gain: Float = 0.8f, val pan: Float = 0f, val mute: Boolean = false, val solo: Boolean = false, val armed: Boolean = false, val sendA: Float = 0f, val sendB: Float = 0f, val name: String = "")
 data class StudioState(
     val revision: Long = 0,
+    val recovery: List<RecoveryEntry> = emptyList(),
+    val autosavedAt: Long = 0,
+    val performance: PerformanceSnapshot = PerformanceSnapshot(),
     val astra: AstraState = AstraState(),
     val project: Project = Project(),
     val sequence: SequenceStats = SequenceStats(),
@@ -117,6 +120,10 @@ class AudioService : Service() {
     private var lastGeminiRequest = -10000L
     private val cancelled = AtomicBoolean(false)
     private val history = ProjectHistory()
+    private val performanceMeter=PerformanceMeter()
+    private var nextMemoryPoll=0L
+    private var javaBytes=0L
+    private var nativeBytes=0L
     @Volatile private var destroyed = false
     private var playingIntent = false
     private var sent: ProjectDocument? = null
@@ -128,11 +135,12 @@ class AudioService : Service() {
     private val recorded = mutableMapOf<Long,Recorded>()
     private val saveProject = Runnable {
         val document = document()
-        io.execute { try { files.save(document) } catch (e: Exception) { control.post { message("Could not autosave: ${e.message}") } } }
+        io.execute { try { files.save(document);control.post{mutableState.value=mutableState.value.copy(autosavedAt=System.currentTimeMillis())} } catch (e: Exception) { control.post { message("Could not autosave: ${e.message}") } } }
     }
     private fun document() = mutableState.value.let { ProjectDocument(it.project,it.bpm,it.master,it.limiterDrive,it.limiterRelease,it.tracks,it.patches,it.effects) }
     private fun message(text: String) { mutableState.value=mutableState.value.copy(message=text) }
-    private fun adopt(d: ProjectDocument) {
+    private fun adopt(candidate: ProjectDocument) {
+        val d=FrozenTracks.reconcile(candidate,true)
         val changed=document()!=d
         mutableState.value=mutableState.value.copy(revision=mutableState.value.revision+if(changed)1 else 0,project=d.project,bpm=d.bpm,master=d.master,limiterDrive=d.limiterDrive,limiterRelease=d.limiterRelease,
             tracks=d.tracks,patches=d.patches,effects=d.effects,canUndo=history.canUndo,canRedo=history.canRedo)
@@ -140,7 +148,7 @@ class AudioService : Service() {
     }
     private fun commit(key: String="", edit: (ProjectDocument)->ProjectDocument) {
         if(!mutableState.value.ready||mutableState.value.busy)return
-        try { val old=document();val next=edit(old);require(next.valid()){ "That edit exceeds the project limits or overlaps a region." }
+        try { val old=document();val next=FrozenTracks.reconcile(edit(old),true);require(next.valid()){ "That edit exceeds the project limits or overlaps a region." }
             history.commit(old,next,key);adopt(next);syncEngine()
         } catch(e: Exception) { message(e.message?:"Could not apply edit.") }
     }
@@ -201,10 +209,10 @@ class AudioService : Service() {
             val fallback=document()
             io.execute {
                 var restored: ProjectDocument?=null;var error: String?=null
-                try { restored=files.load();if(restored!=null)loadAssets(restored) } catch(e: Exception){restored=null;error=e.message;runCatching{files.preserveFailedAutosave()};bridge.loadAssets(emptyList())}
+                try { restored=files.load(::loadAssets) } catch(e: Exception){restored=null;error=e.message;bridge.loadAssets(emptyList())}
                 val exports=runCatching{FinishedTracks(this).list()}.getOrDefault(emptyList())
                 control.post { if(!destroyed){mutableState.value=mutableState.value.copy(finishedExports=exports);if(restored!=null)adopt(restored);else adopt(fallback)
-                    mutableState.value=mutableState.value.copy(ready=true,busy=false,work="",message=error?.let{"Could not restore project: $it"}?:"Ready. Start audio, then launch a clip or build an arrangement.")
+                    mutableState.value=mutableState.value.copy(ready=true,busy=false,work="",message=error?.let{"Could not restore project: $it"}?:files.recoveryNotice?:"Ready. Start audio, then launch a clip or build an arrangement.")
                     control.post(poll)
                 } }
             }
@@ -319,7 +327,10 @@ class AudioService : Service() {
                 }
             }
             val stats = bridge.stats()
-            mutableState.value = mutableState.value.copy(stats = stats, storage=bridge.storageStats(), fxStats = if (stats.running) bridge.fxStats() else FxStats(), sequence=if(stats.running)bridge.sequence() else SequenceStats(), progress=if(mutableState.value.work in listOf("Rendering WAV","Resampling","Stretching audio","Rendering finished track","Bouncing instrument"))bridge.exportProgress() else mutableState.value.progress)
+            val now=android.os.SystemClock.elapsedRealtime()
+            if(now>=nextMemoryPoll){nextMemoryPoll=now+1000;val runtime=Runtime.getRuntime();javaBytes=runtime.totalMemory()-runtime.freeMemory();nativeBytes=android.os.Debug.getNativeHeapAllocatedSize()}
+            val performance=performanceMeter.sample(stats,now,javaBytes,nativeBytes)
+            mutableState.value = mutableState.value.copy(stats = stats, performance=performance, storage=bridge.storageStats(), fxStats = if (stats.running) bridge.fxStats() else FxStats(), sequence=if(stats.running)bridge.sequence() else SequenceStats(), progress=if(mutableState.value.work in listOf("Rendering WAV","Resampling","Stretching audio","Rendering finished track","Bouncing instrument","Freezing track"))bridge.exportProgress() else mutableState.value.progress)
             if (wantsAudio && stats.running) {
                 if (++stablePolls >= 100) reconnectAttempts = 0
             } else stablePolls = 0
@@ -436,8 +447,28 @@ class AudioService : Service() {
     fun projectEdit(key: String="",edit: (Project)->Project){control.post{commit(key){it.copy(project=edit(it.project))}}}
     fun clipEdit(slot: Int,key: String="",edit: (Clip)->Clip){projectEdit(key){p->val clip=p.clip(slot)?:error("Choose a clip.");p.put(edit(clip))}}
     fun newClip(slot: Int){projectEdit{p->require(p.clip(slot)==null){"That slot already has a clip."};p.put(Clip(slot,"MIDI ${slot/ProjectLimits.TRACKS+1}",p.barBeats*4))}}
-    fun undo(){control.post{if(mutableState.value.busy)return@post;finishRecording();history.undo(document())?.let{adopt(it);syncEngine()}}}
-    fun redo(){control.post{if(mutableState.value.busy)return@post;finishRecording();history.redo(document())?.let{adopt(it);syncEngine()}}}
+    fun undo()=restoreHistory(true)
+    fun redo()=restoreHistory(false)
+    private fun restoreHistory(back: Boolean){control.post{
+        if(!mutableState.value.ready||mutableState.value.busy)return@post
+        finishRecording();val before=document()
+        val target=(if(back)history.undo(before)else history.redo(before))?:return@post
+        // Audio IDs may be reused after unfreezing. Restore the exact bank before publishing the plan.
+        if(target.project.assets==before.project.assets){adopt(target);syncEngine();return@post}
+        mutableState.value=mutableState.value.copy(busy=true,work="Restoring edit")
+        ContextCompat.startForegroundService(this,Intent(this,AudioService::class.java).setAction(ACTION_WORK))
+        io.execute{
+            var error: String?=null
+            try{loadAssets(target)}catch(e: Exception){error=e.message?:"Could not restore audio.";runCatching{loadAssets(before)}}
+            control.post{if(!destroyed){
+                mutableState.value=mutableState.value.copy(busy=false,work="")
+                if(error==null){adopt(target);sent=null;syncEngine()}
+                else{if(back)history.redo(target)else history.undo(target)
+                    mutableState.value=mutableState.value.copy(canUndo=history.canUndo,canRedo=history.canRedo);message(error)}
+                refreshForeground()
+            }}
+        }
+    }}
     fun overdub(value: Boolean){control.post{mutableState.value=mutableState.value.copy(overdub=value)}}
     fun record(slot: Int){control.post{
         if(mutableState.value.recording>=0){finishRecording();return@post}
@@ -477,7 +508,7 @@ class AudioService : Service() {
     private fun work(title: String,task: (ProjectDocument)->ProjectDocument?,done: String,resetHistory: Boolean=false){
         control.post {
             if(!mutableState.value.ready||mutableState.value.busy)return@post
-            finishRecording();val snapshot=document();cancelled.set(false)
+            finishRecording();if(title=="Freezing track")stopTransport();val snapshot=document();cancelled.set(false)
             mutableState.value=mutableState.value.copy(busy=true,work=title,progress=0f)
             ContextCompat.startForegroundService(this,Intent(this,AudioService::class.java).setAction(ACTION_WORK))
             io.execute {
@@ -493,6 +524,24 @@ class AudioService : Service() {
             }
         }
     }
+    fun resetPerformance(){control.post{performanceMeter.reset();mutableState.value=mutableState.value.copy(performance=PerformanceSnapshot())}}
+    fun refreshRecovery(){io.execute{val entries=files.recoveryEntries();control.post{mutableState.value=mutableState.value.copy(recovery=entries)}}}
+    fun restoreRecovery(token: String){work("Restoring autosave",{files.restoreRecovery(token,::loadAssets)},"Previous autosave restored. Undo returns to the project you had open.")}
+    fun freezeTrack(track: Int,rate: Int=192000,tail: Float=10f){work("Freezing track",{d->
+        FrozenTracks.check(d,track,rate,tail)
+        val file=File(files.audioDir,"${java.util.UUID.randomUUID()}.wav")
+        val bytes=44+FrozenTracks.frames(d,rate,tail)*8
+        require(file.parentFile!!.usableSpace>bytes+16*1024*1024){"Not enough free storage for this freeze. Choose a lower freeze rate or free some storage."}
+        try{
+            val code=bridge.export(file,d,rate,tail,true,track)
+            check(code==0){if(code==3)"Cancelled." else "Could not freeze this track. Original sources are unchanged."}
+            check(!cancelled.get()){"Cancelled."}
+            val next=addSamples(d,listOf("Track ${track+1} freeze" to file),"Frozen tracks")
+            val f=FrozenTrack(track,next.project.assets.last().id,FrozenTracks.musicFrames(d,rate),FrozenTracks.fingerprint(d,track))
+            next.copy(project=next.project.copy(frozen=next.project.frozen+f)).also{require(it.valid())}
+        }catch(e: Exception){file.delete();throw e}
+    },"Arrangement track frozen. Original clips remain; mixer, effects and sends stay live. Session still uses the original instruments.")}
+    fun unfreezeTrack(track: Int){control.post{commit{FrozenTracks.unfreeze(it,track)}}}
     fun cancelWork(){cancelled.set(true);if(::bridge.isInitialized)bridge.cancelExport()}
     fun importAudio(uri: Uri,slot: Int){work("Importing audio",{d->
         val target=if(d.project.clip(slot)==null)slot else d.project.emptySlot(slot%ProjectLimits.TRACKS)?:error("This track has no empty clip slots.")

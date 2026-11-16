@@ -1,3 +1,9 @@
+# Phase 12 validation in progress
+
+Development **0.12.0-phase12 / versionCode 13**. Local Kotlin tests: **186 passed**. The new native freeze suite passed **95 checks**, including exact live/frozen output in fixtures at 48/96/192 kHz with constant and changing tempos, instrument tails, live effects/sidechain, seek/stop/unfreeze and Session behavior; zero callback allocations/frees. Complete native sanitizer and Android CI results are being collected. The sections below are historical Phase 11 and earlier evidence. [Phase 12 scope](RELIABILITY.md).
+
+---
+
 # Phase 11 — 50-track validation
 
 Development **0.11.0-phase11 / versionCode 12**, Android 14+.

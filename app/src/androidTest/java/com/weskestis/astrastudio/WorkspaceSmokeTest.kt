@@ -79,6 +79,76 @@ class WorkspaceSmokeTest {
         return this
     }
     private fun click(tag: String){val node=compose.onNodeWithTag(tag);runCatching{node.scrollOnUiThread()};node.assertIsDisplayed().performClick()}
+    @Test fun freezePhoneRotationArchiveExportAndUndoAssetReuse(){
+        compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
+        click("File");click("New project");click("Confirm project")
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val binding=ServiceTestRule();val service=(binding.bindService(Intent(context,AudioService::class.java)) as AudioService.LocalBinder).service
+        val source=File(context.cacheDir,"freeze-source.wav");val archive=File(context.cacheDir,"frozen.astra");val master=File(context.cacheDir,"frozen-master.wav");val io=ProjectFiles(context)
+        var restored: ProjectDocument?=null
+        FloatWaveWriter(source,48000,1).use{it.write(FloatArray(12000){n->(.2*kotlin.math.sin(2*Math.PI*55*n/48000)).toFloat()},12000)}
+        fun document()=service.state.value.let{ProjectDocument(it.project,it.bpm,it.master,it.limiterDrive,it.limiterRelease,it.tracks,it.patches,it.effects)}
+        try{
+            service.tempo(120f);compose.waitUntil(10000){service.state.value.bpm==120f}
+            service.importAudio(Uri.fromFile(source),0);compose.waitUntil(20000){service.state.value.project.clip(0)!=null&&!service.state.value.busy}
+            service.projectEdit{it.place(0,0.0)};compose.waitUntil(10000){service.state.value.project.regions.size==1}
+            click("Choose track");compose.onNodeWithTag("Track picker").performScrollToIndex(0);click("Select track 1")
+            click("Open freeze");compose.onNodeWithTag("Freeze rate 192000").scrollOnUiThread().assertIsSelected()
+            click("Freeze rate 48000");shot("29-freeze-phone")
+            compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
+            compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
+            compose.onNodeWithTag("Freeze rate 48000").scrollOnUiThread().assertIsSelected();shot("30-freeze-landscape")
+            click("Freeze full track");compose.waitUntil(60000){!service.state.value.busy&&service.state.value.project.frozen.size==1}
+            compose.onNodeWithTag("Frozen status").scrollOnUiThread().assertTextContains("48 kHz",substring=true)
+            val first=document();val f1=first.project.asset(first.project.frozen.single().asset)!!;assertEquals(492000L,f1.frames);assertEquals(48000,f1.rate)
+            assertEquals(12000L,first.project.frozen.single().musicFrames);assertEquals(1,first.project.clips.size)
+            shot("31-frozen-track");back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
+            io.saveArchive(first,Uri.fromFile(archive),AtomicBoolean(false));restored=io.openArchive(Uri.fromFile(archive),AtomicBoolean(false));assertEquals(first.project.frozen,restored!!.project.frozen)
+            assertEquals(first.project.clips,restored!!.project.clips)
+            val bridge=AudioBridge();try{
+                assertTrue(bridge.loadAssets(restored!!.project.assets.map{it.id to io.audioFile(it)}));assertEquals(0,bridge.export(master,restored!!,192000,.25f,false))
+                WaveFile(master).use{wave->assertEquals(192000,wave.rate);assertEquals(96000L,wave.frames);val data=FloatArray(12000);wave.read(12000,6000,data);assertTrue(data.any{kotlin.math.abs(it)>.01f})}
+            }finally{bridge.close()}
+            service.unfreezeTrack(0);compose.waitUntil(10000){service.state.value.project.frozen.isEmpty()};assertEquals(1,service.state.value.project.assets.size)
+            service.freezeTrack(0,192000,.25f);compose.waitUntil(60000){!service.state.value.busy&&service.state.value.project.frozen.size==1}
+            val second=document();val f2=second.project.asset(second.project.frozen.single().asset)!!;assertEquals(f1.id,f2.id);assertNotEquals(f1.file,f2.file);assertEquals(192000,f2.rate)
+            service.undo();compose.waitUntil(10000){!service.state.value.busy&&service.state.value.project.frozen.isEmpty()}
+            service.undo();compose.waitUntil(10000){!service.state.value.busy&&service.state.value.project.frozen==first.project.frozen}
+            service.exportWave(Uri.fromFile(master),192000,.25f,false);compose.waitUntil(60000){!service.state.value.busy&&service.state.value.message=="24-bit stereo WAV exported."}
+            WaveFile(master).use{assertEquals(96000L,it.frames)}
+            service.redo();compose.waitUntil(10000){!service.state.value.busy&&service.state.value.project.frozen.isEmpty()}
+            service.redo();compose.waitUntil(10000){!service.state.value.busy&&service.state.value.project.frozen==second.project.frozen}
+            service.tempo(121f);compose.waitUntil(10000){service.state.value.bpm==121f&&service.state.value.project.frozen.isEmpty()};assertEquals(1,service.state.value.project.assets.size)
+            service.undo();compose.waitUntil(10000){!service.state.value.busy&&service.state.value.project.frozen==second.project.frozen};assertEquals(120f,service.state.value.bpm)
+        }finally{
+            restored?.project?.assets?.forEach{io.audioFile(it).delete()};listOf(source,archive,master).forEach{it.delete()};binding.unbindService()
+            compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_PORTRAIT}
+        }
+    }
+    @Test fun recoveryRestoreUndoPerformanceAndBack(){
+        compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
+        click("File");click("New project");click("Confirm project")
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val binding=ServiceTestRule();val service=(binding.bindService(Intent(context,AudioService::class.java)) as AudioService.LocalBinder).service
+        try{
+            for(name in listOf("Recovery A","Recovery B","Recovery C")){
+                service.projectEdit{it.copy(name=name)}
+                compose.waitUntil(15000){service.state.value.project.name==name&&runCatching{ProjectCodec.decode(File(context.filesDir,"current.astra.json").readText()).project.name==name}.getOrDefault(false)}
+            }
+            click("File");click("Open recovery");compose.waitUntil(15000){service.state.value.recovery.any{it.name=="Recovery B"}}
+            shot("32-recovery-phone")
+            val index=service.state.value.recovery.indexOfFirst{it.name=="Recovery B"};click("Restore recovery $index")
+            compose.waitUntil(20000){!service.state.value.busy&&service.state.value.project.name=="Recovery B"}
+            service.undo();compose.waitUntil(10000){!service.state.value.busy&&service.state.value.project.name=="Recovery C"}
+            back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
+            click("File");click("Open performance");compose.onNodeWithTag("Performance readings").assertTextContains("50 tracks",substring=true);shot("33-performance-phone")
+            compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
+            compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
+            compose.onNodeWithTag("Performance readings").scrollOnUiThread().assertTextContains("Astra Studio 0.12.0",substring=true);shot("34-performance-landscape")
+            back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
+        }finally{binding.unbindService();compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_PORTRAIT}}
+    }
+
     @Test fun fiftyTracksPickerArchivePlaybackAndMasterExport(){
         compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
         click("File");click("New project");click("Confirm project")

@@ -40,3 +40,10 @@ adb shell test -s /sdcard/Pictures/AstraStudio/25-master192-finished.png
 adb shell test -s /sdcard/Pictures/AstraStudio/26-fifty-tracks-session-phone.png
 adb shell test -s /sdcard/Pictures/AstraStudio/27-fifty-tracks-arrangement-phone.png
 adb shell test -s /sdcard/Pictures/AstraStudio/28-fifty-tracks-landscape.png
+
+adb shell test -s /sdcard/Pictures/AstraStudio/29-freeze-phone.png
+adb shell test -s /sdcard/Pictures/AstraStudio/30-freeze-landscape.png
+adb shell test -s /sdcard/Pictures/AstraStudio/31-frozen-track.png
+adb shell test -s /sdcard/Pictures/AstraStudio/32-recovery-phone.png
+adb shell test -s /sdcard/Pictures/AstraStudio/33-performance-phone.png
+adb shell test -s /sdcard/Pictures/AstraStudio/34-performance-landscape.png

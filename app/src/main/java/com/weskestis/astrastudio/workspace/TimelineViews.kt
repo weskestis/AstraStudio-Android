@@ -40,7 +40,7 @@ internal fun SessionView(s: StudioState,selected: Int,select: (Int)->Unit,edit: 
         LazyRow(Modifier.weight(1f).testTag("Session tracks"),state=tracks){
             items(ProjectLimits.TRACKS,key={it}){track->Column(Modifier.width(168.dp)){
                 Column(Modifier.height(96.dp).fillMaxWidth().background(if(selected%ProjectLimits.TRACKS==track)DimGreen else Color(0xFF0A130D)).clickable{mixer(track)}.padding(8.dp),verticalArrangement=Arrangement.SpaceBetween){
-                    Text("${track+1} / ${trackName(s,track)}",color=Green,fontSize=12.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
+                    Text("${track+1} / ${trackName(s,track)}${if(s.project.frozen.any{it.track==track})" ❄" else ""}",color=Green,fontSize=12.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
                     Text(listOfNotNull(if(s.tracks[track].armed)"ARM" else null,if(s.tracks[track].solo)"SOLO" else null,if(s.tracks[track].mute)"MUTE" else null).joinToString(" · ").ifEmpty{"Mixer / sends ›"},color=Muted,fontSize=10.sp)
                     Text("${s.patches[track].name}",fontSize=10.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
                 }
@@ -147,7 +147,7 @@ internal fun DrawScope.clipPreview(c: Clip,p: Project,origin: Offset,area: Size,
                 .pointerInput(p.regions,start,span){detectHorizontalDragGestures(onDragStart={point->val at=start+(point.x-104.dp.toPx())/(size.width-104.dp.toPx())*span;drag=if(point.x<104.dp.toPx())null else regions.firstOrNull{at>=it.beat&&at<it.beat+it.length};drag?.let(select);dragDelta=0f},onHorizontalDrag={change,amount->if(drag!=null){change.consume();dragDelta+=amount}},onDragCancel={drag=null},onDragEnd={drag?.let{r->val at=(round((r.beat+dragDelta/(size.width-104.dp.toPx())*span)*4)/4).coerceAtLeast(0.0);service.projectEdit{it.editRegion(r.id,beat=at)}};drag=null})}){
                 val left=104.dp.toPx();val width=size.width-left;val row=68.dp.toPx()
                 paint.textSize=11.sp.toPx()
-                run{val y=0f;drawRect(if(t==slot%ProjectLimits.TRACKS)Color(0xFF102218)else if(t%2==0)Color(0xFF070D09)else Color(0xFF0B130E),Offset(0f,y),Size(size.width,row));drawLine(Grid,Offset(0f,y+row),Offset(size.width,y+row));drawContext.canvas.nativeCanvas.drawText("${t+1} ${trackName(s,t).take(12)}",8.dp.toPx(),y+27.dp.toPx(),paint)}
+                run{val y=0f;drawRect(if(t==slot%ProjectLimits.TRACKS)Color(0xFF102218)else if(t%2==0)Color(0xFF070D09)else Color(0xFF0B130E),Offset(0f,y),Size(size.width,row));drawLine(Grid,Offset(0f,y+row),Offset(size.width,y+row));drawContext.canvas.nativeCanvas.drawText("${t+1} ${trackName(s,t).take(12)}${if(p.frozen.any{it.track==t})" *" else ""}",8.dp.toPx(),y+27.dp.toPx(),paint)}
                 clipRect(left,0f,size.width,size.height){
                     var at=floor(start/p.barBeats)*p.barBeats
                     while(at<=start+span){val x=left+((at-start)/span*width).toFloat();drawLine(Grid,Offset(x,0f),Offset(x,size.height));at+=p.barBeats}

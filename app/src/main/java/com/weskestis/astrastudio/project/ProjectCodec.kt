@@ -12,7 +12,7 @@ object ProjectCodec {
     fun encode(d: ProjectDocument): String {
         require(d.valid())
         val p=d.project
-        val root=JSONObject().put("format","astra-studio").put("version",6).put("trackCount",ProjectLimits.TRACKS).put("name",p.name)
+        val root=JSONObject().put("format","astra-studio").put("version",7).put("trackCount",ProjectLimits.TRACKS).put("name",p.name)
             .put("bpm",d.bpm.toDouble()).put("master",d.master.toDouble()).put("limiterDrive",d.limiterDrive.toDouble()).put("limiterRelease",d.limiterRelease.toDouble())
             .put("signature",array(listOf(p.numerator,p.denominator))).put("mode",p.mode).put("quantization",p.quantization)
             .put("tempoEnabled",p.tempoEnabled).put("tempoPoints",array(p.tempoPoints.map{array(listOf(it.beat,it.bpm,if(it.ramp)1 else 0))}))
@@ -25,6 +25,7 @@ object ProjectCodec {
                 .put("warp",c.warp).put("sourceBpm",c.sourceBpm).put("warpStart",c.warpStart).put("pitch",c.pitch)
                 .put("notes",array(c.notes.map{array(listOf(it.id,it.beat,it.length,it.pitch,it.velocity))}))
                 .put("automation",array(c.automation.map{lane->array(lane.map{array(listOf(it.beat,it.value))})}))}))
+            .put("frozen",array(p.frozen.map{array(listOf(it.track,it.asset,it.musicFrames,it.fingerprint))}))
             .put("regions",array(p.regions.map{array(listOf(it.id,it.slot,it.beat,it.length,it.offset,it.audioOffset))}))
         return root.toString().also{require(it.toByteArray(Charsets.UTF_8).size<=MAX_JSON_BYTES){"Project description is too large."}}
     }
@@ -35,7 +36,7 @@ object ProjectCodec {
     private fun JSONArray.frame(index: Int): Long {val v=getDouble(index);require(v.isFinite()&&v==kotlin.math.floor(v)&&v in 0.0..AudioStorage.MAX_ASSET_FRAMES.toDouble());return v.toLong()}
     fun decode(text: String): ProjectDocument {
         require(text.toByteArray(Charsets.UTF_8).size<=MAX_JSON_BYTES){"Project description is too large."}
-        val r=JSONObject(text);require(r.getString("format")=="astra-studio"&&r.int("version") in 1..6){"Unsupported project format/version."}
+        val r=JSONObject(text);require(r.getString("format")=="astra-studio"&&r.int("version") in 1..7){"Unsupported project format/version."}
         val version=r.int("version")
         val storedTracks=if(version<6)16 else ProjectLimits.TRACKS
         if(version>=6)require(r.int("trackCount")==ProjectLimits.TRACKS){"Unsupported track layout."}
@@ -69,7 +70,9 @@ object ProjectCodec {
         }
         val tempo=if(r.int("version")<3)emptyList() else r.getJSONArray("tempoPoints").let{a->a.items(128).map{i->val x=a.getJSONArray(i);require(x.length()==3);val ramp=x.int(2);require(ramp in 0..1);TempoPoint(x.getDouble(0),x.getDouble(1).toFloat(),ramp==1)}}
         val tempoEnabled=r.int("version")>=3&&r.getBoolean("tempoEnabled")
-        return ProjectDocument(Project(r.getString("name"),signature.int(0),signature.int(1),r.int("mode"),r.int("quantization"),r.getBoolean("loop"),r.getDouble("loopStart"),r.getDouble("loopEnd"),clips,regions,assets,expanded(instruments){SampleInstrument()},tempo,tempoEnabled),
+        val frozen=if(version<7)emptyList() else r.getJSONArray("frozen").let{a->a.items(ProjectLimits.TRACKS).map{i->val f=a.getJSONArray(i);require(f.length()==4);FrozenTrack(f.int(0),f.int(1),f.frame(2),f.getString(3))}}
+        val document=ProjectDocument(Project(r.getString("name"),signature.int(0),signature.int(1),r.int("mode"),r.int("quantization"),r.getBoolean("loop"),r.getDouble("loopStart"),r.getDouble("loopEnd"),clips,regions,assets,expanded(instruments){SampleInstrument()},tempo,tempoEnabled,frozen),
             r.getDouble("bpm").toFloat(),r.getDouble("master").toFloat(),r.getDouble("limiterDrive").toFloat(),r.getDouble("limiterRelease").toFloat(),expanded(tracks){TrackControls()},expanded(patches){SynthPatch.initial()},expanded(effects){FxConfig.initial()}).also{require(it.valid()){ "Invalid project values or overlapping arrangement regions." }}
+        return FrozenTracks.reconcile(document)
     }
 }

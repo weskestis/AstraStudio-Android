@@ -119,7 +119,8 @@ class AudioBridge : AutoCloseable {
     fun assetInfo(id: Int): DoubleArray? {val h=synchronized(this){handle};return if(h==0L)null else nativeAssetInfo(h,id)}
     fun export(file: File,document: ProjectDocument,rate: Int,tail: Float,floating: Boolean=false,sourceTrack: Int=-1): Int {
         val h=synchronized(this){handle}
-        return nativeExport(h,file.absolutePath,document.project.nativeWire(),document.patches.flatMap{it.wire}.toFloatArray(),document.effects.flatMap{it.wire}.toFloatArray(),document.mixWire(),rate,tail,floating,sourceTrack)
+        val d=com.weskestis.astrastudio.project.FrozenTracks.reconcile(document)
+        return nativeExport(h,file.absolutePath,d.project.nativeWire(),d.patches.flatMap{it.wire}.toFloatArray(),d.effects.flatMap{it.wire}.toFloatArray(),d.mixWire(),rate,tail,floating,sourceTrack)
     }
     fun stretch(file: File,asset: Int,first: Long,last: Long,frames: Long,semitones: Double): Int {
         val h=synchronized(this){handle};return if(h==0L)1 else nativeStretch(h,file.absolutePath,asset,first,last,frames,semitones)

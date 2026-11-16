@@ -92,6 +92,8 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,rec
                     DropdownMenuItem({Text("Stretch audio")},{act{sheet="stretch"}})
                     DropdownMenuItem({Text("Arrangement tempo map")},{act{sheet="tempo"}})
                     DropdownMenuItem({Text("Record & Sample Lab")},{act{sheet="record"}})
+                    DropdownMenuItem({Text("Performance")},{act{sheet="performance"}},modifier=Modifier.testTag("Open performance"))
+                    DropdownMenuItem({Text("Recovery")},{act{service.refreshRecovery();sheet="recovery"}},modifier=Modifier.testTag("Open recovery"))
                     DropdownMenuItem({Text("How to use")},{act{sheet="help"}})
                 }
             }
@@ -156,6 +158,9 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,rec
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=12.dp)){
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text(when(sheet){"clip"->"CLIP / ${state.project.clip(slot)?.name?:"New MIDI"}";"keys"->"KEYBOARD / ${trackName(state,track)}";else->"${sheet.uppercase()} / ${trackName(state,track)}"},Modifier.weight(1f),color=Green,fontWeight=FontWeight.Bold,fontSize=13.sp);TextButton({backPanel()},Modifier.testTag("Panel back")){Text("‹ Back")};TextButton({closePanel()},Modifier.testTag("Close panel")){Text("Close ×")}}
             when(sheet){
+                "freeze"->FreezePanel(editorState,track,service)
+                "performance"->PerformancePanel(state,service)
+                "recovery"->RecoveryPanel(editorState,service)
                 "share"->SharePanel(editorState,service)
                 "record"->RecordingPanel(editorState,service,slot,recordAudio,importLab,saveLab)
                 "astra"->AstraPanel(editorState,service,slot)
@@ -191,7 +196,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,rec
     if(confirm.isNotEmpty())AlertDialog(onDismissRequest={confirm=""},title={Text(when(confirm){"delete"->"Delete this clip?";"starter"->"Load the starter song?";else->"Start a new project?"})},text={Text(if(confirm=="delete")"Its arrangement regions will also be removed. Undo restores them." else "This replaces the current composition. Save a portable project from File first if you want to keep it.")},confirmButton={TextButton({when(confirm){"delete"->service.projectEdit{it.remove(slot)};"starter"->{service.starter();slot=0;selectedRegion=-1;cursor=0.0};else->{service.newProject();slot=0;selectedRegion=-1;cursor=0.0}};confirm=""},Modifier.testTag("Confirm project")){Text("Continue")}},dismissButton={TextButton({confirm=""}){Text("Cancel")}})
     if(tempoDialog)TempoDialog(state.bpm,{tempoDialog=false}){service.tempo(it);tempoDialog=false}
     if(exportDialog)ExportDialog(state.project,{exportDialog=false}){rate,tail,floating->exportDialog=false;exportWave(state.project.name,rate,tail,floating)}
-    if(state.busy&&state.ready&&workVisible)AlertDialog(onDismissRequest={workVisible=false},title={Text(state.work)},text={Column{if(state.work in listOf("Rendering WAV","Resampling","Stretching audio","Rendering finished track","Bouncing instrument"))LinearProgressIndicator(progress={state.progress.coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth())else LinearProgressIndicator(Modifier.fillMaxWidth());Text("Back hides this window while the work continues. Cancel stops the operation.",fontSize=12.sp,modifier=Modifier.padding(top=12.dp))}},confirmButton={TextButton(service::cancelWork){Text("Cancel")}})
+    if(state.busy&&state.ready&&workVisible)AlertDialog(onDismissRequest={workVisible=false},title={Text(state.work)},text={Column{if(state.work in listOf("Rendering WAV","Resampling","Stretching audio","Rendering finished track","Bouncing instrument","Freezing track"))LinearProgressIndicator(progress={state.progress.coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth())else LinearProgressIndicator(Modifier.fillMaxWidth());Text("Back hides this window while the work continues. Cancel stops the operation.",fontSize=12.sp,modifier=Modifier.padding(top=12.dp))}},confirmButton={TextButton(service::cancelWork){Text("Cancel")}})
 }
 
 @Composable private fun DeviceRack(s: StudioState,t: Int,service: AudioService,compact: Boolean,open: (String)->Unit){
@@ -199,7 +204,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,rec
         if(!compact)Text("DEVICE CHAIN · ${trackName(s,t)}",color=Muted,fontSize=9.sp,letterSpacing=1.sp,modifier=Modifier.padding(start=12.dp,top=4.dp))
         Tools {
             if(compact)Action("Edit clip",tag="Edit clip"){open("clip")}
-            Action("Mixer"){open("mixer")};Action("${if(s.patches[t].wire[0]>0)"FM" else "Wavetable"} ›"){open("synth")}
+            Action("Mixer"){open("mixer")};Action(if(s.project.frozen.any{it.track==t})"Frozen ›" else "Freeze track",tag="Open freeze"){open("freeze")};Action("${if(s.patches[t].wire[0]>0)"FM" else "Wavetable"} ›"){open("synth")}
             Action(when(s.project.instruments[t].mode){1->"Sampler ›";2->"Drum rack ›";else->"Sampler / drums"},tag="Sample instrument"){open("instrument")}
             s.effects[t].order.forEach{unit->val on=s.effects[t][FxConfig.enabled[unit]]>.5f
                 FilterChip(on,{open("effects:$unit")},label={Text(listOf("EQ 8","Multiband","Shaper","Sidechain","Echo","Reverb","Chorus","Phaser")[unit],fontSize=11.sp)})}
