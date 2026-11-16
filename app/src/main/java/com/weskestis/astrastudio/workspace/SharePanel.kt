@@ -16,6 +16,7 @@ import com.weskestis.astrastudio.audio.AudioService
 import com.weskestis.astrastudio.audio.StudioState
 import com.weskestis.astrastudio.project.FinishedTracks
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable internal fun SharePanel(s: StudioState,service: AudioService){
     val context=LocalContext.current
     var rate by rememberSaveable{mutableIntStateOf(48000)}
@@ -39,7 +40,7 @@ import com.weskestis.astrastudio.project.FinishedTracks
         HorizontalDivider(Modifier.padding(vertical=10.dp))
         Text(e.name,color=Green,modifier=Modifier.testTag("Finished track $i"))
         Text("${number(e.bytes/1048576.0)} MiB",fontSize=12.sp,color=Muted)
-        Tools{
+        FlowRow(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(4.dp)){
             Action("Share WAV",!s.busy,"Share WAV $i"){
                 runCatching{context.startActivity(Intent.createChooser(FinishedTracks(context).sendIntent(e.path),"Share finished track"))}
                     .onFailure{service.notice(it.message?:"No compatible sharing app is available. Save the WAV instead.")}

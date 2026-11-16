@@ -83,8 +83,10 @@ class WorkspaceSmokeTest {
             context.contentResolver.openInputStream(uri)!!.use{input->assertArrayEquals(f.readBytes(),input.readBytes())}
             assertTrue(runCatching{store.sendIntent(source.absolutePath)}.isFailure)
             assertTrue("Finished exports keep the same canonical identity when the store is reopened",FinishedTracks(context).list().any{it.path==f.absolutePath})
+            compose.waitUntil(10000){compose.onAllNodesWithTag("Share WAV 0").fetchSemanticsNodes().isNotEmpty()}
+            compose.onNodeWithTag("Share WAV 0").performScrollTo().assertIsDisplayed()
             shot("21-finished-track-phone")
-            compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
             compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
             compose.onNodeWithTag("Share WAV 0").performScrollTo().assertIsDisplayed();shot("22-finished-track-landscape")
             click("Share WAV 0")
