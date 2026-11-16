@@ -1,8 +1,23 @@
-# Phase 14 — advanced sampling (validation in progress)
+# Phase 14 — advanced sampling and layered instruments
 
-Development **0.14.0-sampling / versionCode 15**, Android 14+. [Workflow and limits](SAMPLING.md).
+Development **0.14.0-sampling / versionCode 15**, Android 14+.
 
-Local APK assembly and Android lint pass. All 235 Kotlin tests pass, including 27 new sampling/preset cases. Native and Android integration evidence will be recorded after the current validation run completes. Historical results below describe their original versions, not this candidate.
+Verified executable/test source commit: `a6e69c9cc6ff701c4c7cdb95d2fa9b27ae0f1fa4`.
+[Successful build and Android run](https://github.com/weskestis/AstraStudio-Android/actions/runs/43920095192). [Controls, workflow and limits](SAMPLING.md).
+
+- All **235 Kotlin tests passed**, zero failures/ignored tests. The 27 new cases cover independent layers, source remapping, JSON migration, frame/fade bounds, freeze invalidation, transient/equal/manual slicing, tiny ranges, cancellation, MIDI timing, preset copies across projects, deduplication, corruption, transactional rollback and 192 kHz resample capacity.
+- All **13 native suites passed** in Release and with AddressSanitizer/UndefinedBehaviorSanitizer. Both final logs have zero ASan/UBSan diagnostics. The new layered-sampling suite passed **85,625 assertions**, including unchanged single-layer output, exact four-player summation at 192 kHz, source fades, forward/reverse loop overlap continuity/period, extreme short loops, per-layer choke, source-pointer retirement, Track 50 export, all 128 MIDI voices, panic and **zero render-thread allocations/frees**.
+- All **19 Android tests passed**, zero failures/errors/skips, in **246.257 seconds** on API 34 x86_64 at **1080 × 2520**. New coverage completes recording import → transient/equal/manual markers → pads and MIDI → independent layer assignment/edit → saved kit → new project → load/Undo/Redo → portable archive → native 192 kHz export. It checks a full track reports the actual no-empty-slot error without changing the kit. A separate workflow verifies direct 192 kHz resampling preserves the source and supports Undo. Existing recording, pack, synth, Warp, freeze/recovery, 50-track, sharing, Back and rotation cases remain green.
+- APK assembly, Android test assembly, source-manifest checks, generated schemas and Android lint pass. Portrait slicing, independent-layer editing, saved-kit and direct-resample screens and landscape kit-library navigation were reviewed. The phone slice completion actions are separate rows. Test scrolling now brings nested vertical and horizontal viewports into view before interaction.
+
+## Verified APK
+
+- File: `AstraStudio_0.14.0_AdvancedSampling.apk` — **29,037,414 bytes**, from the successful CI build.
+- SHA-256: `3f651906bd300f517f912fb15e20afcc0e8129ed3239db46feffc3c562080482`.
+- Certificate SHA-256: `1bff24ae64d74c99d9540a1ecc5acccc8479367f44772b305144d2c10ce4bd45`.
+- Package `com.weskestis.astrastudio`; minimum/target API 34; ARM64 and x86_64. Signature verification, 16 KiB ZIP alignment and all six native libraries' LOAD-segment alignment pass. The unchanged development certificate supports updating Astra 0.13 without uninstalling.
+
+Limits remain 50 tracks, 128 shared MIDI voices, 64 project sources and the existing streaming budgets. Four sample players per MIDI voice give a structural maximum of 512 players; actual sustained Xperia performance is not yet measured. Presets consume disk space and existing project source capacity when loaded. Loop overlap shortens each repeated cycle by its overlap. Project JSON 9/native wire 8 migrate older versions; retain an original portable project when using older APKs. Physical Xperia latency, thermals, storage pressure and maximum sustained active layers remain separate acceptance work. Historical results below describe their original versions.
 
 ---
 
