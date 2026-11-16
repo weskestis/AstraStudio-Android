@@ -27,6 +27,8 @@ struct Plan {
     int mode{},numerator{4},denominator{4};bool loop{};double loopStart{},loopEnd{16};
     std::array<Clip,kClips> clips;std::array<std::vector<Region>,kTracks> regions;Samples samples;std::array<sampler::Instrument,kTracks> instruments;
     TempoMap tempo;std::array<FrozenTrack,kTracks> frozen;
+    std::array<std::array<int,2>,kTracks> tableAssets;
+    const synth::ImportedWavetable* table(int track,int osc)const noexcept{const int id=tableAssets[track][osc];return id<0?nullptr:samples[id]->wavetable.get();}
     bool decode(std::span<const double> data,const Samples& audio);
     double barBeats()const noexcept{return numerator*4.0/denominator;}
     double endBeat()const noexcept;

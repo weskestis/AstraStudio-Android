@@ -1,6 +1,7 @@
 #pragma once
 #include "SynthPatch.h"
 #include "WavetableBank.h"
+#include "ImportedWavetable.h"
 #include "Modulators.h"
 #include "Filter.h"
 #include "FMOperator.h"
@@ -10,6 +11,8 @@
 namespace astra::synth {
 class SynthVoice {
 public:
+    void tables(const ImportedWavetable* a,const ImportedWavetable* b)noexcept{tableA_=a;tableB_=b;}
+    bool usesTables(const ImportedWavetable* a,const ImportedWavetable* b)const noexcept{return tableA_==a&&tableB_==b;}
     bool prepare(double sampleRate) noexcept;
     void start(int note, float velocity, uint32_t seed, const Patch& patch, double sampleRate,
                const std::array<double, 4>& freePhases, float bpm) noexcept;
@@ -21,6 +24,7 @@ public:
     bool releasing() const noexcept { return envelopes_[0].releasing(); }
     float amplitude() const noexcept { return envelopes_[0].value(); }
 private:
+    const ImportedWavetable* tableA_{};const ImportedWavetable* tableB_{};
     enum Control : int { IncA, IncB, IncSub, PositionA, PositionB, Amount, Index, LevelA, LevelB,
         Sub, Noise, Gain, MipA, MipB, WarpA, WarpB, Amplitude, Feedback,
         OpInc1, OpInc2, OpInc3, OpInc4, OpLevel1, OpLevel2, OpLevel3, OpLevel4, Count };

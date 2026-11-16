@@ -47,3 +47,7 @@ adb shell test -s /sdcard/Pictures/AstraStudio/31-frozen-track.png
 adb shell test -s /sdcard/Pictures/AstraStudio/32-recovery-phone.png
 adb shell test -s /sdcard/Pictures/AstraStudio/33-performance-phone.png
 adb shell test -s /sdcard/Pictures/AstraStudio/34-performance-landscape.png
+
+adb shell test -s /sdcard/Pictures/AstraStudio/35-pack-browser-phone.png
+adb shell test -s /sdcard/Pictures/AstraStudio/36-pack-detail-landscape.png
+adb shell test -s /sdcard/Pictures/AstraStudio/37-imported-wavetable.png

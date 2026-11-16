@@ -1,5 +1,6 @@
 #pragma once
 #include "fx/FxPrimitives.h"
+#include "dsp/ImportedWavetable.h"
 #include <array>
 #include <atomic>
 #include <cstdint>
@@ -16,6 +17,7 @@ struct SampleCursor { int64_t page{-1};const void* source{};int slot{-1};unsigne
 class SampleStream;
 struct Sample {
     int rate{};std::vector<float> stereo;
+    std::shared_ptr<const synth::ImportedWavetable> wavetable;
     std::shared_ptr<SampleStream> stream;
     std::array<float,1024> peaks{};
     int64_t sourceFrames{};

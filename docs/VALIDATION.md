@@ -1,3 +1,9 @@
+# Phase 13 validation in progress
+
+Version **0.13.0-soundpacks / versionCode 14**. The new pack installer and imported oscillator tests are being checked against all seven supplied packs, native sanitizers and Android instrumentation. [Scope and editing workflow](SOUND_PACKS.md). Earlier sections below retain their historical results.
+
+---
+
 # Phase 12 — freeze, recovery and performance validation
 
 Development **0.12.0-phase12 / versionCode 13**, Android 14+.

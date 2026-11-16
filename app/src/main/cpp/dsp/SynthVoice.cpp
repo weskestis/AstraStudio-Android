@@ -80,8 +80,8 @@ void SynthVoice::update(const Patch& p, const std::array<double, 4>& freePhases,
     target[WarpB] = unit(v(OscBWarpAmount) + m(Target::WarpB));
     const float stressA = 1.0f + (modes_[3] == 1 ? 7.0f : 2.0f) * target[WarpA];
     const float stressB = 1.0f + (modes_[4] == 1 ? 7.0f : 2.0f) * target[WarpB] + target[Amount] * 4.0f;
-    target[MipA] = WavetableBank::mipFor(target[IncA] * sr * stressA, sr);
-    target[MipB] = WavetableBank::mipFor(target[IncB] * sr * stressB, sr);
+    target[MipA] = (tableA_?tableA_->mipFor(target[IncA]*sr*stressA,sr):WavetableBank::mipFor(target[IncA] * sr * stressA, sr));
+    target[MipB] = (tableB_?tableB_->mipFor(target[IncB]*sr*stressB,sr):WavetableBank::mipFor(target[IncB] * sr * stressB, sr));
     target[Amplitude] = std::clamp(1.0f + m(Target::Amplitude), 0.0f, 2.0f);
     target[Feedback] = v(Feedback);
     for (int i = 0; i < 4; ++i) {
@@ -115,9 +115,10 @@ float SynthVoice::render(const Patch& p, const WavetableBank& bank,
     for (int oversample = 0; oversample < 2; ++oversample) {
         float raw;
         if (modes_[0] == 0) {
-            const float a = bank.read(modes_[1], controls_[PositionA], warped(phaseA_, modes_[3], controls_[WarpA]), controls_[MipA]);
-            const float b = controls_[LevelB] > 1e-7f ? bank.read(modes_[2], controls_[PositionB],
-                warped(wrap(phaseB_ + controls_[Amount] * a), modes_[4], controls_[WarpB]), controls_[MipB]) : 0;
+            const double pa=warped(phaseA_, modes_[3], controls_[WarpA]);
+            const float a = tableA_?tableA_->read(controls_[PositionA],pa,controls_[MipA]):bank.read(modes_[1], controls_[PositionA],pa, controls_[MipA]);
+            const double pb=warped(wrap(phaseB_ + controls_[Amount] * a), modes_[4], controls_[WarpB]);
+            const float b = controls_[LevelB] > 1e-7f ? (tableB_?tableB_->read(controls_[PositionB],pb,controls_[MipB]):bank.read(modes_[2],controls_[PositionB],pb,controls_[MipB])) : 0;
             raw = a * controls_[LevelA] + b * controls_[LevelB];
         } else raw = fm_.render(bank, increments, opLevels, controls_[Index], controls_[Feedback], modes_[5]);
         if (controls_[Noise] > 1e-7f) {

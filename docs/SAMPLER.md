@@ -1,6 +1,6 @@
 # Samples, drum rack, resampling and Back
 
-Introduced in Phase 6, updated for 0.7.0-phase7 / versionCode 7. Android 14 minimum, ARM64 and x86_64; the development signing certificate is unchanged.
+Introduced in Phase 6; current sound-pack workflow updated for 0.13.0-soundpacks / versionCode 14. Android 14 minimum, ARM64 and x86_64; the development signing certificate is unchanged.
 
 ## Play samples
 
@@ -12,17 +12,15 @@ Choose a sample from **Samples**, open its details, then assign it to the sample
 
 **Trim / loop frames** edits exact source-frame positions. End frames are exclusive. White waveform lines mark the trim range; yellow lines mark the loop. Loop bounds must be inside the trimmed range. One-shot ignores ordinary note-off; gated playback releases on note-off. Loop and one-shot are mutually exclusive. Transport Stop releases one-shots too; Panic clears all notes, audition and effect tails. Changes to a zone take effect on its next note; currently playing notes retain their original settings. Switching instrument mode stops that track's held voices.
 
-This is pitch-linked sample playback: transposition changes speed and duration. Phase 7 adds offline independent time stretching and Arrangement tempo maps; see [QUALITY.md](QUALITY.md). Granular synthesis and microphone recording remain future work.
+This is pitch-linked sample playback: transposition changes speed and duration. Phase 7 adds offline independent time stretching and Arrangement tempo maps; see [QUALITY.md](QUALITY.md). Microphone recording and Sample Lab are documented in [RECORDING.md](RECORDING.md); granular synthesis remains future work.
 
 ## Browser and packs
 
-**Samples → Import samples** accepts a multi-selection through Android's document picker. **Import ZIP pack** reads supported audio entries into individually named private files; ZIP directory paths are never used as destinations. ZIP expansion is bounded to 512 MiB and 4,096 entries, with no more than the project's remaining sample slots. Unsupported non-audio entries count against the expansion bound. A failed/cancelled import leaves the project unchanged and removes files created by that import.
+**Samples → Project samples → Import samples** accepts a multi-selection of audio through Android's document picker. These sources belong to the current project, including favorites and collection labels. The active project supports **64 sources**, **2 GiB per file** and **8 GiB of stereo-float-equivalent frames**, with 128 MiB of active native source pages/resident data. Large ordinary sources stream.
 
-Mono/stereo PCM WAV decoding is native. Other supported Android MediaCodec formats are converted before loading; actual codec availability depends on the device. ZIP is supported; RAR and encrypted packs are not. Limits remain **64 assets and 512 MiB decoded stereo float audio per project**, including bounces. Large packs that exceed those limits must be imported as a smaller selection.
+**Samples → Sound packs → Install pack parts** installs `.riftpack` files or PCM WAV ZIPs into a separate persistent library of up to 20,000 sounds. All seven Rift parts work directly; only chosen sounds enter the project's 64 slots. Search/filter, preview, favorite, then load into a sampler, pad, audio clip or wavetable oscillator. Read [Sound packs](SOUND_PACKS.md) for installation, editing and exact limits.
 
-Search by name, filter by collection, or select **Favorites**. Details allow a favorite toggle, collection rename, sampler/pad assignment, or creation of an audio clip in the selected track's first available slot. The browser is part of the current project. Portable `.astra` archives retain every browser sample, including unused samples and inactive pad assignments, with favorites and collection labels. All audio stays local unless explicitly attached to Gemini through Astra.
-
-**Preview** requires Start audio and plays up to ten seconds at reduced level through the master output/limiter, without track effects. Stop preview or Back ends the audition. This changes no composition, instrument assignment or Undo history.
+Project samples retain the existing reduced-level native preview of up to 10 seconds. Installed-pack previews use an independent disk-backed audition and pause transport. Neither changes the composition or Undo history. Back/Stop ends audition. Project copies and selected wavetable sources travel in portable saves; installed originals remain unchanged.
 
 ## Resampling
 

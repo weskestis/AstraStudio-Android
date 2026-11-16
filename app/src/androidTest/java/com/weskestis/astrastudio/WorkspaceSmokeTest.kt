@@ -21,6 +21,7 @@ import com.weskestis.astrastudio.recording.*
 import androidx.test.rule.ServiceTestRule
 import android.content.Intent
 import com.weskestis.astrastudio.project.*
+import com.weskestis.astrastudio.packs.*
 import com.weskestis.astrastudio.synth.SynthSchema
 import com.weskestis.astrastudio.astra.*
 import com.weskestis.astrastudio.astra.AstraCommands.command as cmd
@@ -80,6 +81,56 @@ class WorkspaceSmokeTest {
         return this
     }
     private fun click(tag: String){val node=compose.onNodeWithTag(tag);runCatching{node.scrollOnUiThread()};node.assertIsDisplayed().performClick()}
+    @Test fun installedPacksBrowseEditUndoTablesAndPortableProjects(){
+        compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
+        click("File");click("New project");click("Confirm project")
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val binding=ServiceTestRule();val service=(binding.bindService(Intent(context,AudioService::class.java)) as AudioService.LocalBinder).service
+        val fixture=File(context.cacheDir,"pack-tone.wav");val pack=File(context.cacheDir,"instrument-test.riftpack");val archive=File(context.cacheDir,"pack-roundtrip.astra");val output=File(context.cacheDir,"table-master.wav")
+        FloatWaveWriter(fixture,48000,1).use{it.write(FloatArray(12000){n->(.3*kotlin.math.sin(2*Math.PI*55*n/48000)).toFloat()},12000)}
+        val sample=fixture.readBytes();val tableData=FloatArray(2048*2){n->(.4*kotlin.math.sin(2*Math.PI*(n%2048)/2048*(if(n<2048)1 else 3))).toFloat()}
+        val chunk="<!>2048 ".toByteArray();val header=FloatWaveWriter.header(44100,1,tableData.size*4L)
+        val table=header.take(36).toByteArray()+"clm ".toByteArray()+ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(chunk.size).array()+chunk+header.drop(36).toByteArray()+ByteBuffer.allocate(tableData.size*4).order(ByteOrder.LITTLE_ENDIAN).apply{tableData.forEach(::putFloat)}.array()
+        ByteBuffer.wrap(table).order(ByteOrder.LITTLE_ENDIAN).putInt(4,table.size-8)
+        val entries=org.json.JSONArray()
+        fun entry(id: String,name: String,data: ByteArray,tableEntry: Boolean=false){entries.put(org.json.JSONObject().put("id",id).put("name",name).put("kind",if(tableEntry)"wavetable"else "sample").put("category",if(tableEntry)"Wavetables"else "Bass").put("file","audio/$id.wav").put("bytes",data.size).put("sha256",java.security.MessageDigest.getInstance("SHA-256").digest(data).joinToString(""){"%02x".format(it.toInt() and 255)}).put("rate",if(tableEntry)44100 else 48000).put("frames",if(tableEntry)4096 else 12000).put("channels",1).put("cycle",if(tableEntry)2048 else 0).put("key","F"))}
+        entry("tone","Pack test bass",sample);entry("table","Pack test wavetable",table,true)
+        val manifest=org.json.JSONObject().put("format","rift-sound-pack").put("version",1).put("id","astra-pack-test").put("name","Astra test collection").put("creator","Astra tests").put("part",1).put("parts",1).put("entries",entries)
+        java.util.zip.ZipOutputStream(pack.outputStream()).use{z->fun add(name: String,bytes: ByteArray){z.putNextEntry(java.util.zip.ZipEntry(name));z.write(bytes);z.closeEntry()};add("manifest.json",manifest.toString().toByteArray());add("audio/tone.wav",sample);add("audio/table.wav",table)}
+        fun document()=service.state.value.let{ProjectDocument(it.project,it.bpm,it.master,it.limiterDrive,it.limiterRelease,it.tracks,it.patches,it.effects)}
+        try{
+            service.installSoundPacks(listOf(Uri.fromFile(pack)));compose.waitUntil(30000){service.state.value.packs.sounds.size>=2&&!service.state.value.busy}
+            assertTrue(service.state.value.project.assets.isEmpty())
+            click("Choose track");compose.onNodeWithTag("Track picker").performScrollToIndex(0);click("Select track 1")
+            click("Samples");click("Sound packs tab");compose.onNodeWithTag("Sound pack browser").assertTextContains("2 sounds",substring=true);shot("35-pack-browser-phone")
+            compose.onNodeWithTag("Pack search").scrollOnUiThread().performTextReplacement("bass")
+            compose.onNodeWithTag("Pack result count").assertTextContains("1 matches",substring=true)
+            click("Pack sound astra-pack-test:tone");click("Preview pack sound");service.stopPreview()
+            click("Use pack sound");compose.waitUntil(30000){!service.state.value.busy&&service.state.value.project.instruments[0].mode==1}
+            compose.onNodeWithTag("Pack sound details").assertExists();assertEquals(65,service.state.value.project.instruments[0].sample.root)
+            service.sampleEdit(0,-1){it.copy(first=1200,last=6000,loopFirst=1200,loopLast=6000,reverse=true,pitch=-12f)}
+            compose.waitUntil(10000){service.state.value.project.instruments[0].sample.reverse}
+            val loaded=document();assertEquals(1,loaded.project.assets.size);assertArrayEquals(sample,File(service.samplePath(loaded.project.assets.single())).readBytes())
+            service.undo();compose.waitUntil(20000){!service.state.value.project.instruments[0].sample.reverse};service.redo();compose.waitUntil(20000){service.state.value.project.instruments[0].sample.reverse}
+            service.packFavorite("astra-pack-test:tone");compose.waitUntil(10000){"astra-pack-test:tone" in service.state.value.packs.favorites}
+            compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
+            compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
+            compose.onNodeWithTag("Pack sound details").scrollOnUiThread();shot("36-pack-detail-landscape")
+            back();compose.onNodeWithTag("Sound pack browser").assertExists()
+            compose.onNodeWithTag("Pack search").scrollOnUiThread().performTextReplacement("wavetable")
+            click("Pack sound astra-pack-test:table");click("Load table A")
+            compose.waitUntil(30000){!service.state.value.busy&&service.state.value.project.tables[0][0]>=0};assertEquals(0,service.state.value.project.instruments[0].mode)
+            val tableAsset=service.state.value.project.asset(service.state.value.project.tables[0][0])!!;assertEquals(2048,tableAsset.cycle)
+            click("Edit synth / modulation");compose.onNodeWithText("IMPORTED WAVETABLES").scrollOnUiThread().assertExists();shot("37-imported-wavetable")
+            back();compose.onNodeWithTag("Session grid").assertExists()
+            service.newClip(0);compose.waitUntil(10000){service.state.value.project.clip(0)!=null}
+            service.projectEdit{it.put(it.clip(0)!!.add(0.0,45,.5)).place(0,0.0)};compose.waitUntil(10000){service.state.value.project.regions.isNotEmpty()}
+            val d=document();val files=ProjectFiles(context);files.saveArchive(d,Uri.fromFile(archive),AtomicBoolean(false));val restored=files.openArchive(Uri.fromFile(archive),AtomicBoolean(false))
+            assertEquals(d.project.tables,restored.project.tables);assertEquals(2048,restored.project.asset(restored.project.tables[0][0])!!.cycle)
+            val bridge=AudioBridge();try{assertTrue(bridge.loadAssets(restored.project.assets.map{it.id to files.audioFile(it)}));assertTrue(bridge.project(restored.project));assertEquals(0,bridge.export(output,restored,192000,.1f,false));WaveFile(output).use{w->assertEquals(192000,w.rate);val data=FloatArray(19200*2);w.read(0,19200,data);assertTrue(data.any{kotlin.math.abs(it)>.00001f})}}finally{bridge.close();restored.project.assets.forEach{files.audioFile(it).delete()}}
+            service.newProject();compose.waitUntil(10000){service.state.value.project.assets.isEmpty()};assertEquals(2,service.state.value.packs.sounds.size)
+        }finally{fixture.delete();pack.delete();archive.delete();output.delete();binding.unbindService()}
+    }
     @Test fun freezePhoneRotationArchiveExportAndUndoAssetReuse(){
         compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
         click("File");click("New project");click("Confirm project")

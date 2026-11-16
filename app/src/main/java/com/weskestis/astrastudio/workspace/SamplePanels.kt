@@ -98,8 +98,11 @@ import kotlin.math.roundToInt
     }
 }
 
-@Composable internal fun SampleBrowser(s: StudioState,t: Int,slot: Int,targetPad: Int?,service: AudioService,start: ()->Unit,importFiles: ()->Unit,importPack: ()->Unit,assigned: ()->Unit){
+@Composable internal fun SampleBrowser(s: StudioState,t: Int,slot: Int,targetPad: Int?,service: AudioService,start: ()->Unit,importFiles: ()->Unit,importPack: ()->Unit,editSynth: ()->Unit,assigned: ()->Unit){
     var query by rememberSaveable{mutableStateOf("")};var favorites by rememberSaveable{mutableStateOf(false)};var group by rememberSaveable{mutableStateOf("")};var selected by rememberSaveable{mutableIntStateOf(-1)}
+    var library by rememberSaveable{mutableStateOf(false)}
+    Tools{FilterChip(!library,{library=false;service.stopPreview()},label={Text("Project samples")});FilterChip(library,{library=true;service.stopPreview()},label={Text("Sound packs")},modifier=Modifier.testTag("Sound packs tab"))}
+    if(library){PackBrowser(s,t,slot,targetPad,service,importPack,assigned,editSynth);return}
     PanelBackHandler(selected>=0){selected=-1;service.stopPreview()}
     val asset=s.project.asset(selected)
     if(asset!=null){
@@ -116,8 +119,8 @@ import kotlin.math.roundToInt
         return
     }
     Text("SAMPLES · ${s.project.assets.size}/64",color=Green,fontWeight=FontWeight.Bold)
-    Tools{Action("Import samples",!s.busy,click=importFiles);Action("Import ZIP pack",!s.busy,click=importPack);FilterChip(favorites,{favorites=!favorites},label={Text("★ Favorites")})}
-    Text("Select multiple audio files, or a ZIP pack. Mono/stereo WAV and formats supported by Android. 2 GiB per file; 8 GiB stereo-float-equivalent sources per project. Large samples stream through fixed audio pages.",fontSize=12.sp,color=Muted)
+    Tools{Action("Import samples",!s.busy,click=importFiles);Action("Install sound packs",!s.busy){library=true;importPack()};FilterChip(favorites,{favorites=!favorites},label={Text("★ Favorites")})}
+    Text("Select multiple audio files. Install large packs in Sound packs. Mono/stereo WAV and formats supported by Android. 2 GiB per file; 8 GiB stereo-float-equivalent sources per project. Large samples stream through fixed audio pages.",fontSize=12.sp,color=Muted)
     OutlinedTextField(query,{query=it},label={Text("Search samples")},singleLine=true,modifier=Modifier.fillMaxWidth().testTag("Sample search"))
     Tools{FilterChip(group=="",{group=""},label={Text("All")});s.project.assets.map{it.group}.distinct().sorted().forEach{label->FilterChip(group==label,{group=label},label={Text(label.ifBlank{"Unsorted"})})}}
     val matches=s.project.assets.filter{(!favorites||it.favorite)&&(group.isEmpty()||it.group==group)&&it.name.contains(query,true)}

@@ -16,7 +16,7 @@ constexpr int pageFrames=4096,pageCount=64,queueSize=256;
 constexpr std::size_t cacheBytes=pageFrames*pageCount*2*sizeof(float);
 uint16_t u16(const unsigned char* p){return uint16_t(p[0]|(p[1]<<8));}
 uint32_t u32(const unsigned char* p){return p[0]|(uint32_t(p[1])<<8)|(uint32_t(p[2])<<16)|(uint32_t(p[3])<<24);}
-struct Layout {int format{},channels{},bits{},rate{},align{};int64_t offset{},frames{};};
+struct Layout {int format{},channels{},bits{},rate{},align{},cycle{};int64_t offset{},frames{};};
 bool layout(std::FILE* file,Layout& l){
     unsigned char h[12];if(std::fread(h,1,12,file)!=12||std::memcmp(h,"RIFF",4)||std::memcmp(h+8,"WAVE",4))return false;
     struct stat stat{};if(fstat(fileno(file),&stat))return false;
@@ -29,13 +29,13 @@ bool layout(std::FILE* file,Layout& l){
             if(l.format==0xfffe){constexpr unsigned char suffix[12]={0,0,16,0,128,0,0,170,0,56,155,113};
                 if(size<40||u16(f+16)<22||std::memcmp(f+28,suffix,12)||u16(f+26)||u16(f+18)!=l.bits)return false;
                 l.format=u16(f+24);}
+        }else if(!std::memcmp(c,"clm ",4)&&size>=6&&size<=256){char text[257]{};if(std::fread(text,1,size,file)!=size)return false;int cycle=0;if(std::sscanf(text,"<!>%d",&cycle)==1&&cycle>=32&&cycle<=2048&&!(cycle&(cycle-1)))l.cycle=cycle;
         }else if(!std::memcmp(c,"data",4)){l.offset=at;bytes=size;}
-        if(l.offset&&l.format)break;
         if(fseeko(file,at+size+(size&1U),SEEK_SET))return false;
     }
     if(!l.offset||l.rate<8000||l.rate>384000||l.channels<1||l.channels>2||l.align!=l.channels*l.bits/8||
        !((l.format==1&&(l.bits==16||l.bits==24||l.bits==32))||(l.format==3&&l.bits==32))||!bytes||bytes%l.align)return false;
-    l.frames=bytes/l.align;return l.frames<=kMaxSourceFrames;
+    l.frames=bytes/l.align;if(l.cycle&&(l.channels!=1||l.frames%l.cycle||l.frames/l.cycle>256))l.cycle=0;return l.frames<=kMaxSourceFrames;
 }
 bool decode(const unsigned char* raw,float* out,int count,const Layout& l)noexcept{
     for(int i=0;i<count;++i)for(int ch=0;ch<2;++ch){const auto* p=raw+i*l.align+std::min(ch,l.channels-1)*(l.bits/8);float v;
@@ -139,7 +139,7 @@ public:
 };
 DiskWorker& worker(){static DiskWorker instance;return instance;}
 }
-std::size_t Sample::memoryBytes()const noexcept{return stream?cacheBytes:stereo.size()*sizeof(float);}
+std::size_t Sample::memoryBytes()const noexcept{return (stream?cacheBytes:stereo.size()*sizeof(float))+(wavetable?wavetable->memoryBytes():0);}
 bool Sample::read(int64_t first,float* out,int count,SampleCursor& c)const noexcept{
     if(count<0||first<0||first>frames()-count){if(count>0)std::fill_n(out,count*2,0.f);return false;}
     if(stream)return stream->read(first,out,count,c);
@@ -157,8 +157,9 @@ std::shared_ptr<const Sample> readSample(const char* path,std::size_t budget,boo
     struct Close {void operator()(std::FILE* f)const noexcept{std::fclose(f);}};
     std::unique_ptr<std::FILE,Close> file(std::fopen(path,"rb"));if(!file)return {};
     Layout l;if(!layout(file.get(),l))return {};
-    const auto bytes=uint64_t(l.frames)*8;const bool disk=streaming&&bytes>kResidentThreshold;
-    if((disk?cacheBytes:bytes)>budget)return {};
+    const auto bytes=uint64_t(l.frames)*8;const bool disk=streaming&&!l.cycle&&bytes>kResidentThreshold;
+    const auto tables=l.cycle?synth::ImportedWavetable::requiredBytes(l.cycle,int(l.frames/l.cycle)):0;
+    if((disk?cacheBytes:bytes)+tables>budget)return {};
     auto sample=std::make_shared<Sample>();sample->rate=l.rate;sample->sourceFrames=l.frames;
     if(!disk)sample->stereo.resize(l.frames*2);
     std::array<unsigned char,pageFrames*8> raw{};std::array<float,pageFrames*2> decoded{};
@@ -169,6 +170,7 @@ std::shared_ptr<const Sample> readSample(const char* path,std::size_t budget,boo
         for(int i=0;i<n;++i){const auto b=int((at+i)*512/l.frames);for(int ch=0;ch<2;++ch){const float v=out[i*2+ch];sample->peaks[b*2]=std::min(sample->peaks[b*2],v);sample->peaks[b*2+1]=std::max(sample->peaks[b*2+1],v);}}
         at+=n;
     }
+    if(l.cycle)sample->wavetable=std::make_shared<synth::ImportedWavetable>(sample->stereo,l.cycle);
     if(disk){sample->stream=std::make_shared<SampleStream>(file.get(),l,path,false);file.release();sample->stream->prime(0);
         if(sample->failed())return {};
         worker().add(sample->stream);}

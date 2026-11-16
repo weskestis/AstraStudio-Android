@@ -13,7 +13,7 @@ class SelectionPreview : AutoCloseable {
     private val generation=AtomicLong()
     @Volatile private var track: AudioTrack?=null
     fun stop(){generation.incrementAndGet();runCatching{track?.pause()};runCatching{track?.flush()}}
-    fun play(file: File,first: Long,last: Long,finished: (String)->Unit){
+    fun play(file: File,first: Long,last: Long,gain: Float=.65f,finished: (String)->Unit){
         stop();val job=generation.get()
         worker.execute {
             var error=""
@@ -23,7 +23,7 @@ class SelectionPreview : AutoCloseable {
                     val output=AudioTrack.Builder().setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
                         .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_FLOAT).setSampleRate(wave.rate).setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).build())
                         .setBufferSizeInBytes(maxOf(minimum*2,8192*8)).setTransferMode(AudioTrack.MODE_STREAM).build()
-                    track=output;output.setVolume(.65f)
+                    track=output;output.setVolume(gain.coerceIn(0f,1f))
                     if(job!=generation.get())return@use
                     output.play();var position=first;var written=0L;val data=FloatArray(8192*2)
                     var lastProgress=System.nanoTime()

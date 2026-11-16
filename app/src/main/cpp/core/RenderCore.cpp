@@ -236,7 +236,7 @@ void RenderCore::noteOn(const Command& c) noexcept {
     const auto& track = tracks_[c.track];
     selected->sampled=zone!=nullptr;
     if(zone){selected->synth.silence();selected->sample.start(plan->samples[zone->asset].get(),*zone,c.note,c.value,sampleRate_,instrument->mode==2);}
-    else {selected->sample.silence();selected->synth.start(c.note, c.value, c.noteId * 2654435761U, track.renderPatch, sampleRate_, track.freePhases, bpm_);}
+    else {selected->sample.silence();selected->synth.tables(plan?plan->table(c.track,0):nullptr,plan?plan->table(c.track,1):nullptr);selected->synth.start(c.note, c.value, c.noteId * 2654435761U, track.renderPatch, sampleRate_, track.freePhases, bpm_);}
     selected->active = true;
     selected->age = voiceAge_++;
 }
@@ -272,7 +272,7 @@ void RenderCore::apply(const Command& c) noexcept {
             // Retire every raw sample pointer before its owning old plan can be reclaimed.
             for(auto& v:voices_)if(v.active){const int mode=next->instruments[v.track].mode;
                 const int oldMode=activePlan_>=0?planSlots_[activePlan_].plan->instruments[v.track].mode:0;
-                if((next->mode==1&&next->frozen[v.track].asset>=0)||mode!=oldMode||(v.sampled&&(v.sample.asset()<0||next->samples[v.sample.asset()].get()!=v.sample.source()))){v.active=false;v.sample.silence();v.synth.silence();}}
+                if((next->mode==1&&next->frozen[v.track].asset>=0)||mode!=oldMode||(!v.sampled&&!v.synth.usesTables(next->table(v.track,0),next->table(v.track,1)))||(v.sampled&&(v.sample.asset()<0||next->samples[v.sample.asset()].get()!=v.sample.source()))){v.active=false;v.sample.silence();v.synth.silence();}}
             sequence_.activate(next);tempoClock_.reset();const int old=activePlan_;activePlan_=c.note;
             if(old>=0)planSlots_[old].busy.store(false,std::memory_order_release);
             break;

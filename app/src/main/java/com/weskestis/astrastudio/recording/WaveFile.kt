@@ -12,6 +12,7 @@ class WaveFile(val file: File) : Closeable {
     private val input=RandomAccessFile(file,"r")
     val rate: Int
     val channels: Int
+    val cycle: Int
     val frames: Long
     private val format: Int
     private val bits: Int
@@ -23,22 +24,24 @@ class WaveFile(val file: File) : Closeable {
             fun word()=Integer.reverseBytes(input.readInt()).toLong() and 0xffffffffL
             fun short()=java.lang.Short.reverseBytes(input.readShort()).toInt() and 65535
             fun tag()=ByteArray(4).also(input::readFully).toString(Charsets.US_ASCII)
-            require(input.length()>=44&&tag()=="RIFF"){"Choose a PCM WAV recording."};word();require(tag()=="WAVE")
-            var f=0;var c=0;var r=0;var b=0;var align=0;var start=-1L;var size=0L;var chunks=0
-            while(input.filePointer+8<=input.length()&&++chunks<=10000){
+            require(input.length()>=44&&tag()=="RIFF"){"Choose a PCM WAV recording."};val riffEnd=word()+8;require(riffEnd in 44..input.length()){ "Truncated RIFF container." };require(tag()=="WAVE")
+            var tableCycle=0;var f=0;var c=0;var r=0;var b=0;var align=0;var start=-1L;var size=0L;var chunks=0
+            while(input.filePointer+8<=riffEnd&&++chunks<=10000){
                 val id=tag();val n=word();val p=input.filePointer
-                require(n<=input.length()-p){"Truncated WAV file."}
+                require(n<=riffEnd-p){"Truncated WAV file."}
                 if(id=="fmt "){
                     require(n>=16);f=short();c=short();r=word().toInt();word();align=short();b=short()
                     if(f==65534){require(n>=40);val extra=short();val valid=short();word();f=short()
                         val guidTail=ByteArray(14).also(input::readFully)
                         require(extra>=22&&valid==b&&guidTail.contentEquals(byteArrayOf(0,0,0,0,16,0,-128,0,0,-86,0,56,-101,113))){"Unsupported extensible WAV format."}}
+                } else if(id=="clm "&&n in 6..256){val text=ByteArray(n.toInt()).also(input::readFully).toString(Charsets.US_ASCII);tableCycle=Regex("^<!>([0-9]{1,4}) ").find(text)?.groupValues?.get(1)?.toIntOrNull()?:0
                 } else if(id=="data"&&start<0){start=p;size=n}
                 input.seek(p+n+(n and 1))
             }
             require(f==1&&b in listOf(16,24,32)||f==3&&b==32){"Use 16/24/32-bit PCM or float WAV."}
             require(c in 1..2&&r in 8000..384000&&start>=0&&size>0&&align==c*(b/8)&&size%align==0L){"Invalid WAV layout."}
             format=f;channels=c;rate=r;bits=b;offset=start;width=align;frames=size/align
+            cycle=tableCycle.takeIf{it in 32..2048&&it and (it-1)==0&&c==1&&frames%it==0L&&frames/it in 1..256}?:0
         } catch(e: Exception){input.close();throw e}
     }
     fun read(first: Long,count: Int,out: FloatArray): Int {

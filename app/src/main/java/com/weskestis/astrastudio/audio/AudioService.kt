@@ -20,6 +20,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.net.Uri
 import com.weskestis.astrastudio.project.*
+import com.weskestis.astrastudio.packs.*
 import com.weskestis.astrastudio.recording.*
 import com.weskestis.astrastudio.astra.*
 import java.io.File
@@ -41,6 +42,8 @@ import kotlinx.coroutines.flow.asStateFlow
 data class TrackControls(val gain: Float = 0.8f, val pan: Float = 0f, val mute: Boolean = false, val solo: Boolean = false, val armed: Boolean = false, val sendA: Float = 0f, val sendB: Float = 0f, val name: String = "")
 data class StudioState(
     val revision: Long = 0,
+    val packs: PackCatalog = PackCatalog(),
+    val packDetail: PackDetail? = null,
     val recovery: List<RecoveryEntry> = emptyList(),
     val autosavedAt: Long = 0,
     val performance: PerformanceSnapshot = PerformanceSnapshot(),
@@ -105,6 +108,8 @@ class AudioService : Service() {
     private var midi: MidiInputManager? = null
     private var presets = emptyList<SynthPatch>()
     private var fxPresets = emptyList<FxConfig>()
+    private lateinit var packs: SoundPacks
+    private val packInspection=java.util.concurrent.atomic.AtomicLong()
     private lateinit var files: ProjectFiles
     lateinit var recorder: MicrophoneRecorder; private set
     private val selectionPreview=SelectionPreview()
@@ -171,6 +176,7 @@ class AudioService : Service() {
     override fun onCreate() {
         super.onCreate()
         files = ProjectFiles(this)
+        packs = SoundPacks(File(filesDir,"sound-packs"))
         geminiKeys = GeminiKeyStore(this)
         thread = HandlerThread("AstraControl").also { it.start() }
         control = Handler(thread.looper)
@@ -211,7 +217,8 @@ class AudioService : Service() {
                 var restored: ProjectDocument?=null;var error: String?=null
                 try { restored=files.load(::loadAssets) } catch(e: Exception){restored=null;error=e.message;bridge.loadAssets(emptyList())}
                 val exports=runCatching{FinishedTracks(this).list()}.getOrDefault(emptyList())
-                control.post { if(!destroyed){mutableState.value=mutableState.value.copy(finishedExports=exports);if(restored!=null)adopt(restored);else adopt(fallback)
+                val catalog=runCatching{packs.repairInterruptedInstalls();packs.catalog()}.getOrDefault(PackCatalog(warning="Could not read installed sound packs."))
+                control.post { if(!destroyed){mutableState.value=mutableState.value.copy(finishedExports=exports,packs=catalog);if(restored!=null)adopt(restored);else adopt(fallback)
                     mutableState.value=mutableState.value.copy(ready=true,busy=false,work="",message=error?.let{"Could not restore project: $it"}?:files.recoveryNotice?:"Ready. Start audio, then launch a clip or build an arrangement.")
                     control.post(poll)
                 } }
@@ -508,7 +515,7 @@ class AudioService : Service() {
     private fun work(title: String,task: (ProjectDocument)->ProjectDocument?,done: String,resetHistory: Boolean=false){
         control.post {
             if(!mutableState.value.ready||mutableState.value.busy)return@post
-            finishRecording();if(title=="Freezing track")stopTransport();val snapshot=document();cancelled.set(false)
+            finishRecording();selectionPreview.stop();bridge.stopPreview();if(title=="Freezing track")stopTransport();val snapshot=document();cancelled.set(false)
             mutableState.value=mutableState.value.copy(busy=true,work=title,progress=0f)
             ContextCompat.startForegroundService(this,Intent(this,AudioService::class.java).setAction(ACTION_WORK))
             io.execute {
@@ -549,7 +556,7 @@ class AudioService : Service() {
         val (name,file)=files.importAudio(uri,cancelled)
         try{
             check(bridge.loadAssets(d.project.assets.map{it.id to files.audioFile(it)}+(id to file))){"Unsupported WAV, invalid sample data, or playback-page budget exceeded."}
-            val info=requireNotNull(bridge.assetInfo(id));val asset=AudioAsset(id,name,file.name,info[0].toInt(),info[1].toLong(),info.drop(2).map{it.toFloat()})
+            val info=requireNotNull(bridge.assetInfo(id));val asset=AudioAsset(id,name,file.name,info[0].toInt(),info[1].toLong(),info.drop(2).map{it.toFloat()},cycle=WaveFile(file).use{it.cycle})
             val length=asset.frames.toDouble()/asset.rate*d.bpm/60
             val project=d.project.copy(assets=d.project.assets+asset).put(Clip(target,name.take(64).ifBlank{"Audio"},length.coerceAtLeast(.0625),asset=id,last=asset.frames))
             d.copy(project=project).also{require(it.valid()){ "Audio exceeds the supported timeline or memory limits." }}
@@ -564,12 +571,12 @@ class AudioService : Service() {
         p.put(Clip(target,a.name.take(64),(a.frames.toDouble()/a.rate*mutableState.value.bpm/60).coerceAtLeast(.0625),asset=a.id,last=a.frames))}}
     fun hitPad(track: Int,pad: Int){if(track !in 0 until ProjectLimits.TRACKS||pad !in 0..15)return;val id=nextTouchId();noteOn(track,36+pad,id);control.postDelayed({noteOff(track,id)},120)}
     fun previewSample(id: Int){control.post{if(wantsAudio&&!mutableState.value.busy&&syncEngine())bridge.preview(id)else message("Start audio to audition samples.")}}
-    fun stopPreview(){control.post{bridge.stopPreview()}}
+    fun stopPreview(){selectionPreview.stop();control.post{bridge.stopPreview()}}
     private fun addSamples(d: ProjectDocument,items: List<Pair<String,File>>,group: String): ProjectDocument {
         require(items.isNotEmpty()&&items.size+d.project.assets.size<=64){"A project holds 64 samples."}
         val ids=(0..63).filter{d.project.asset(it)==null}.take(items.size)
         check(bridge.loadAssets(d.project.assets.map{it.id to files.audioFile(it)}+items.mapIndexed{i,p->ids[i] to p.second})){"Unsupported audio, invalid samples, or playback-page budget exceeded."}
-        val added=items.mapIndexed{i,p->val info=requireNotNull(bridge.assetInfo(ids[i]));AudioAsset(ids[i],p.first.take(128).ifBlank{"Sample"},p.second.name,info[0].toInt(),info[1].toLong(),info.drop(2).map{it.toFloat()},group=group.take(64))}
+        val added=items.mapIndexed{i,p->val info=requireNotNull(bridge.assetInfo(ids[i]));AudioAsset(ids[i],p.first.take(128).ifBlank{"Sample"},p.second.name,info[0].toInt(),info[1].toLong(),info.drop(2).map{it.toFloat()},group=group.take(64),cycle=WaveFile(p.second).use{it.cycle})}
         check(!cancelled.get()){ "Cancelled." }
         return d.copy(project=d.project.copy(assets=d.project.assets+added)).also{require(it.valid()){ "Invalid sample metadata." }}
     }
@@ -581,6 +588,59 @@ class AudioService : Service() {
             addSamples(d,created,if(pack)files.displayName(uris[0]).substringBeforeLast('.').take(64).ifBlank{"Imported pack"} else "Imports")
         }catch(e: Exception){created.forEach{it.second.delete()};throw e}
     },"Samples added. Audition, favorite, or assign them to the sampler and pads.")}
+    fun installSoundPacks(uris: List<Uri>){work("Installing sound packs",{_->
+        require(uris.size in 1..32){"Select up to 32 pack parts."}
+        try{uris.forEachIndexed{index,uri->
+            check(!cancelled.get()){"Cancelled. Completed parts remain installed."}
+            requireNotNull(contentResolver.openInputStream(uri)).use{input->packs.install(input,files.displayName(uri),cancelled){label,fraction->
+                control.post{mutableState.value=mutableState.value.copy(message="Pack ${index+1}/${uris.size} · $label",progress=(index+fraction)/uris.size)}
+            }}
+        }}finally{val catalog=packs.catalog();control.post{mutableState.value=mutableState.value.copy(packs=catalog,packDetail=null)}}
+        null
+    },"Sound packs installed. Open Samples → Sound packs to browse, preview and load editable sounds.")}
+    fun packFavorite(key: String){io.execute{try{val catalog=packs.favorite(key);control.post{mutableState.value=mutableState.value.copy(packs=catalog)}}catch(e: Exception){control.post{message(e.message?:"Could not save favorite.")}}}}
+    fun inspectPackSound(key: String){val job=packInspection.incrementAndGet();io.execute{
+        try{val catalog=packs.catalog();val sound=requireNotNull(catalog.sound(key));val file=packs.file(catalog,sound)
+            val waveform=WaveFile(file).use{it.envelope(0,it.frames,512){check(job==packInspection.get()&&!destroyed)}}.map{it.coerceIn(-8f,8f)}
+            control.post{if(job==packInspection.get()&&!destroyed)mutableState.value=mutableState.value.copy(packDetail=PackDetail(key,waveform))}
+        }catch(_: Exception){}
+    }}
+    fun previewPackSound(key: String){control.post{
+        if(mutableState.value.busy||recorder.state.value.active)return@post
+        try{val catalog=mutableState.value.packs;val sound=requireNotNull(catalog.sound(key));val file=packs.file(catalog,sound)
+            stopTransport();bridge.stopPreview()
+            selectionPreview.play(file,0,minOf(sound.frames,sound.rate*10L),minOf(.65f,.8f/maxOf(sound.peak,.001f))){error->if(error.isNotEmpty())control.post{message(error)}}
+            message("Previewing ${sound.name}. Load it to edit; original pack audio is preserved.")
+        }catch(e: Exception){message(e.message?:"Could not preview pack sound.")}
+    }}
+    // -1 sampler, 0..15 drum pad, 16 audio clip, 17/18 wavetable oscillators, 19 project browser.
+    fun usePackSound(key: String,track: Int,slot: Int,target: Int){work("Loading pack sound",{d->
+        require(track in 0 until ProjectLimits.TRACKS&&slot in 0 until ProjectLimits.CLIPS&&slot%ProjectLimits.TRACKS==track&&target in -1..19)
+        val catalog=packs.catalog();val sound=requireNotNull(catalog.sound(key)){"That sound is not installed."}
+        val source=packs.file(catalog,sound);val prefix="pack_${sound.sha256}_"
+        val existing=d.project.assets.firstOrNull{it.file.startsWith(prefix)}
+        val file=existing?.let(files::audioFile)?:File(files.audioDir,"$prefix${java.util.UUID.randomUUID().toString().replace("-","").take(16)}.wav");var created=false
+        try{
+            val next=if(existing!=null)d else {
+                require(d.project.assets.size<64){"This project has 64 audio sources. The installed pack remains available in other projects."}
+                if(!file.exists()){created=true;source.inputStream().use{input->file.outputStream().use{ProjectFiles.copy(input,it,ProjectFiles.MAX_MEDIA_BYTES,cancelled)}}}
+                addSamples(d,listOf(sound.name to file),catalog.pack(sound).name)
+            }
+            val asset=existing?:next.project.assets.last()
+            when(target){
+                16->{val destination=if(next.project.clip(slot)==null)slot else next.project.emptySlot(track)?:error("This track has no empty clip slots.")
+                    val bpm=if(sound.bpm>0)sound.bpm else next.bpm.toDouble()
+                    next.copy(project=next.project.put(Clip(destination,sound.name.take(64),(sound.seconds*bpm/60).coerceAtLeast(.0625),asset=asset.id,last=asset.frames,warp=sound.bpm>0,sourceBpm=bpm))) }
+                17,18->{require(sound.isTable&&asset.cycle==sound.cycle){"Choose a wavetable sound."};val oscillator=target-17
+                    next.copy(project=next.project.copy(tables=next.project.tables.toMutableList().also{it[track]=it[track].toMutableList().also{row->row[oscillator]=asset.id}}).instrument(track){it.copy(mode=0)},
+                        patches=next.patches.toMutableList().also{it[track]=it[track].parameter(SynthSchema.Instrument,0f)})}
+                19->next
+                else->{val root=PackPitch.root(sound.key)
+                    next.copy(project=next.project.instrument(track){i->i.edit(target){it.load(asset).copy(root=if(target<0)root else 36+target)}.copy(mode=if(target<0)1 else 2)})}
+            }.also{require(it.valid())}
+        }catch(e: Exception){if(created)file.delete();throw e}
+    },"Sound loaded on Track ${track+1}. Trim, loop, pitch, envelopes, filters and effects are editable. Pack originals are unchanged.")}
+    fun clearWavetable(track: Int,osc: Int){if(track in 0 until ProjectLimits.TRACKS&&osc in 0..1)projectEdit{p->p.copy(tables=p.tables.toMutableList().also{it[track]=it[track].toMutableList().also{row->row[osc]=-1}})}}
     fun factoryKit(track: Int){work("Creating starter kit",{d->
         require(track in 0 until ProjectLimits.TRACKS);val created=mutableListOf<Pair<String,File>>()
         try{

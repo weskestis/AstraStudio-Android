@@ -16,7 +16,7 @@ void hash(uint64_t& h,double x){h^=std::bit_cast<uint64_t>(x);h*=1099511628211UL
 }
 bool Plan::decode(std::span<const double> data,const Samples& audio){
     if(data.size()>kProjectWireLimit)return false;
-    Reader r{data};const int version=r.integer(1,6);
+    Reader r{data};const int version=r.integer(1,7);
     const int wireTracks=version<5?16:kTracks;
     const int wireClips=wireTracks*kScenes;
     auto slot=[&](){const int old=r.integer(0,wireClips-1);return old%wireTracks+(old/wireTracks)*kTracks;};
@@ -83,6 +83,8 @@ bool Plan::decode(std::span<const double> data,const Samples& audio){
             seen[track]=true;assets[f.asset]=true;samples[f.asset]->prefetch(0);
         }
     }
+    for(auto& t:tableAssets)t={-1,-1};
+    if(version>=7)for(auto& t:tableAssets)for(auto& id:t){id=r.integer(-1,kAssets-1);if(id>=0&&(!samples[id]||!samples[id]->wavetable))return false;}
     if(!r.ok||r.at!=data.size())return false;
     for(const auto& c:clips)if(c.present&&c.asset>=0)samples[c.asset]->prefetch(c.first+c.warpStart);
     for(const auto& instrument:instruments){const auto warm=[&](const sampler::Zone& z){if(z.asset>=0)samples[z.asset]->prefetch(z.reverse?z.last-1:z.first);};warm(instrument.sample);for(const auto& pad:instrument.pads)warm(pad);}

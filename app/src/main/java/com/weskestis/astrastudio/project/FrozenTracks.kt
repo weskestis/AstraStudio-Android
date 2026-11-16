@@ -31,14 +31,15 @@ object FrozenTracks {
             }
             val regions=p.regions.filter{it.slot%ProjectLimits.TRACKS==track}.sortedBy{it.beat};out.writeInt(regions.size)
             regions.forEach{out.writeInt(it.id);out.writeInt(it.slot);out.writeDouble(it.beat);out.writeDouble(it.length);out.writeDouble(it.offset);out.writeLong(it.audioOffset)}
-            val used=(clips.map{it.asset}+listOf(instrument.sample.asset)+instrument.pads.map{it.asset}).filter{it>=0}.distinct().sorted()
+            val used=(clips.map{it.asset}+listOf(instrument.sample.asset)+instrument.pads.map{it.asset}+p.tables[track]).filter{it>=0}.distinct().sorted()
+            if(p.tables[track].any{it>=0}){out.writeInt(0x57544142);p.tables[track].forEach(out::writeInt)}
             used.forEach{id->val a=requireNotNull(p.asset(id));out.writeInt(id);out.writeInt(a.rate);out.writeLong(a.frames)}
         }
         return digest.digest().joinToString(""){"%02x".format(it.toInt() and 255)}
     }
     private fun retain(d: ProjectDocument,retained: List<FrozenTrack>,releaseUnused: Boolean): ProjectDocument {
         val removed=d.project.frozen.filter{it !in retained}.map{it.asset}.toSet()
-        val used=(d.project.clips.map{it.asset}+d.project.instruments.flatMap{listOf(it.sample.asset)+it.pads.map{z->z.asset}}+retained.map{it.asset}).toSet()
+        val used=(d.project.clips.map{it.asset}+d.project.instruments.flatMap{listOf(it.sample.asset)+it.pads.map{z->z.asset}}+d.project.tables.flatten()+retained.map{it.asset}).toSet()
         val assets=if(releaseUnused)d.project.assets.filter{it.id !in removed||it.id in used}else d.project.assets
         return d.copy(project=d.project.copy(frozen=retained,assets=assets))
     }

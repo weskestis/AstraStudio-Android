@@ -7,7 +7,7 @@ import kotlin.math.*
 
 data class MidiNote(val id: Int, val beat: Double, val length: Double, val pitch: Int, val velocity: Float=.85f)
 data class AutoPoint(val beat: Double,val value: Float)
-data class AudioAsset(val id: Int,val name: String,val file: String,val rate: Int,val frames: Long,val waveform: List<Float>,val favorite: Boolean=false,val group: String="Imports")
+data class AudioAsset(val id: Int,val name: String,val file: String,val rate: Int,val frames: Long,val waveform: List<Float>,val favorite: Boolean=false,val group: String="Imports",val cycle: Int=0)
 data class Clip(val slot: Int,val name: String="MIDI clip",val length: Double=16.0,
     val notes: List<MidiNote> = emptyList(),val automation: List<List<AutoPoint>> = List(4){emptyList()},
     val asset: Int = -1,val first: Long = 0,val last: Long = 0,val root: Int = 5,val minor: Boolean = true,
@@ -47,7 +47,7 @@ data class Clip(val slot: Int,val name: String="MIDI clip",val length: Double=16
 data class Region(val id: Int,val slot: Int,val beat: Double,val length: Double,val offset: Double=0.0,val audioOffset: Long=0)
 data class Project(val name: String="Untitled",val numerator: Int=4,val denominator: Int=4,
     val mode: Int=0,val quantization: Int=0,val loop: Boolean=false,val loopStart: Double=0.0,val loopEnd: Double=16.0,
-    val clips: List<Clip> = emptyList(),val regions: List<Region> = emptyList(),val assets: List<AudioAsset> = emptyList(),val instruments: List<SampleInstrument> = List(ProjectLimits.TRACKS){SampleInstrument()},val tempoPoints: List<TempoPoint> = emptyList(),val tempoEnabled: Boolean=false,val frozen: List<FrozenTrack> = emptyList()) {
+    val clips: List<Clip> = emptyList(),val regions: List<Region> = emptyList(),val assets: List<AudioAsset> = emptyList(),val instruments: List<SampleInstrument> = List(ProjectLimits.TRACKS){SampleInstrument()},val tempoPoints: List<TempoPoint> = emptyList(),val tempoEnabled: Boolean=false,val frozen: List<FrozenTrack> = emptyList(),val tables: List<List<Int>> = List(ProjectLimits.TRACKS){listOf(-1,-1)}) {
     val barBeats get()=numerator*4.0/denominator
     val launchBeats get()=when(quantization){1->1.0;2->.5;else->barBeats}
     fun timelineSeconds(first: Double,last: Double,bpm: Float)=TempoMap.seconds(if(tempoEnabled)tempoPoints else emptyList(),first,last,bpm)
@@ -75,7 +75,7 @@ data class Project(val name: String="Untitled",val numerator: Int=4,val denomina
         val next=copy(regions=regions.filter{it.id!=id}+r.copy(length=left)+b);require(next.valid());return next
     }
     fun nativeWire(): DoubleArray {
-        val data=ArrayList<Double>();data.addAll(listOf(6.0,mode.toDouble(),numerator.toDouble(),denominator.toDouble(),if(loop)1.0 else 0.0,loopStart,loopEnd,clips.size.toDouble(),regions.size.toDouble()))
+        val data=ArrayList<Double>();data.addAll(listOf(7.0,mode.toDouble(),numerator.toDouble(),denominator.toDouble(),if(loop)1.0 else 0.0,loopStart,loopEnd,clips.size.toDouble(),regions.size.toDouble()))
         for(c in clips.sortedBy{it.slot}) {
             data.addAll(listOf(c.slot.toDouble(),c.length,c.asset.toDouble(),c.first.toDouble(),c.last.toDouble(),c.notes.size.toDouble(),c.automation.sumOf{it.size}.toDouble()))
             for(n in c.notes)data.addAll(listOf(n.beat,n.length,n.pitch.toDouble(),n.velocity.toDouble()))
@@ -86,10 +86,13 @@ data class Project(val name: String="Untitled",val numerator: Int=4,val denomina
         data.add(if(tempoEnabled)1.0 else 0.0);data.add(tempoPoints.size.toDouble());for(p in tempoPoints)data.addAll(listOf(p.beat,p.bpm.toDouble(),if(p.ramp)1.0 else 0.0))
         val audio=clips.filter{it.isAudio};data.add(audio.size.toDouble());for(c in audio)data.addAll(listOf(c.slot.toDouble(),if(c.warp)1.0 else 0.0,c.sourceBpm,c.warpStart.toDouble(),c.pitch))
         data.add(frozen.size.toDouble());for(f in frozen)data.addAll(listOf(f.track.toDouble(),f.asset.toDouble(),f.musicFrames.toDouble()))
+        for(t in tables)for(id in t)data.add(id.toDouble())
         return data.toDoubleArray()
     }
     fun valid(): Boolean {
         if(!TempoMap.valid(tempoPoints,tempoEnabled))return false;
+        if(tables.size!=ProjectLimits.TRACKS||tables.any{it.size!=2||it.any{id->id !in -1..63||(id>=0&&(asset(id)?.cycle?:0)==0)}})return false
+        if(assets.any{it.cycle!=0&&(it.cycle !in 32..2048||it.cycle and (it.cycle-1)!=0||it.frames%it.cycle!=0L||it.frames/it.cycle !in 1..256)})return false
         if(frozen.size>ProjectLimits.TRACKS||frozen.map{it.track}.toSet().size!=frozen.size||frozen.map{it.asset}.toSet().size!=frozen.size)return false
         for(f in frozen){val a=asset(f.asset)?:return false;if(f.track !in 0 until ProjectLimits.TRACKS||a.rate !in FrozenTracks.rates||f.musicFrames !in 1..a.frames||!f.fingerprint.matches(Regex("[0-9a-f]{64}")))return false}
         if(name.isBlank()||name.length>64||name.any{it.isISOControl()}||numerator !in 1..12||denominator !in listOf(2,4,8)||mode !in 0..1||quantization !in 0..2)return false

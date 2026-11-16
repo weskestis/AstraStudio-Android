@@ -20,6 +20,8 @@ app/src/main/cpp/dsp/FMOperator.h
 app/src/main/cpp/dsp/Filter.cpp
 app/src/main/cpp/dsp/Filter.h
 app/src/main/cpp/dsp/HalfBand.h
+app/src/main/cpp/dsp/ImportedWavetable.cpp
+app/src/main/cpp/dsp/ImportedWavetable.h
 app/src/main/cpp/dsp/Modulators.h
 app/src/main/cpp/dsp/ParameterIds.h
 app/src/main/cpp/dsp/SynthPatch.cpp
@@ -61,6 +63,7 @@ app/src/main/cpp/tests/CapacityTests.cpp
 app/src/main/cpp/tests/CoreTests.cpp
 app/src/main/cpp/tests/FreezeTests.cpp
 app/src/main/cpp/tests/FxTests.cpp
+app/src/main/cpp/tests/ImportedTableTests.cpp
 app/src/main/cpp/tests/MasterTests.cpp
 app/src/main/cpp/tests/ProjectTests.cpp
 app/src/main/cpp/tests/QualityTests.cpp
@@ -94,6 +97,7 @@ app/src/main/java/com/weskestis/astrastudio/fx/FxEditor.kt
 app/src/main/java/com/weskestis/astrastudio/fx/FxSchema.kt
 app/src/main/java/com/weskestis/astrastudio/midi/MidiDecoder.kt
 app/src/main/java/com/weskestis/astrastudio/midi/MidiInputManager.kt
+app/src/main/java/com/weskestis/astrastudio/packs/SoundPacks.kt
 app/src/main/java/com/weskestis/astrastudio/project/AudioStorage.kt
 app/src/main/java/com/weskestis/astrastudio/project/ExportFormats.kt
 app/src/main/java/com/weskestis/astrastudio/project/FactorySamples.kt
@@ -118,6 +122,7 @@ app/src/main/java/com/weskestis/astrastudio/synth/SynthPatch.kt
 app/src/main/java/com/weskestis/astrastudio/synth/SynthSchema.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/ClipEditor.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/ExportFormatControls.kt
+app/src/main/java/com/weskestis/astrastudio/workspace/PackBrowser.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/PanelNavigation.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/QualityPanels.kt
 app/src/main/java/com/weskestis/astrastudio/workspace/RecordingPanel.kt
@@ -134,6 +139,7 @@ app/src/main/res/xml/finished_paths.xml
 app/src/test/java/com/weskestis/astrastudio/astra/AstraTests.kt
 app/src/test/java/com/weskestis/astrastudio/fx/FxConfigTest.kt
 app/src/test/java/com/weskestis/astrastudio/midi/MidiDecoderTest.kt
+app/src/test/java/com/weskestis/astrastudio/packs/SoundPackTests.kt
 app/src/test/java/com/weskestis/astrastudio/project/CapacityTests.kt
 app/src/test/java/com/weskestis/astrastudio/project/LegacyFixture.kt
 app/src/test/java/com/weskestis/astrastudio/project/ProjectTests.kt
@@ -155,6 +161,7 @@ docs/RECORDING.md
 docs/RELIABILITY.md
 docs/ROADMAP.md
 docs/SAMPLER.md
+docs/SOUND_PACKS.md
 docs/STREAMING.md
 docs/SYNTHESIS.md
 docs/VALIDATION.md

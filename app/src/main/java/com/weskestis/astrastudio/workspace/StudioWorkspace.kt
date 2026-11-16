@@ -165,9 +165,9 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,rec
                 "record"->RecordingPanel(editorState,service,slot,recordAudio,importLab,saveLab)
                 "astra"->AstraPanel(editorState,service,slot)
                 "clip"->state.project.clip(slot)?.let{ClipEditor(it,editorState,service)}?:Text("Creating clip…")
-                "synth"->{Tools{Action("Use synth",state.project.instruments[track].mode!=0){service.instrument(track,0)};Action("Sampler / drums"){sheet="instrument"}};SynthEditor(track,state.patches[track],service,state.stats.running)}
+                "synth"->{Tools{Action("Use synth",state.project.instruments[track].mode!=0){service.instrument(track,0)};Action("Sampler / drums"){sheet="instrument"}};ImportedTables(editorState,track,service){browse()};SynthEditor(track,state.patches[track],service,state.stats.running)}
                 "instrument"->SampleInstrumentPanel(editorState,track,slot,service,start){browse(it)}
-                "samples"->SampleBrowser(editorState,track,slot,if(browserPad==-2)null else browserPad,service,start,importSamples,importPack){service.stopPreview();if(parentSheet.isNotEmpty()){sheet=parentSheet;parentSheet=""}else sheet="instrument"}
+                "samples"->SampleBrowser(editorState,track,slot,if(browserPad==-2)null else browserPad,service,start,importSamples,importPack,{service.stopPreview();sheet="synth";parentSheet=""}){service.stopPreview();if(parentSheet.isNotEmpty()){sheet=parentSheet;parentSheet=""}else sheet="instrument"}
                 "resample"->ResamplePanel(editorState,slot,service){browse()}
                 "tempo"->TempoPanel(editorState,service)
                 "warp"->WarpPanel(editorState,slot,service){sheet="resample"}

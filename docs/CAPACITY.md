@@ -26,7 +26,7 @@ A track can host the existing synth or sampler/drum instrument, audio clips, eig
 
 ## Project compatibility
 
-JSON version 7 adds freeze metadata and includes an explicit track count of 50. Versions 1–5 require their original 16-track arrays, then expand new tracks with empty/default state. Clip and region slots migrate from `scene * 16 + track` to `scene * 50 + track`; simply increasing a list size would move old clips onto incorrect tracks. Older sample instruments, tempo maps and warp state retain their existing version migrations. Native wire version 6 also accepts versions 1–5 and remaps clip, region and warp slots.
+JSON version 8 adds imported-table assignments and source cycle metadata; version 7 adds freeze metadata and includes an explicit track count of 50. Versions 1–5 require their original 16-track arrays, then expand new tracks with empty/default state. Clip and region slots migrate from `scene * 16 + track` to `scene * 50 + track`; simply increasing a list size would move old clips onto incorrect tracks. Older sample instruments, tempo maps and warp state retain their existing version migrations. Native wire version 7 also accepts versions 1–6 and remaps clip, region and warp slots.
 
 For example, old slot 127 (Scene 8, Track 16) becomes slot 365, while new slot 399 is Scene 8, Track 50. Malformed dimensions and out-of-range legacy slots are rejected. Portable archives and autosave use the same codec. New saves cannot open in the older APK; retain an original portable copy when backward compatibility is needed.
 
@@ -41,3 +41,5 @@ Physical Xperia CPU, thermal endurance, storage latency and maximum sustained ac
 Phase 12 freezes consume one of the same 64 asset slots per track. Originals and active caches count toward source storage, and unused caches release their active slots when unfrozen while files remain for Undo/recovery. See [freeze/recovery details](RELIABILITY.md).
 
 See [validation evidence](VALIDATION.md) for the tested package and CI result.
+
+Phase 13 adds a separate on-disk sound-pack library, up to 20,000 sounds. Installed packs and previews do not occupy the project's 64 source slots. Imported oscillator tables share the 128 MiB active source-memory budget with PCM/pages. See [sound packs](SOUND_PACKS.md).

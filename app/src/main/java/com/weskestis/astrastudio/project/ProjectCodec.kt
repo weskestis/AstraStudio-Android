@@ -12,7 +12,7 @@ object ProjectCodec {
     fun encode(d: ProjectDocument): String {
         require(d.valid())
         val p=d.project
-        val root=JSONObject().put("format","astra-studio").put("version",7).put("trackCount",ProjectLimits.TRACKS).put("name",p.name)
+        val root=JSONObject().put("format","astra-studio").put("version",8).put("trackCount",ProjectLimits.TRACKS).put("name",p.name)
             .put("bpm",d.bpm.toDouble()).put("master",d.master.toDouble()).put("limiterDrive",d.limiterDrive.toDouble()).put("limiterRelease",d.limiterRelease.toDouble())
             .put("signature",array(listOf(p.numerator,p.denominator))).put("mode",p.mode).put("quantization",p.quantization)
             .put("tempoEnabled",p.tempoEnabled).put("tempoPoints",array(p.tempoPoints.map{array(listOf(it.beat,it.bpm,if(it.ramp)1 else 0))}))
@@ -20,11 +20,12 @@ object ProjectCodec {
             .put("tracks",array(d.tracks.map{JSONObject().put("name",it.name).put("gain",it.gain.toDouble()).put("pan",it.pan.toDouble()).put("mute",it.mute).put("solo",it.solo).put("armed",it.armed).put("sendA",it.sendA.toDouble()).put("sendB",it.sendB.toDouble())}))
             .put("patches",array(d.patches.map{it.encode()})).put("effects",array(d.effects.map{it.encode()}))
             .put("instruments",array(p.instruments.map{array(listOf(it.mode)+it.sample.wire()+it.pads.flatMap{pad->pad.wire()})}))
-            .put("assets",array(p.assets.map{JSONObject().put("id",it.id).put("name",it.name).put("file",it.file).put("rate",it.rate).put("frames",it.frames).put("waveform",array(it.waveform)).put("favorite",it.favorite).put("group",it.group)}))
+            .put("assets",array(p.assets.map{JSONObject().put("id",it.id).put("name",it.name).put("file",it.file).put("rate",it.rate).put("frames",it.frames).put("waveform",array(it.waveform)).put("favorite",it.favorite).put("group",it.group).put("cycle",it.cycle)}))
             .put("clips",array(p.clips.map{c->JSONObject().put("slot",c.slot).put("name",c.name).put("length",c.length).put("asset",c.asset).put("first",c.first).put("last",c.last).put("root",c.root).put("minor",c.minor)
                 .put("warp",c.warp).put("sourceBpm",c.sourceBpm).put("warpStart",c.warpStart).put("pitch",c.pitch)
                 .put("notes",array(c.notes.map{array(listOf(it.id,it.beat,it.length,it.pitch,it.velocity))}))
                 .put("automation",array(c.automation.map{lane->array(lane.map{array(listOf(it.beat,it.value))})}))}))
+            .put("tables",array(p.tables.map{array(it)}))
             .put("frozen",array(p.frozen.map{array(listOf(it.track,it.asset,it.musicFrames,it.fingerprint))}))
             .put("regions",array(p.regions.map{array(listOf(it.id,it.slot,it.beat,it.length,it.offset,it.audioOffset))}))
         return root.toString().also{require(it.toByteArray(Charsets.UTF_8).size<=MAX_JSON_BYTES){"Project description is too large."}}
@@ -36,7 +37,7 @@ object ProjectCodec {
     private fun JSONArray.frame(index: Int): Long {val v=getDouble(index);require(v.isFinite()&&v==kotlin.math.floor(v)&&v in 0.0..AudioStorage.MAX_ASSET_FRAMES.toDouble());return v.toLong()}
     fun decode(text: String): ProjectDocument {
         require(text.toByteArray(Charsets.UTF_8).size<=MAX_JSON_BYTES){"Project description is too large."}
-        val r=JSONObject(text);require(r.getString("format")=="astra-studio"&&r.int("version") in 1..7){"Unsupported project format/version."}
+        val r=JSONObject(text);require(r.getString("format")=="astra-studio"&&r.int("version") in 1..8){"Unsupported project format/version."}
         val version=r.int("version")
         val storedTracks=if(version<6)16 else ProjectLimits.TRACKS
         if(version>=6)require(r.int("trackCount")==ProjectLimits.TRACKS){"Unsupported track layout."}
@@ -53,7 +54,7 @@ object ProjectCodec {
                 if(r.int("version")>=4)c.getBoolean("warp")else false,if(r.int("version")>=4)c.getDouble("sourceBpm")else 120.0,
                 if(r.int("version")>=4)c.frame("warpStart")else 0,if(r.int("version")>=4)c.getDouble("pitch")else 0.0)}}
         val regions=r.getJSONArray("regions").let{a->a.items(if(version<6)512 else ProjectLimits.REGIONS).map{i->val x=a.getJSONArray(i);require(x.length()==6);Region(x.int(0),slot(x.int(1)),x.getDouble(2),x.getDouble(3),x.getDouble(4),x.frame(5))}}
-        val assets=r.getJSONArray("assets").let{a->a.items(64).map{i->val x=a.getJSONObject(i);val w=x.getJSONArray("waveform");require(w.length()==1024);AudioAsset(x.int("id"),x.getString("name"),x.getString("file"),x.int("rate"),x.frame("frames"),(0 until 1024).map{w.getDouble(it).toFloat()},x.optBoolean("favorite",false),x.optString("group","Imports"))}}
+        val assets=r.getJSONArray("assets").let{a->a.items(64).map{i->val x=a.getJSONObject(i);val w=x.getJSONArray("waveform");require(w.length()==1024);AudioAsset(x.int("id"),x.getString("name"),x.getString("file"),x.int("rate"),x.frame("frames"),(0 until 1024).map{w.getDouble(it).toFloat()},x.optBoolean("favorite",false),x.optString("group","Imports"),if(version>=8)x.int("cycle")else 0)}}
         val tracks=r.getJSONArray("tracks").let{a->require(a.length()==storedTracks);(0 until storedTracks).map{i->val t=a.getJSONObject(i);TrackControls(t.getDouble("gain").toFloat(),t.getDouble("pan").toFloat(),t.getBoolean("mute"),t.getBoolean("solo"),t.getBoolean("armed"),t.getDouble("sendA").toFloat(),t.getDouble("sendB").toFloat(),t.getString("name"))}}
         val patches=r.getJSONArray("patches").let{a->require(a.length()==storedTracks);(0 until storedTracks).map{requireNotNull(SynthPatch.decode(a.getString(it))){"Invalid synth patch."}}}
         val effects=r.getJSONArray("effects").let{a->require(a.length()==storedTracks);(0 until storedTracks).map{requireNotNull(FxConfig.decode(a.getString(it))){"Invalid effects rack."}}}
@@ -71,7 +72,8 @@ object ProjectCodec {
         val tempo=if(r.int("version")<3)emptyList() else r.getJSONArray("tempoPoints").let{a->a.items(128).map{i->val x=a.getJSONArray(i);require(x.length()==3);val ramp=x.int(2);require(ramp in 0..1);TempoPoint(x.getDouble(0),x.getDouble(1).toFloat(),ramp==1)}}
         val tempoEnabled=r.int("version")>=3&&r.getBoolean("tempoEnabled")
         val frozen=if(version<7)emptyList() else r.getJSONArray("frozen").let{a->a.items(ProjectLimits.TRACKS).map{i->val f=a.getJSONArray(i);require(f.length()==4);FrozenTrack(f.int(0),f.int(1),f.frame(2),f.getString(3))}}
-        val document=ProjectDocument(Project(r.getString("name"),signature.int(0),signature.int(1),r.int("mode"),r.int("quantization"),r.getBoolean("loop"),r.getDouble("loopStart"),r.getDouble("loopEnd"),clips,regions,assets,expanded(instruments){SampleInstrument()},tempo,tempoEnabled,frozen),
+        val tables=if(version<8)List(ProjectLimits.TRACKS){listOf(-1,-1)}else r.getJSONArray("tables").let{a->require(a.length()==ProjectLimits.TRACKS);(0 until a.length()).map{i->val t=a.getJSONArray(i);require(t.length()==2);listOf(t.int(0),t.int(1))}}
+        val document=ProjectDocument(Project(r.getString("name"),signature.int(0),signature.int(1),r.int("mode"),r.int("quantization"),r.getBoolean("loop"),r.getDouble("loopStart"),r.getDouble("loopEnd"),clips,regions,assets,expanded(instruments){SampleInstrument()},tempo,tempoEnabled,frozen,tables),
             r.getDouble("bpm").toFloat(),r.getDouble("master").toFloat(),r.getDouble("limiterDrive").toFloat(),r.getDouble("limiterRelease").toFloat(),expanded(tracks){TrackControls()},expanded(patches){SynthPatch.initial()},expanded(effects){FxConfig.initial()}).also{require(it.valid()){ "Invalid project values or overlapping arrangement regions." }}
         return FrozenTracks.reconcile(document)
     }

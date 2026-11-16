@@ -1,4 +1,4 @@
-name: Android Phase 12 - Freeze and Recovery
+name: Android Phase 13 - Sound Packs
 on:
   push:
     branches: [main]
@@ -54,14 +54,14 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: AstraStudio-Phase12-FreezeRecovery-APK
+          name: AstraStudio-Phase13-SoundPacks-APK
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Phase12-FreezeRecovery-test-reports
+          name: Phase13-SoundPacks-test-reports
           path: |
             app/build/reports/tests/
             app/build/reports/lint-results-debug.html
@@ -104,7 +104,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Phase12-FreezeRecovery-interface-validation
+          name: Phase13-SoundPacks-interface-validation
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
