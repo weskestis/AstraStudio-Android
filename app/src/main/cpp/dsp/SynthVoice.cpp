@@ -6,6 +6,10 @@
 #include <numbers>
 
 namespace astra::synth {
+bool SynthVoice::prepare(double sampleRate) noexcept {
+    for(auto& filter:filters_)if(!filter.prepare(static_cast<float>(sampleRate*2)))return false;
+    return true;
+}
 void SynthVoice::start(int note, float velocity, uint32_t seed, const Patch& patch, double sampleRate,
                       const std::array<double, 4>& freePhases, float bpm) noexcept {
     tail_ = lastSample_; fade_ = std::abs(tail_) > 1e-6f ? 64 : 0;

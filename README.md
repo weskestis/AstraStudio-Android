@@ -1,10 +1,16 @@
-# Astra Studio — Phase 10
+# Astra Studio — 192 kHz master export
 
-Android 14+ native music workstation, built for **Sony Xperia 1 IV** first. Package `com.weskestis.astrastudio`, version **0.10.0-phase10**, green and black throughout. This is a development DAW, with implemented editing/playback features and explicit limits below; it is not yet a production-certified replacement for a desktop workstation.
+Android 14+ native music workstation, built for **Sony Xperia 1 IV** first. Package `com.weskestis.astrastudio`, version **0.10.1-master192**, green and black throughout. This is a development DAW, with implemented editing/playback features and explicit limits below; it is not yet a production-certified replacement for a desktop workstation.
 
 ## Full workstation development goal
 
 The goal is a professional Android DAW with Ableton Live-level workflow depth and sound-design capability. Phase 13 is a possible release milestone within that goal, not the finish line. The [full roadmap and capability ledger](docs/ROADMAP.md) records the remaining scope, current limitations and completion criteria. Phase 10 adds bounded project audio streaming, instrument phrase bounces and finished-track sharing. Device measurements and full-track freezing remain open; the next feature increments continue closing the capability ledger.
+
+## 192 kHz / 24-bit master
+
+Open **File → Export arrangement WAV** or **File → Share finished track**, then select **192 kHz / 24-bit master**. The preset sets both the rate and encoding. Native synths, effects, automation, tempo maps and master processing render offline at the chosen rate; source files are converted as needed and remain unchanged. PCM24 receives TPDF dither once at the final conversion.
+
+Rates: **44.1, 48, 88.2, 96, 176.4 and 192 kHz**, in stereo PCM24 or float32. Existing defaults remain 48 kHz. The 192 kHz / 24-bit file uses about **69.1 MB per minute**; render duration and memory also increase. Playback and microphone capture retain their device-rate behavior. A larger output rate does not recreate detail missing from an imported recording. [Master format, implementation and limits](MASTERING.md).
 
 ## Larger sources and sharing
 
@@ -60,7 +66,7 @@ Full workflow, command reference and limitations: [Astra Phase 5](docs/ASTRA.md)
 
 ## Install and make a track
 
-Install `AstraStudio_Phase10_0.10.0.apk` over Phase 1–9. The development signing certificate is unchanged. GitHub fallback: **Actions → Android Phase 10 → a successful run → AstraStudio-Phase10-APK**.
+Install `AstraStudio_0.10.1_192kHz.apk` over Phase 10 or an earlier Astra build. The development signing certificate is unchanged. GitHub fallback: **Actions → Android 192 kHz Master → a successful run → AstraStudio-Master192-APK**.
 
 1. **File → Load starter song** opens Green circuit: original, editable MIDI drums, bass and lead, two scenes and a 16-bar arrangement. Save your current project first.
 2. Tap **Start audio**, then **Play**. Session Play launches Scene 1; Arrangement Play begins at the white cursor. Clip/scene launch buttons follow the selected bar, quarter-note or eighth-note quantization.
@@ -69,7 +75,7 @@ Install `AstraStudio_Phase10_0.10.0.apk` over Phase 1–9. The development signi
 5. In **Arrangement**, tap the ruler to set the cursor, then **Place clip**. Drag regions, duplicate, split or edit exact lengths with **Region**. Audio splits can use individual source samples.
 6. The bottom **device chain** opens the track mixer, synth and effects. Mixer includes arm, mute, solo, pan and post-fader reverb/echo sends.
 7. **File → Import audio** accepts PCM WAV directly and other mono/stereo formats supported by Android's codecs. **Save portable project** creates a `.astra` ZIP with all used audio, notes, automation, mix, synth and effect settings. Work also autosaves privately on the phone.
-8. **Export arrangement WAV** renders 32-bit float or dithered 24-bit stereo at 44.1 or 48 kHz through the same DSP, with optional effect tails. Export ignores playback looping.
+8. **Export arrangement WAV** renders 32-bit float or dithered 24-bit stereo at 44.1–192 kHz through the same DSP, with optional effect tails. Export ignores playback looping.
 
 Detailed controls, limits and file format: [Phase 4 workflow](docs/WORKSPACE.md). Build/verification evidence: [Validation](docs/VALIDATION.md).
 

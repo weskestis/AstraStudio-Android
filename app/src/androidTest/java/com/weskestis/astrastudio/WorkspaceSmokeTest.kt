@@ -47,6 +47,53 @@ class WorkspaceSmokeTest {
         values.clear();values.put(android.provider.MediaStore.Images.Media.IS_PENDING,0);resolver.update(uri,values,null,null)
     }
     private fun click(tag: String){val node=compose.onNodeWithTag(tag);runCatching{node.performScrollTo()};node.assertIsDisplayed().performClick()}
+    @Test fun master192ControlsRenderAndShareExactPcm24(){
+        compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
+        click("File");click("New project");click("Confirm project")
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val binding=ServiceTestRule();val service=(binding.bindService(Intent(context,AudioService::class.java)) as AudioService.LocalBinder).service
+        val source=File(context.cacheDir,"Master192_55Hz.wav");val saved=File(context.cacheDir,"Master192-saved.wav");val exported=File(context.cacheDir,"Master192-export.wav")
+        val samples=FloatArray(24000){(.3*kotlin.math.sin(2*Math.PI*55*it/48000)).toFloat()}
+        FloatWaveWriter(source,48000,1).use{it.write(samples,samples.size)}
+        var completed: FinishedExport?=null
+        try{
+            service.tempo(120f);compose.waitUntil(10000){service.state.value.bpm==120f}
+            service.importAudio(Uri.fromFile(source),0)
+            compose.waitUntil(20000){service.state.value.project.clip(0)!=null&&!service.state.value.busy}
+            service.projectEdit{it.place(0,0.0)};compose.waitUntil(10000){service.state.value.project.regions.isNotEmpty()}
+            click("File");click("Export arrangement");click("Export 192 master")
+            compose.onNodeWithTag("Export rate 192000").performScrollTo().assertIsSelected()
+            compose.onNodeWithTag("Export PCM24").performScrollTo().assertIsSelected();shot("23-master192-export-phone")
+            compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
+            compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
+            compose.onNodeWithTag("Export 192 master").performScrollTo().assertIsSelected();shot("24-master192-export-landscape")
+            back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
+            click("File");click("Share finished track");click("Share 192 master")
+            compose.onNodeWithTag("Share rate 192000").performScrollTo().assertIsSelected()
+            compose.onNodeWithTag("Share PCM24").performScrollTo().assertIsSelected()
+            compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_PORTRAIT}
+            compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_PORTRAIT}
+            compose.onNodeWithTag("Share 192 master").performScrollTo().assertIsSelected()
+            val previous=service.state.value.finishedExports.map{it.path}.toSet();click("Render finished track")
+            compose.waitUntil(60000){!service.state.value.busy&&service.state.value.finishedExports.any{it.path !in previous}}
+            completed=service.state.value.finishedExports.first{it.path !in previous};val store=FinishedTracks(context);val f=store.file(completed!!.path)
+            val head=ByteBuffer.wrap(f.inputStream().use{it.readNBytes(44)}).order(ByteOrder.LITTLE_ENDIAN)
+            assertEquals(1,head.getShort(20).toInt());assertEquals(2,head.getShort(22).toInt());assertEquals(192000,head.getInt(24));assertEquals(1152000,head.getInt(28));assertEquals(6,head.getShort(32).toInt());assertEquals(24,head.getShort(34).toInt())
+            assertEquals(5184044L,f.length())
+            WaveFile(f).use{wave->assertEquals(192000,wave.rate);assertEquals(864000L,wave.frames);val data=FloatArray(96000);wave.read(19200,48000,data);assertTrue(data.any{kotlin.math.abs(it)>.01f})}
+            compose.waitUntil(10000){compose.onAllNodesWithTag("Share WAV 0").fetchSemanticsNodes().isNotEmpty()}
+            compose.onNodeWithTag("Share WAV 0").performScrollTo().assertIsDisplayed();shot("25-master192-finished")
+            val uri=store.sendIntent(f.absolutePath).getParcelableExtra(Intent.EXTRA_STREAM,Uri::class.java)!!
+            context.contentResolver.openInputStream(uri)!!.use{assertArrayEquals(f.readBytes(),it.readBytes())}
+            service.saveFinishedTrack(Uri.fromFile(saved),f.absolutePath);compose.waitUntil(10000){saved.length()==f.length()&&!service.state.value.busy};assertArrayEquals(f.readBytes(),saved.readBytes())
+            service.exportWave(Uri.fromFile(exported),192000,4f,false);compose.waitUntil(60000){exported.length()==f.length()&&!service.state.value.busy};assertArrayEquals(f.readBytes(),exported.readBytes())
+            back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
+        }finally{
+            compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED}
+            completed?.let{runCatching{FinishedTracks(context).delete(it.path)}}
+            source.delete();saved.delete();exported.delete();binding.unbindService()
+        }
+    }
     @Test fun streamedAudioBounceAndFinishedTrackSharing(){
         compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
         click("File");click("New project");click("Confirm project")

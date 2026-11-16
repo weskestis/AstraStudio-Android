@@ -28,8 +28,7 @@ import com.weskestis.astrastudio.project.FinishedTracks
     val save=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/wav")){uri->if(uri!=null&&savePath.isNotBlank())service.saveFinishedTrack(uri,savePath)}
     Text("FINISHED TRACKS",color=Green,fontSize=18.sp)
     Text("Render the complete Arrangement, including the master, effects and sends. Then share the WAV or save it to a location you choose.",fontSize=13.sp,color=Muted)
-    Tools{FilterChip(!floating,{floating=false},label={Text("24-bit WAV")},modifier=Modifier.testTag("Share PCM24"));FilterChip(floating,{floating=true},label={Text("32-bit float")})}
-    Tools{listOf(44100,48000).forEach{r->FilterChip(rate==r,{rate=r},label={Text("${r/1000f} kHz")})}}
+    ExportFormatControls(rate,floating,{rate=it},{floating=it},"Share")
     NumberField("Effect tail seconds · 0–30",tail,{tail=it})
     Action("Render finished track",!s.busy&&s.project.regions.isNotEmpty()&&tail.toFloatOrNull()?.let{it.isFinite()&&it in 0f..30f}==true){service.renderFinishedTrack(rate,tail.toFloat(),floating)}
     if(s.project.regions.isEmpty())Text("Place clips in Arrangement before rendering.",color=Green)

@@ -28,7 +28,7 @@ This is a phrase bounce. It is not persistent whole-track freeze/unfreeze, and i
 
 ## Share finished track
 
-Open **File → Share finished track** (also **Share track** in the device rack). Choose 24-bit PCM WAV or 32-bit float WAV, 44.1/48 kHz and a 0–30 second effect tail, then **Render finished track**. Sharing defaults to PCM24; the existing editing/export dialog continues to default to float32.
+Open **File → Share finished track** (also **Share track** in the device rack). Choose 24-bit PCM WAV or 32-bit float WAV, 44.1–192 kHz and a 0–30 second effect tail, then **Render finished track**. Sharing defaults to PCM24; the existing editing/export dialog continues to default to float32.
 
 After completion:
 

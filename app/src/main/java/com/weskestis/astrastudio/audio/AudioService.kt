@@ -629,6 +629,8 @@ class AudioService : Service() {
     fun newProject(){control.post{if(mutableState.value.busy)return@post;stopTransport();history.clear();bridge.loadAssets(emptyList());adopt(document().copy(project=Project(),tracks=List(16){TrackControls()}));syncEngine();message("New project. Your synth patches and effects are retained.")}}
     fun exportWave(uri: Uri,rate: Int=48000,tail: Float=4f,floating: Boolean=false){work("Rendering WAV",{d->
         require(d.project.regions.isNotEmpty()){ "Place clips in Arrangement before exporting." }
+        val bytes=ExportNames.bytes(d.project,d.bpm,rate,tail,floating)
+        require(cacheDir.usableSpace>=bytes+64L*1024*1024){"Free more storage before rendering this track."}
         val file=File(cacheDir,"export-${System.nanoTime()}.wav")
         try{val result=bridge.export(file,d,rate,tail,floating);check(result==0){when(result){2->"Could not write the WAV file.";3->"Cancelled.";else->"Could not render this arrangement."}}
             files.publishWave(file,uri,cancelled)

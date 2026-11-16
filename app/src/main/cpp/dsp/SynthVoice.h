@@ -10,6 +10,7 @@
 namespace astra::synth {
 class SynthVoice {
 public:
+    bool prepare(double sampleRate) noexcept;
     void start(int note, float velocity, uint32_t seed, const Patch& patch, double sampleRate,
                const std::array<double, 4>& freePhases, float bpm) noexcept;
     void release() noexcept;

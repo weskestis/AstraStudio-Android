@@ -12,8 +12,9 @@ data class FinishedExport(val name: String,val path: String,val bytes: Long,val 
 object ExportNames {
     fun stem(title: String)=title.replace(Regex("[^A-Za-z0-9 _-]"),"_").trim().take(64).ifBlank{"Astra track"}
     fun bytes(project: Project,bpm: Float,rate: Int,tail: Float,floating: Boolean): Long {
-        require(project.regions.isNotEmpty()&&rate in listOf(44100,48000)&&tail.isFinite()&&tail in 0f..30f)
-        val frames=ceil(project.timelineSeconds(0.0,project.endBeat,bpm)*rate).toLong()+ceil(tail*rate.toDouble()).toLong()
+        require(project.regions.isNotEmpty()&&rate in ExportFormats.sampleRates&&tail.isFinite()&&tail in 0f..30f)
+        // Match the float tail passed across JNI and the renderer's sample rounding.
+        val frames=ceil(project.timelineSeconds(0.0,project.endBeat,bpm)*rate).toLong()+ceil((tail*rate).toDouble()).toLong()
         require(frames>0&&frames<=(0xffffffffL-36)/(if(floating)8 else 6)){"This track is too long for a standard WAV file."}
         return 44+frames*(if(floating)8 else 6)
     }

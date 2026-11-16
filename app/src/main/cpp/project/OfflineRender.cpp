@@ -8,7 +8,7 @@ int renderWave(const char* path,std::span<const double> wire,const Samples& samp
  const std::array<synth::Patch,16>& patches,const std::array<fx::Config,16>& effects,
  const std::array<float,kMixValues>& mix,int rate,float tail,std::atomic<bool>& cancel,std::atomic<float>& progress,bool floating,int sourceTrack){
     if(sourceTrack< -1||sourceTrack>=16)return 1;
-    if((rate!=44100&&rate!=48000)||!std::isfinite(tail)||tail<0||tail>30||wire.size()<9)return 1;
+    if(std::find(kExportRates.begin(),kExportRates.end(),rate)==kExportRates.end()||!std::isfinite(tail)||tail<0||tail>30||wire.size()<9)return 1;
     for(float x:mix)if(!std::isfinite(x))return 1;
     if(mix[0]<30||mix[0]>300||mix[1]<0||mix[1]>1||mix[2]<0||mix[2]>24||mix[3]<20||mix[3]>500)return 1;
     Samples readable;for(std::size_t i=0;i<samples.size();++i){readable[i]=offlineSample(samples[i]);if(samples[i]&&!readable[i])return 2;}
@@ -24,7 +24,9 @@ int renderWave(const char* path,std::span<const double> wire,const Samples& samp
         constexpr CommandType types[6]={CommandType::TrackGain,CommandType::TrackPan,CommandType::TrackMute,CommandType::TrackSolo,CommandType::SendA,CommandType::SendB};
         for(int n=0;n<6;++n)if(!core->enqueue({types[n],t,0,0,mix[4+t*6+n]}))return 1;
     }
-    std::array<float,1024> block{};for(int n=0;n<20;++n)core->render(block.data(),512);
+    // Let smoothed settings settle for the same time at every render rate.
+    std::array<float,1024> block{};const int warmup=static_cast<int>(std::ceil(10240.0*rate/48000.0));
+    for(int frame=0;frame<warmup;frame+=512)core->render(block.data(),std::min(512,warmup-frame));
     WaveWriter writer(path,rate,total,floating);if(!writer.good())return 2;
     core->enqueue({CommandType::Transport,0,0,0,1});const auto latency=static_cast<uint64_t>(core->outputLatencyFrames());
     const auto streamFrames=total+latency;uint64_t done=0;

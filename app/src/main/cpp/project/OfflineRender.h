@@ -4,6 +4,7 @@
 #include "fx/FxConfig.h"
 namespace astra::project {
 constexpr int kMixValues=4+16*6;
+inline constexpr std::array<int,6> kExportRates{44100,48000,88200,96000,176400,192000};
 // Control/worker thread only. Uses the same RenderCore as Oboe and writes float32 or 24-bit
 // stereo PCM. Return 0 success, 1 invalid configuration, 2 I/O, 3 cancellation.
 int renderWave(const char* path,std::span<const double> wire,const Samples& samples,

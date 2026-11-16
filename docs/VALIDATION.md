@@ -1,3 +1,9 @@
+# 192 kHz master validation in progress
+
+Development **0.10.1-master192 / versionCode 11**. Native master-format fixtures pass; final build, Android screenshots and APK identity will be recorded after CI. [Mastering scope](../MASTERING.md).
+
+---
+
 # Phase 10 validation
 
 Development **0.10.0-phase10 / versionCode 10**, Android 14+.

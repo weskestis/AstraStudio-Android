@@ -21,6 +21,7 @@ RenderCore::RenderCore() noexcept {
 
 bool RenderCore::prepare(double sampleRate) noexcept {
     if (!std::isfinite(sampleRate) || sampleRate < 8000.0 || sampleRate > 384000.0) return false;
+    for(auto& voice:voices_)if(!voice.synth.prepare(sampleRate))return false;
     for (auto& track : tracks_) if (!track.effects.prepare(sampleRate)) return false;
     if (!limiter_.prepare(sampleRate)) return false;
     clickDelay_.reset();

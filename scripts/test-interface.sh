@@ -32,3 +32,7 @@ adb shell test -s /sdcard/Pictures/AstraStudio/20-warp-landscape.png
 
 adb shell test -s /sdcard/Pictures/AstraStudio/21-finished-track-phone.png
 adb shell test -s /sdcard/Pictures/AstraStudio/22-finished-track-landscape.png
+
+adb shell test -s /sdcard/Pictures/AstraStudio/23-master192-export-phone.png
+adb shell test -s /sdcard/Pictures/AstraStudio/24-master192-export-landscape.png
+adb shell test -s /sdcard/Pictures/AstraStudio/25-master192-finished.png

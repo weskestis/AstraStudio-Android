@@ -56,7 +56,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,rec
     var tempoDialog by remember { mutableStateOf(false) }
     var workVisible by remember { mutableStateOf(false) }
     LaunchedEffect(state.busy,state.work){workVisible=state.busy}
-    var exportDialog by remember { mutableStateOf(false) }
+    var exportDialog by rememberSaveable { mutableStateOf(false) }
     var cursor by rememberSaveable { mutableDoubleStateOf(0.0) }
     var selectedRegion by rememberSaveable { mutableIntStateOf(-1) }
     var pending by remember { mutableStateOf<Pair<String,Int>?>(null) }
@@ -241,15 +241,13 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,rec
     },confirmButton={TextButton({apply(value.toFloat())},enabled=value.toFloatOrNull()?.let{it in 30f..300f}==true){Text("Apply")}},dismissButton={TextButton(close){Text("Cancel")}})
 }
 @Composable private fun ExportDialog(p: Project,close: ()->Unit,apply: (Int,Float,Boolean)->Unit) {
-    var rate by remember { mutableIntStateOf(48000) }
-    var tail by remember { mutableStateOf("4") }
-    var floating by remember { mutableStateOf(true) }
+    var rate by rememberSaveable { mutableIntStateOf(48000) }
+    var tail by rememberSaveable { mutableStateOf("4") }
+    var floating by rememberSaveable { mutableStateOf(true) }
     AlertDialog(onDismissRequest=close,title={Text("Export arrangement")},text={
-        Column {
+        Column(Modifier.verticalScroll(rememberScrollState())) {
             Text("Stereo WAV · ${number(p.endBeat)} beats. Tempo map, master effects and sends are included; loop playback is ignored.")
-            Tools{FilterChip(floating,{floating=true},label={Text("32-bit float")},modifier=Modifier.testTag("Export float"));FilterChip(!floating,{floating=false},label={Text("24-bit PCM")})}
-            Text(if(floating)"Preserves the floating-point mix for further editing. No quantization dither." else "Dithered once for 24-bit delivery.",fontSize=12.sp)
-            Row { listOf(44100,48000).forEach { r -> FilterChip(rate==r,{rate=r},label={Text("${r/1000f} kHz")}) } }
+            ExportFormatControls(rate,floating,{rate=it},{floating=it},"Export")
             NumberField("Effect tail seconds · 0–30",tail,{tail=it})
             if(p.regions.isEmpty())Text("Place clips in Arrangement first.",color=Green)
         }
