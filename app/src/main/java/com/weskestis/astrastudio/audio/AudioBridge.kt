@@ -42,9 +42,9 @@ class AudioBridge : AutoCloseable {
     private var handle = nativeCreate().also { check(it != 0L) { "Unable to allocate audio engine" } }
     private val statsBuffer = ByteBuffer.allocateDirect(20 * Double.SIZE_BYTES).order(ByteOrder.nativeOrder())
 
-    private val fxBuffer = ByteBuffer.allocateDirect(133 * Float.SIZE_BYTES).order(ByteOrder.nativeOrder())
+    private val fxBuffer = ByteBuffer.allocateDirect(ProjectLimits.FX_VALUES * Float.SIZE_BYTES).order(ByteOrder.nativeOrder())
 
-    private val sequenceBuffer = ByteBuffer.allocateDirect(49 * Float.SIZE_BYTES).order(ByteOrder.nativeOrder())
+    private val sequenceBuffer = ByteBuffer.allocateDirect(ProjectLimits.SEQUENCE_VALUES * Float.SIZE_BYTES).order(ByteOrder.nativeOrder())
 
     @Synchronized fun start(bufferBursts: Int = 3): Int {
         require(bufferBursts in 2..8)
@@ -88,7 +88,8 @@ class AudioBridge : AutoCloseable {
     @Synchronized fun fxStats(): FxStats {
         if (handle == 0L || !nativeReadFxStats(handle, fxBuffer)) return FxStats()
         fun v(i: Int) = fxBuffer.getFloat(i * Float.SIZE_BYTES)
-        return FxStats(List(16){v(it)}, List(48){v(16+it)}, v(64), v(65).toInt(), List(64){v(66+it)}, v(130), v(131).toInt(), v(132).toLong())
+        val tail=ProjectLimits.TRACKS*4
+        return FxStats(List(ProjectLimits.TRACKS){v(it)}, List(ProjectLimits.TRACKS*3){v(ProjectLimits.TRACKS+it)}, v(tail), v(tail+1).toInt(), List(64){v(tail+2+it)}, v(tail+66), v(tail+67).toInt(), v(tail+68).toLong())
     }
 
     @Synchronized fun project(project: Project): Boolean = handle != 0L && nativeSetProject(handle, project.nativeWire())
@@ -102,7 +103,7 @@ class AudioBridge : AutoCloseable {
     @Synchronized fun sequence(): SequenceStats {
         if(handle==0L||!nativeReadSequence(handle,sequenceBuffer))return SequenceStats()
         fun v(i: Int)=sequenceBuffer.getFloat(i*4)
-        return SequenceStats(List(16){v(it).toInt()},List(16){v(16+it).toInt()},List(16){v(32+it)},v(48).toInt())
+        return SequenceStats(List(ProjectLimits.TRACKS){v(it).toInt()},List(ProjectLimits.TRACKS){v(ProjectLimits.TRACKS+it).toInt()},List(ProjectLimits.TRACKS){v(2*ProjectLimits.TRACKS+it)},v(3*ProjectLimits.TRACKS).toInt())
     }
     // These worker calls hold the Kotlin monitor only while copying the opaque
     // handle. Native code snapshots shared sample ownership before long I/O/DSP.
@@ -169,7 +170,7 @@ class AudioBridge : AutoCloseable {
 
     companion object {
         const val IMMEDIATE = -1L
-        const val TRACK_COUNT = 16
+        const val TRACK_COUNT = ProjectLimits.TRACKS
         init { System.loadLibrary("astra_audio") }
     }
 }

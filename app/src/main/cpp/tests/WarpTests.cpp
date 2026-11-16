@@ -19,7 +19,7 @@ std::vector<float> render(project::Plan& p,double bpm,double seconds,double seek
     sequencer.activate(&p);if(session)sequencer.launch(0,0,seek,0);
     std::vector<float> result(static_cast<std::size_t>(seconds*48000)*2);project::TempoClock clock;double beat=seek;
     const auto start=std::chrono::steady_clock::now();
-    inRender=true;for(std::size_t i=0;i<result.size()/2;++i){sequencer.loop(beat);std::array<fx::Stereo,16> audio{};sequencer.tick(beat,static_cast<float>(bpm),audio);result[i*2]=audio[0].l;result[i*2+1]=audio[0].r;beat=clock.tick(p.mode==1?&p.tempo:nullptr,beat,bpm,48000);}inRender=false;
+    inRender=true;for(std::size_t i=0;i<result.size()/2;++i){sequencer.loop(beat);std::array<fx::Stereo,astra::kTrackCount> audio{};sequencer.tick(beat,static_cast<float>(bpm),audio);result[i*2]=audio[0].l;result[i*2+1]=audio[0].r;beat=clock.tick(p.mode==1?&p.tempo:nullptr,beat,bpm,48000);}inRender=false;
     const double elapsed=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
     std::printf("Warp fixture %.2f s in %.3f s (host, not Xperia).\n",seconds,elapsed);return result;
 }
@@ -63,7 +63,7 @@ int main(){
     }
     {p.tempo={true,{{0,120,true},{4,90,false}}};const auto w=wire(p);check(project::decodePlan(w,p.samples)!=nullptr,"version 4 native warp decode");auto bad=w;bad[bad.size()-2]=source->frames();check(!project::decodePlan(bad,p.samples),"reject downbeat after source");bad=w;bad.back()=25;check(!project::decodePlan(bad,p.samples),"reject unsupported pitch");
         char path[]="/tmp/astra-warp-XXXXXX";const int fd=mkstemp(path);check(fd>=0,"export fixture");close(fd);
-        std::array<synth::Patch,16> patches{};std::array<fx::Config,16> effects{};std::array<float,project::kMixValues> mix{};mix[0]=145;mix[1]=.7;mix[3]=80;for(int t=0;t<16;++t)mix[4+t*6]=.8;
+        std::array<synth::Patch,astra::kTrackCount> patches{};std::array<fx::Config,astra::kTrackCount> effects{};std::array<float,project::kMixValues> mix{};mix[0]=145;mix[1]=.7;mix[3]=80;for(int t=0;t<16;++t)mix[4+t*6]=.8;
         std::atomic<bool> cancel{false};std::atomic<float> progress{};
         check(project::renderWave(path,w,p.samples,patches,effects,mix,48000,0,cancel,progress,true)==0,"warped arrangement exports");auto wav=project::readSample(path,project::kSampleBudget);check(wav&&wav->frames()==std::ceil(p.tempo.seconds(0,8,145)*48000),"export exact tempo-map duration");check(std::abs(frequency(wav->stereo,.3,2)-220)<1,"export preserves source pitch");std::remove(path);
     }

@@ -61,7 +61,7 @@ The service persists immutable patches with a versioned, validated text format a
 
 ## Fixed bounds and performance
 
-The existing 16 tracks and 128 shared voice slots remain. Each voice has fixed filter delays, operator/envelope state and FIR history; storage is allocated when constructing the stream's callback object. Note start clears preallocated filter state, which is bounded work but can be expensive for simultaneous large note bursts. Bank generation, Java arrays, persistence and patch encoding remain off the audio thread.
+Phase 11 provides 50 tracks sharing 128 voice slots. Each voice has fixed filter delays, operator/envelope state and FIR history; storage is allocated when constructing the stream's callback object. Note start clears preallocated filter state, which is bounded work but can be expensive for simultaneous large note bursts. Bank generation, Java arrays, persistence and patch encoding remain off the audio thread.
 
 Host tests establish bounds, functional behavior and zero intercepted C++ allocations in the owned renderer. They do not establish Xperia polyphony, xrun-free operation, thermal stability, UI frame rate or end-to-end latency. The render tool reports host processing ratios only. No new mastering processing is included; the existing sample clamp remains a final overload guard.
 

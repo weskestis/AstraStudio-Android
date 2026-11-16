@@ -198,7 +198,7 @@ object FxSchema {
         FxParamInfo("Post gain dB", -24.0f, 12.0f, -3.0f, false, false),
         FxParamInfo("Saturator wet", 0.0f, 1.0f, 1.0f, false, false),
         FxParamInfo("Compressor enabled", 0.0f, 1.0f, 0.0f, true, false),
-        FxParamInfo("Detector track (-1 self)", -1.0f, 15.0f, -1.0f, true, false),
+        FxParamInfo("Detector track (-1 self)", -1.0f, 49.0f, -1.0f, true, false),
         FxParamInfo("Threshold dB", -60.0f, 0.0f, -28.0f, false, false),
         FxParamInfo("Ratio", 1.0f, 20.0f, 6.0f, false, false),
         FxParamInfo("Attack ms", 0.1f, 100.0f, 1.0f, false, true),

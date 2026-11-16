@@ -2,6 +2,7 @@ package com.weskestis.astrastudio.workspace
 
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.activity.compose.BackHandler
@@ -41,6 +42,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,rec
     importAudio: (Int)->Unit,openProject: ()->Unit,saveProject: (String)->Unit,exportWave: (String,Int,Float,Boolean)->Unit) {
     var view by rememberSaveable { mutableIntStateOf(0) }
     var slot by rememberSaveable { mutableIntStateOf(0) }
+    var trackPicker by rememberSaveable { mutableStateOf(false) }
     var fxUnit by rememberSaveable { mutableIntStateOf(0) }
     var sheet by rememberSaveable { mutableStateOf("") }
     var parentSheet by rememberSaveable { mutableStateOf("") }
@@ -61,7 +63,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,rec
     var selectedRegion by rememberSaveable { mutableIntStateOf(-1) }
     var pending by remember { mutableStateOf<Pair<String,Int>?>(null) }
     val compact=androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp<520
-    val track=slot%16
+    val track=slot%ProjectLimits.TRACKS
     val editorCandidate=state.editorSnapshot();val editorState=remember(editorCandidate){editorCandidate}
     val sequencePhase=rememberUpdatedState(state.sequence.phase)
     val sessionCandidate=state.sessionSnapshot();val sessionState=remember(sessionCandidate){sessionCandidate}
@@ -112,6 +114,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,rec
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal=8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)){
             FilterChip(view==0,{view=0},label={Text("Session")},modifier=Modifier.testTag("Session"))
             FilterChip(view==1,{view=1},label={Text("Arrangement")},modifier=Modifier.testTag("Arrangement"))
+            Action("Track ${track+1} / ${ProjectLimits.TRACKS}",state.ready,"Choose track"){trackPicker=true}
             if(compact){
                 Action(if(state.stats.running)"Audio on" else "Start audio",state.ready,"Audio"){if(state.stats.running)service.stopFromUi()else start()}
                 Action("▶ Play",state.ready,"Play"){audioAction("play")};Action("■ Stop",state.stats.running){pending=null;service.stopTransportFromUi()}
@@ -134,8 +137,8 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,rec
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if(!state.ready)Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center){CircularProgressIndicator()}
-            else if(view==0)SessionView(sessionState,slot,select={slot=it},edit={slot=it;sheet="clip"},create={service.newClip(it);slot=it;sheet="clip"},launch={audioAction("launch",it)},scene={audioAction("scene",it)},stop=service::stopTrack,mixer={slot=slot/16*16+it;sheet="mixer"},phase={sequencePhase.value[it]})
-            else ArrangementView(state,slot,selectedRegion,cursor,select={selectedRegion=it.id;slot=it.slot},cursorChange={cursor=it},service=service,edit={sheet="clip"},trackSelect={slot=slot/16*16+it})
+            else if(view==0)SessionView(sessionState,slot,select={slot=it},edit={slot=it;sheet="clip"},create={service.newClip(it);slot=it;sheet="clip"},launch={audioAction("launch",it)},scene={audioAction("scene",it)},stop=service::stopTrack,mixer={slot=slot/ProjectLimits.TRACKS*ProjectLimits.TRACKS+it;sheet="mixer"},phase={sequencePhase.value[it]})
+            else ArrangementView(state,slot,selectedRegion,cursor,select={selectedRegion=it.id;slot=it.slot},cursorChange={cursor=it},service=service,edit={sheet="clip"},trackSelect={slot=slot/ProjectLimits.TRACKS*ProjectLimits.TRACKS+it})
         }
         if(!compact)Tools {
             Text("T${track+1} · ${state.project.clip(slot)?.name?:"Empty slot"}",fontSize=11.sp,color=Green,maxLines=1)
@@ -175,6 +178,16 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,rec
         }
     }
     }}}}
+    if(trackPicker)AlertDialog(onDismissRequest={trackPicker=false},title={Text("Choose track · ${ProjectLimits.TRACKS} tracks")},
+        text={val list=rememberLazyListState(initialFirstVisibleItemIndex=track)
+            LazyColumn(Modifier.fillMaxWidth().heightIn(max=420.dp).testTag("Track picker"),state=list){
+                items(ProjectLimits.TRACKS,key={it}){t->
+                    TextButton({slot=slot/ProjectLimits.TRACKS*ProjectLimits.TRACKS+t;trackPicker=false},Modifier.fillMaxWidth().heightIn(min=48.dp).testTag("Select track ${t+1}")){
+                        Text("${t+1} · ${trackName(state,t)}",Modifier.weight(1f),color=if(t==track)Green else Color.White)
+                        if(t==track)Text("Selected",color=Green,fontSize=11.sp)
+                    }
+                }
+            }},confirmButton={TextButton({trackPicker=false}){Text("Close")}})
     if(confirm.isNotEmpty())AlertDialog(onDismissRequest={confirm=""},title={Text(when(confirm){"delete"->"Delete this clip?";"starter"->"Load the starter song?";else->"Start a new project?"})},text={Text(if(confirm=="delete")"Its arrangement regions will also be removed. Undo restores them." else "This replaces the current composition. Save a portable project from File first if you want to keep it.")},confirmButton={TextButton({when(confirm){"delete"->service.projectEdit{it.remove(slot)};"starter"->{service.starter();slot=0;selectedRegion=-1;cursor=0.0};else->{service.newProject();slot=0;selectedRegion=-1;cursor=0.0}};confirm=""},Modifier.testTag("Confirm project")){Text("Continue")}},dismissButton={TextButton({confirm=""}){Text("Cancel")}})
     if(tempoDialog)TempoDialog(state.bpm,{tempoDialog=false}){service.tempo(it);tempoDialog=false}
     if(exportDialog)ExportDialog(state.project,{exportDialog=false}){rate,tail,floating->exportDialog=false;exportWave(state.project.name,rate,tail,floating)}
@@ -191,7 +204,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,rec
             s.effects[t].order.forEach{unit->val on=s.effects[t][FxConfig.enabled[unit]]>.5f
                 FilterChip(on,{open("effects:$unit")},label={Text(listOf("EQ 8","Multiband","Shaper","Sidechain","Echo","Reverb","Chorus","Phaser")[unit],fontSize=11.sp)})}
             Action("Share track"){open("share")}
-            Action("Master"){service.meterTrack(16);open("master")}
+            Action("Master"){service.meterTrack(ProjectLimits.TRACKS);open("master")}
         }
     }
 }
@@ -205,7 +218,7 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,rec
     ValueSlider("Pan",v.pan,-1f..1f,change={service.track(t,v.copy(pan=it))})
     ValueSlider("Send A · Reverb",v.sendA,0f..1f,change={service.track(t,v.copy(sendA=it))})
     ValueSlider("Send B · Ping-pong echo",v.sendB,0f..1f,change={service.track(t,v.copy(sendB=it))})
-    Text("Sends follow track volume, mute and solo. MIDI channel ${t+1} plays this track.",color=Muted,fontSize=12.sp)
+    Text("Sends follow track volume, mute and solo. "+if(t<16)"MIDI channel ${t+1} plays this track." else "Play this track with Keys, clips or Astra. USB MIDI channels address tracks 1–16.",color=Muted,fontSize=12.sp)
 }
 @Composable private fun MasterPanel(s: StudioState,service: AudioService){
     ValueSlider("Master volume",s.master,0f..1f,change=service::master)
@@ -253,4 +266,4 @@ fun StudioWorkspace(state: StudioState,service: AudioService,start: ()->Unit,rec
         }
     },confirmButton={TextButton({apply(rate,tail.toFloat(),floating)},enabled=p.regions.isNotEmpty()&&tail.toFloatOrNull()?.let{it in 0f..30f}==true){Text("Export")}},dismissButton={TextButton(close){Text("Cancel")}})
 }
-@Composable private fun HelpPanel(){Text("1. Start audio. Use File → Load starter song to explore a working session, or tap an empty Session slot to write a MIDI clip.\n\n2. Tap ▶ on clips or scenes to launch at the chosen quantization. Tap a clip body to select it; Edit clip opens its piano roll, velocity and automation lanes.\n\n3. Open Keys to play. Record MIDI writes the keyboard or USB controller into the selected clip after its launch boundary. Overdub adds notes; turn it off to replace the take.\n\n4. Select a clip, switch to Arrangement, tap the ruler for a cursor, then Place clip. Drag regions horizontally to move them. Split and duplicate build the song. Open Region for exact beat lengths or sample positions.\n\n5. The bottom rack opens synths and effects for the selected track. Mixer has volume, pan, arm, mute, solo and two effect sends.\n\n6. File → Import audio accepts WAV and formats supported by Android. Audio clips keep their original pitch and speed. Sampler / drums in the device chain plays samples with pitch, reverse, loops and envelopes. You can trim and split at source-sample boundaries.\n\n7. Work autosaves locally. Save portable project carries all audio, notes, automation and sound settings to a .astra file. Export arrangement creates a 32-bit float or 24-bit WAV.\n\nLimits: 16 tracks, 8 scenes, 256 notes per clip, 512 arrangement regions, 64 audio assets, 2 GiB per imported file and 8 GiB of stereo-float-equivalent source frames. Larger sources stream through bounded audio pages. Record audio opens microphone capture and Sample Lab for zoom, pitch analysis and extraction. Open Samples to import multiple files or a ZIP pack, audition, favorite and assign sounds. Resample creates a processed clip or arrangement bounce in the browser. Back returns from details to the parent panel, closes a panel, and returns Arrangement to Session before leaving the app. Tap Astra beside File for commands and Gemini. Tempo map adds BPM steps and ramps in Arrangement. Stretch renders a new audio clip with independent pitch and duration; it keeps the original. Warp saves source tempo, downbeat and pitch settings, and follows Session BPM or Arrangement tempo maps during playback and export.",fontSize=14.sp,lineHeight=21.sp)}
+@Composable private fun HelpPanel(){Text("1. Use Track / 50 to jump to any track in Session or Arrangement. Start audio. Use File → Load starter song to explore a working session, or tap an empty Session slot to write a MIDI clip.\n\n2. Tap ▶ on clips or scenes to launch at the chosen quantization. Tap a clip body to select it; Edit clip opens its piano roll, velocity and automation lanes.\n\n3. Open Keys to play. Record MIDI writes the keyboard or USB controller into the selected clip after its launch boundary. Overdub adds notes; turn it off to replace the take.\n\n4. Select a clip, switch to Arrangement, tap the ruler for a cursor, then Place clip. Drag regions horizontally to move them. Split and duplicate build the song. Open Region for exact beat lengths or sample positions.\n\n5. The bottom rack opens synths and effects for the selected track. Mixer has volume, pan, arm, mute, solo and two effect sends.\n\n6. File → Import audio accepts WAV and formats supported by Android. Audio clips keep their original pitch and speed. Sampler / drums in the device chain plays samples with pitch, reverse, loops and envelopes. You can trim and split at source-sample boundaries.\n\n7. Work autosaves locally. Save portable project carries all audio, notes, automation and sound settings to a .astra file. Export arrangement creates a 32-bit float or 24-bit WAV.\n\nLimits: 50 tracks, 8 scenes (400 clip slots), 256 notes per clip, 2048 arrangement regions, 64 audio assets, 2 GiB per imported file and 8 GiB of stereo-float-equivalent source frames. Larger sources stream through bounded audio pages. Record audio opens microphone capture and Sample Lab for zoom, pitch analysis and extraction. Open Samples to import multiple files or a ZIP pack, audition, favorite and assign sounds. Resample creates a processed clip or arrangement bounce in the browser. Back returns from details to the parent panel, closes a panel, and returns Arrangement to Session before leaving the app. Tap Astra beside File for commands and Gemini. Tempo map adds BPM steps and ramps in Arrangement. Stretch renders a new audio clip with independent pitch and duration; it keeps the original. Warp saves source tempo, downbeat and pitch settings, and follows Session BPM or Arrangement tempo maps during playback and export.",fontSize=14.sp,lineHeight=21.sp)}

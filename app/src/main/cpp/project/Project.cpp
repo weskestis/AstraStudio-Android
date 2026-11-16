@@ -15,14 +15,17 @@ struct Reader {
 void hash(uint64_t& h,double x){h^=std::bit_cast<uint64_t>(x);h*=1099511628211ULL;}
 }
 bool Plan::decode(std::span<const double> data,const Samples& audio){
-    if(data.size()>400000)return false;
-    Reader r{data};const int version=r.integer(1,4);
+    if(data.size()>kProjectWireLimit)return false;
+    Reader r{data};const int version=r.integer(1,5);
+    const int wireTracks=version<5?16:kTracks;
+    const int wireClips=wireTracks*kScenes;
+    auto slot=[&](){const int old=r.integer(0,wireClips-1);return old%wireTracks+(old/wireTracks)*kTracks;};
     mode=r.integer(0,1);numerator=r.integer(1,12);denominator=r.integer(2,8);if(denominator!=2&&denominator!=4&&denominator!=8)return false;
     loop=r.integer(0,1)!=0;loopStart=r.get(0,65535);loopEnd=r.get(.0625,65536);if(loopEnd<=loopStart)return false;
-    const int clipCount=r.integer(0,kClips),regionCount=r.integer(0,kMaxRegions);samples=audio;
+    const int clipCount=r.integer(0,wireClips),regionCount=r.integer(0,version<5?512:kMaxRegions);samples=audio;
     for(auto& c:clips)c=Clip{};
     for(auto& list:regions)list.clear();
-    for(int n=0;n<clipCount&&r.ok;++n){const int slot=r.integer(0,kClips-1);auto& c=clips[slot];if(c.present)return false;c.present=true;
+    for(int n=0;n<clipCount&&r.ok;++n){const int index=slot();auto& c=clips[index];if(c.present)return false;c.present=true;
         c.length=r.get(.0625,65536);c.asset=r.integer(-1,kAssets-1);c.first=r.frame();c.last=r.frame();const int notes=r.integer(0,kMaxNotes),points=r.integer(0,kMaxPoints*4);
         if(c.asset>=0&&(!samples[c.asset]||c.last<=c.first||c.last>samples[c.asset]->frames()||notes))return false;
         c.hash=1469598103934665603ULL;hash(c.hash,c.length);hash(c.hash,c.asset);hash(c.hash,static_cast<double>(c.first));hash(c.hash,static_cast<double>(c.last));
@@ -39,12 +42,12 @@ bool Plan::decode(std::span<const double> data,const Samples& audio){
         }
     }
     std::array<int,kMaxRegions> ids{};
-    for(int i=0;i<regionCount&&r.ok;++i){Region x;x.id=r.integer(1,1000000000);x.slot=r.integer(0,kClips-1);x.start=r.get(0,65536);x.length=r.get(1.0/960,65536);x.offset=r.get(0,65536);x.audioOffset=r.frame();
+    for(int i=0;i<regionCount&&r.ok;++i){Region x;x.id=r.integer(1,1000000000);x.slot=slot();x.start=r.get(0,65536);x.length=r.get(1.0/960,65536);x.offset=r.get(0,65536);x.audioOffset=r.frame();
         if(!clips[x.slot].present||x.start+x.length>65536)return false;
         for(int j=0;j<i;++j)if(ids[j]==x.id)return false;
         ids[i]=x.id;
         const auto& c=clips[x.slot];if(c.asset>=0&&x.audioOffset>=c.last-c.first)return false;
-        regions[x.slot%16].push_back(x);
+        regions[x.slot%kTracks].push_back(x);
     }
     for(auto& list:regions){std::sort(list.begin(),list.end(),[](const Region& a,const Region& b){return a.start<b.start;});double end=0;
         for(const auto& x:list){if(x.start<end-1e-8)return false;end=x.start+x.length;}}
@@ -58,16 +61,16 @@ bool Plan::decode(std::span<const double> data,const Samples& audio){
             if(z.asset<0)return z.first==0&&z.last==0&&z.loopFirst==0&&z.loopLast==0&&!z.loop;
             return samples[z.asset]&&z.last>z.first&&z.last<=samples[z.asset]->frames()&&z.loopFirst>=z.first&&z.loopLast<=z.last&&z.loopLast>z.loopFirst&&!(z.loop&&z.oneShot);
         };
-        for(auto& instrument:instruments){instrument.mode=r.integer(0,2);if(!zone(instrument.sample))return false;for(auto& pad:instrument.pads)if(!zone(pad))return false;}
+        for(int t=0;t<wireTracks;++t){auto& instrument=instruments[t];instrument.mode=r.integer(0,2);if(!zone(instrument.sample))return false;for(auto& pad:instrument.pads)if(!zone(pad))return false;}
     }
     if(version>=3){tempo.enabled=r.integer(0,1)!=0;const int count=r.integer(0,128);tempo.points.reserve(count);
         for(int i=0;i<count;++i)tempo.points.push_back({r.get(0,65536),r.get(30,300),r.integer(0,1)!=0});
         if(!tempo.valid())return false;
     }
-    if(version>=4){const int count=r.integer(0,kClips);std::array<bool,kClips> seen{};
-        for(int i=0;i<count&&r.ok;++i){const int slot=r.integer(0,kClips-1);auto& c=clips[slot];
-            if(seen[slot]||!c.present||c.asset<0)return false;
-            seen[slot]=true;
+    if(version>=4){const int count=r.integer(0,wireClips);std::array<bool,kClips> seen{};
+        for(int i=0;i<count&&r.ok;++i){const int index=slot();auto& c=clips[index];
+            if(seen[index]||!c.present||c.asset<0)return false;
+            seen[index]=true;
             c.warp=r.integer(0,1);c.sourceBpm=r.get(30,300);c.warpStart=r.frame();c.pitch=r.get(-24,24);
             if(c.warpStart>=c.last-c.first)return false;
             hash(c.hash,c.warp);hash(c.hash,c.sourceBpm);hash(c.hash,double(c.warpStart));hash(c.hash,c.pitch);
@@ -91,22 +94,22 @@ bool Sequencer::prepare(double rate,const sampler::Kernel* kernel)noexcept{
 void Sequencer::release(int track)noexcept{auto& t=tracks_[track];if(note_)for(auto& id:t.held)if(id){note_(owner_,track,0,0,id,false);id=0;}t.slot=t.region=-1;t.previous=-1;t.cursor=0;}
 void Sequencer::clearAutomation(int track)noexcept{auto& t=tracks_[track];for(int lane=0;lane<4;++lane)if(t.automated[lane]){t.automated[lane]=false;if(automation_)automation_(owner_,track,lane,0,false);}}
 void Sequencer::activate(const Plan* next)noexcept{
-    for(int i=0;i<16;++i){auto& t=tracks_[i];if(!next||!plan_||next->mode!=plan_->mode||(next->mode==1&&next->regions[i]!=plan_->regions[i])||
+    for(int i=0;i<kTracks;++i){auto& t=tracks_[i];if(!next||!plan_||next->mode!=plan_->mode||(next->mode==1&&next->regions[i]!=plan_->regions[i])||
         (t.slot>=0&&(!next->clips[t.slot].present||next->clips[t.slot].hash!=t.hash||
             (plan_->clips[t.slot].asset>=0&&next->samples[plan_->clips[t.slot].asset]!=plan_->samples[plan_->clips[t.slot].asset])||
             (plan_->clips[t.slot].warp&&(next->tempo.enabled!=plan_->tempo.enabled||next->tempo.points!=plan_->tempo.points))))){release(i);clearAutomation(i);}}
     plan_=next;automationClock_=0;
 }
-void Sequencer::stop(bool clear)noexcept{for(int i=0;i<16;++i){release(i);clearAutomation(i);tracks_[i].phase=0;if(clear){tracks_[i].scene=-1;tracks_[i].queued=-2;}}
+void Sequencer::stop(bool clear)noexcept{for(int i=0;i<kTracks;++i){release(i);clearAutomation(i);tracks_[i].phase=0;if(clear){tracks_[i].scene=-1;tracks_[i].queued=-2;}}
     previousBeat_=-1;automationClock_=0;
 }
 void Sequencer::launch(int track,int sceneIndex,double beat,double quantum)noexcept{
-    if(track<0||track>=16||sceneIndex< -1||sceneIndex>=8)return;
-    if(plan_&&sceneIndex>=0){const auto& c=plan_->clips[sceneIndex*16+track];if(c.present&&c.asset>=0)plan_->samples[c.asset]->prefetch(c.first+c.warpStart);}
+    if(track<0||track>=kTracks||sceneIndex< -1||sceneIndex>=kScenes)return;
+    if(plan_&&sceneIndex>=0){const auto& c=plan_->clips[sceneIndex*kTracks+track];if(c.present&&c.asset>=0)plan_->samples[c.asset]->prefetch(c.first+c.warpStart);}
     auto& t=tracks_[track];t.queued=sceneIndex;
     t.due=quantum>0?std::ceil((beat-1e-9)/quantum)*quantum:beat;t.due=std::max(beat,t.due);
 }
-void Sequencer::scene(int s,double beat,double q)noexcept{for(int t=0;t<16;++t)launch(t,s,beat,q);}
+void Sequencer::scene(int s,double beat,double q)noexcept{for(int t=0;t<kTracks;++t)launch(t,s,beat,q);}
 void Sequencer::event(int track,const Clip& c,const Event& e)noexcept{
     auto& t=tracks_[track];auto& id=t.held[e.note];if(e.on){if(id&&note_)note_(owner_,track,0,0,id,false);id=nextId();const auto& n=c.notes[e.note];if(note_)note_(owner_,track,n.pitch,n.velocity,id,true);}
     else if(id){if(note_)note_(owner_,track,0,0,id,false);id=0;}
@@ -120,13 +123,13 @@ void Sequencer::enter(int track,int slot,int region,double phase,double audioOff
     }
 }
 bool Sequencer::loop(double& beat)const noexcept{if(plan_&&plan_->mode==1&&plan_->loop&&beat>=plan_->loopEnd){beat=plan_->loopStart+std::fmod(beat-plan_->loopEnd,plan_->loopEnd-plan_->loopStart);return true;}return false;}
-void Sequencer::tick(double beat,float bpm,std::array<fx::Stereo,16>& audio)noexcept{
+void Sequencer::tick(double beat,float bpm,std::array<fx::Stereo,kTracks>& audio)noexcept{
     if(!plan_)return;
-    if(previousBeat_>=0&&beat<previousBeat_)for(int i=0;i<16;++i)release(i);
+    if(previousBeat_>=0&&beat<previousBeat_)for(int i=0;i<kTracks;++i)release(i);
     previousBeat_=beat;
-    for(int i=0;i<16;++i){auto& t=tracks_[i];int slot=-1,region=-1;double phase=0,audioOffset=0,elapsed=-1;
+    for(int i=0;i<kTracks;++i){auto& t=tracks_[i];int slot=-1,region=-1;double phase=0,audioOffset=0,elapsed=-1;
         if(plan_->mode==0){if(t.queued!=-2&&beat+1e-10>=t.due){release(i);t.scene=t.queued;t.queued=-2;t.launchBeat=t.due;}
-            if(t.scene>=0){slot=t.scene*16+i;if(!plan_->clips[slot].present){slot=-1;t.scene=-1;}else phase=std::fmod(std::max(0.0,beat-t.launchBeat),plan_->clips[slot].length);}}
+            if(t.scene>=0){slot=t.scene*kTracks+i;if(!plan_->clips[slot].present){slot=-1;t.scene=-1;}else phase=std::fmod(std::max(0.0,beat-t.launchBeat),plan_->clips[slot].length);}}
         else{const auto& list=plan_->regions[i];auto at=std::upper_bound(list.begin(),list.end(),beat+1e-10,[](double b,const Region& r){return b<r.start;});
             if(at!=list.begin()){--at;if(beat<at->start+at->length-1e-10){slot=at->slot;region=at->id;const auto& c=plan_->clips[slot];
                 phase=std::fmod(std::max(0.0,beat-at->start+at->offset),c.length);audioOffset=static_cast<double>(at->audioOffset);
@@ -151,5 +154,5 @@ void Sequencer::tick(double beat,float bpm,std::array<fx::Stereo,16>& audio)noex
         t.previous=phase;t.previousAbsolute=beat;t.lastAudioOffset=audioOffset;t.phase=static_cast<float>(phase/c.length);
     }automationClock_=(automationClock_+1)&31;
 }
-Snapshot Sequencer::snapshot()const noexcept{Snapshot s;s.mode=plan_?plan_->mode:0;for(int i=0;i<16;++i){s.active[i]=tracks_[i].slot;s.queued[i]=tracks_[i].queued;s.phase[i]=tracks_[i].phase;}return s;}
+Snapshot Sequencer::snapshot()const noexcept{Snapshot s;s.mode=plan_?plan_->mode:0;for(int i=0;i<kTracks;++i){s.active[i]=tracks_[i].slot;s.queued[i]=tracks_[i].queued;s.phase[i]=tracks_[i].phase;}return s;}
 } // namespace astra::project

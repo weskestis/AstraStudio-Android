@@ -1,5 +1,7 @@
 package com.weskestis.astrastudio.astra
 
+import com.weskestis.astrastudio.project.ProjectLimits
+
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -51,7 +53,7 @@ fun AstraPanel(state: StudioState, service: AudioService, selected: Int) {
     }
     fun link(url: String){runCatching{context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url)))}.onFailure{service.astraNotice("Could not open a browser on this device.")}}
     Text("ASTRA / MAKE THE NEXT MOVE",color=Green,fontWeight=FontWeight.Bold,fontSize=17.sp)
-    Text("Track ${selected%16+1} · scene ${selected/16+1}. Preview edits, apply once, undo the whole proposal.",fontSize=12.sp,color=Muted,modifier=Modifier.padding(vertical=6.dp))
+    Text("Track ${selected%ProjectLimits.TRACKS+1} · scene ${selected/ProjectLimits.TRACKS+1}. Preview edits, apply once, undo the whole proposal.",fontSize=12.sp,color=Muted,modifier=Modifier.padding(vertical=6.dp))
     Tools{
         Action("Gemini settings",!a.working,"Astra settings"){settings=!settings;showJson=false;history=false;key=""}
         Action("Command JSON",!a.working,"Astra JSON"){showJson=!showJson;settings=false;history=false}

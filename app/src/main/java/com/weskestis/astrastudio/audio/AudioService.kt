@@ -66,7 +66,7 @@ data class StudioState(
     val fxStats: FxStats = FxStats(),
     val limiterDrive: Float = 0f,
     val limiterRelease: Float = 80f,
-    val meterTrack: Int = 16,
+    val meterTrack: Int = ProjectLimits.TRACKS,
     val patches: List<SynthPatch> = List(AudioBridge.TRACK_COUNT) { SynthPatch.initial() },
 )
 
@@ -284,7 +284,7 @@ class AudioService : Service() {
         if(previous?.master!=next.master)accepted(bridge.masterGain(next.master))
         if(previous?.limiterDrive!=next.limiterDrive)accepted(bridge.limiterDrive(next.limiterDrive))
         if(previous?.limiterRelease!=next.limiterRelease)accepted(bridge.limiterRelease(next.limiterRelease))
-        for(t in 0..15){
+        for(t in 0 until ProjectLimits.TRACKS){
             if(previous?.patches?.get(t)!=next.patches[t])accepted(bridge.patch(t,next.patches[t]))
             if(previous?.effects?.get(t)!=next.effects[t])accepted(bridge.effects(t,next.effects[t]))
             if(previous?.tracks?.get(t)!=next.tracks[t]){val v=next.tracks[t]
@@ -351,7 +351,7 @@ class AudioService : Service() {
         if(wantsAudio&&bridge.noteOn(track,note,velocity,id)){heldTouch[(track.toLong() shl 32)+id]=track to id;recordEvent(track,note,velocity,id,true)}
     } }
     fun noteOff(track: Int,id: Int) { control.post {heldTouch.remove((track.toLong() shl 32)+id);recordEvent(track,0,0f,id,false);bridge.noteOff(track,id)} }
-    fun releaseTouchNotes() { control.post { heldTouch.values.toList().forEach{(track,id)->recordEvent(track,0,0f,id,false);bridge.noteOff(track,id)};heldTouch.clear();bridge.stopPreview();for(t in 0..15)bridge.noteOff(t,20000+t) } }
+    fun releaseTouchNotes() { control.post { heldTouch.values.toList().forEach{(track,id)->recordEvent(track,0,0f,id,false);bridge.noteOff(track,id)};heldTouch.clear();bridge.stopPreview();for(t in 0 until ProjectLimits.TRACKS)bridge.noteOff(t,20000+t) } }
     fun transport() { control.post { if(playingIntent)stopTransport()else playNow(mutableState.value.project.mode,0.0) } }
     private fun stopTransport(){finishRecording();bridge.transport(false);playingIntent=false;pendingLaunch=null}
     fun stopTransportFromUi(){control.post{stopTransport()}}
@@ -362,7 +362,7 @@ class AudioService : Service() {
         bridge.transport(true);playingIntent=true
         if(mode==1)bridge.seek(beat)else bridge.scene(0,0f)
     }
-    fun launch(slot: Int){control.post{if(!wantsAudio||mutableState.value.busy)return@post;finishRecording();commit{it.copy(project=it.project.copy(mode=0))};pendingLaunch=Triple(slot%16,slot/16,false)}}
+    fun launch(slot: Int){control.post{if(!wantsAudio||mutableState.value.busy)return@post;finishRecording();commit{it.copy(project=it.project.copy(mode=0))};pendingLaunch=Triple(slot%ProjectLimits.TRACKS,slot/ProjectLimits.TRACKS,false)}}
     fun launchScene(scene: Int){control.post{if(!wantsAudio||mutableState.value.busy)return@post;finishRecording();commit{it.copy(project=it.project.copy(mode=0))};pendingLaunch=Triple(0,scene,true)}}
     fun stopTrack(track: Int){control.post{if(wantsAudio)bridge.launch(track,-1,mutableState.value.project.launchBeats.toFloat())}}
     fun seek(beat: Double){control.post{if(beat.isFinite()&&beat in 0.0..65536.0)bridge.seek(beat)}}
@@ -391,8 +391,8 @@ class AudioService : Service() {
             if (wantsAudio && result < 0) mutableState.value = mutableState.value.copy(message = "This output route did not accept a buffer change ($result).")
         }
     } }
-    fun track(index: Int,value: TrackControls){control.post{if(index in 0..15)commit("track-$index"){it.copy(tracks=it.tracks.toMutableList().also{list->list[index]=value})}}}
-    private fun editPatch(track: Int,transform: (SynthPatch)->SynthPatch){if(track in 0..15)commit("patch-$track"){it.copy(patches=it.patches.toMutableList().also{p->p[track]=transform(p[track])})}}
+    fun track(index: Int,value: TrackControls){control.post{if(index in 0 until ProjectLimits.TRACKS)commit("track-$index"){it.copy(tracks=it.tracks.toMutableList().also{list->list[index]=value})}}}
+    private fun editPatch(track: Int,transform: (SynthPatch)->SynthPatch){if(track in 0 until ProjectLimits.TRACKS)commit("patch-$track"){it.copy(patches=it.patches.toMutableList().also{p->p[track]=transform(p[track])})}}
     fun preset(track: Int, index: Int) { control.post {
         if (index in presets.indices) editPatch(track) { presets[index] }
     } }
@@ -403,14 +403,14 @@ class AudioService : Service() {
         control.post { editPatch(track) { it.paint(lfo, from, fromValue, to, toValue) } }
     }
 
-    private fun editEffects(track: Int,transform: (FxConfig)->FxConfig){if(track in 0..15)commit("fx-$track"){it.copy(effects=it.effects.toMutableList().also{p->p[track]=transform(p[track])})}}
+    private fun editEffects(track: Int,transform: (FxConfig)->FxConfig){if(track in 0 until ProjectLimits.TRACKS)commit("fx-$track"){it.copy(effects=it.effects.toMutableList().also{p->p[track]=transform(p[track])})}}
     fun fxPreset(track: Int, index: Int) { control.post { if (index in fxPresets.indices) editEffects(track) { fxPresets[index] } } }
     fun fxParameter(track: Int, id: Int, value: Float) { control.post { editEffects(track) { it.parameter(id, value) } } }
     fun fxMove(track: Int, unit: Int, direction: Int) { control.post { editEffects(track) { it.move(unit, direction) } } }
     fun fxLane(track: Int, unit: Int, lane: Int) { control.post { editEffects(track) { it.lane(unit, lane) } } }
     fun fxMacro(track: Int, macro: Int, field: Int, value: Float) { control.post { editEffects(track) { it.macro(macro, field, value) } } }
     fun meterTrack(track: Int) { control.post {
-        if (track in 0..16) { mutableState.value = mutableState.value.copy(meterTrack = track); bridge.meterTrack(track) }
+        if (track in 0..ProjectLimits.TRACKS) { mutableState.value = mutableState.value.copy(meterTrack = track); bridge.meterTrack(track) }
     } }
     fun limiterDrive(value: Float){control.post{if(value.isFinite())commit("limiter-drive"){it.copy(limiterDrive=value.coerceIn(0f,24f))}}}
     fun limiterRelease(value: Float){control.post{if(value.isFinite())commit("limiter-release"){it.copy(limiterRelease=value.coerceIn(20f,500f))}}}
@@ -435,7 +435,7 @@ class AudioService : Service() {
 
     fun projectEdit(key: String="",edit: (Project)->Project){control.post{commit(key){it.copy(project=edit(it.project))}}}
     fun clipEdit(slot: Int,key: String="",edit: (Clip)->Clip){projectEdit(key){p->val clip=p.clip(slot)?:error("Choose a clip.");p.put(edit(clip))}}
-    fun newClip(slot: Int){projectEdit{p->require(p.clip(slot)==null){"That slot already has a clip."};p.put(Clip(slot,"MIDI ${slot/16+1}",p.barBeats*4))}}
+    fun newClip(slot: Int){projectEdit{p->require(p.clip(slot)==null){"That slot already has a clip."};p.put(Clip(slot,"MIDI ${slot/ProjectLimits.TRACKS+1}",p.barBeats*4))}}
     fun undo(){control.post{if(mutableState.value.busy)return@post;finishRecording();history.undo(document())?.let{adopt(it);syncEngine()}}}
     fun redo(){control.post{if(mutableState.value.busy)return@post;finishRecording();history.redo(document())?.let{adopt(it);syncEngine()}}}
     fun overdub(value: Boolean){control.post{mutableState.value=mutableState.value.copy(overdub=value)}}
@@ -446,14 +446,14 @@ class AudioService : Service() {
         if(c?.isAudio==true){message("Choose a MIDI clip to record keyboard or USB notes.");return@post}
         history.begin(document())
         commit{d->val clip=c?:Clip(slot,"Recorded MIDI",d.project.barBeats*4)
-            d.copy(project=d.project.copy(mode=0).put(if(mutableState.value.overdub)clip else clip.copy(notes=emptyList())),tracks=d.tracks.toMutableList().also{it[slot%16]=it[slot%16].copy(armed=true)})}
+            d.copy(project=d.project.copy(mode=0).put(if(mutableState.value.overdub)clip else clip.copy(notes=emptyList())),tracks=d.tracks.toMutableList().also{it[slot%ProjectLimits.TRACKS]=it[slot%ProjectLimits.TRACKS].copy(armed=true)})}
         mutableState.value=mutableState.value.copy(recording=slot)
-        pendingLaunch=Triple(slot%16,slot/16,false);message("MIDI recording starts at the launch boundary. Play the keyboard or USB controller.")
+        pendingLaunch=Triple(slot%ProjectLimits.TRACKS,slot/ProjectLimits.TRACKS,false);message("MIDI recording starts at the launch boundary. Play the keyboard or USB controller.")
     }}
     private fun recordEvent(track: Int,key: Int,velocity: Float,id: Int,on: Boolean){
         val address=(track.toLong() shl 32)+(id.toLong() and 0xffffffffL)
         if(!on){recorded.remove(address)?.let{finishNote(it)};return}
-        val slot=mutableState.value.recording;if(slot<0||slot%16!=track||!mutableState.value.tracks[track].armed)return
+        val slot=mutableState.value.recording;if(slot<0||slot%ProjectLimits.TRACKS!=track||!mutableState.value.tracks[track].armed)return
         val seq=bridge.sequence();val c=mutableState.value.project.clip(slot)?:return
         if(seq.active[track]!=slot)return
         recorded[address]=Recorded(track,key,velocity,bridge.stats().beat,seq.phase[track]*c.length)
@@ -495,7 +495,7 @@ class AudioService : Service() {
     }
     fun cancelWork(){cancelled.set(true);if(::bridge.isInitialized)bridge.cancelExport()}
     fun importAudio(uri: Uri,slot: Int){work("Importing audio",{d->
-        val target=if(d.project.clip(slot)==null)slot else d.project.emptySlot(slot%16)?:error("This track has no empty clip slots.")
+        val target=if(d.project.clip(slot)==null)slot else d.project.emptySlot(slot%ProjectLimits.TRACKS)?:error("This track has no empty clip slots.")
         val id=(0..63).firstOrNull{i->d.project.asset(i)==null}?:error("The project holds up to 64 audio files.")
         val (name,file)=files.importAudio(uri,cancelled)
         try{
@@ -506,14 +506,14 @@ class AudioService : Service() {
             d.copy(project=project).also{require(it.valid()){ "Audio exceeds the supported timeline or memory limits." }}
         }catch(e: Exception){file.delete();throw e}
     },"Audio imported into the selected track. Select its clip to edit the waveform.")}
-    fun instrument(track: Int,mode: Int){if(track in 0..15&&mode in 0..2)projectEdit{it.instrument(track){i->i.copy(mode=mode)}}}
-    fun sampleEdit(track: Int,pad: Int,edit: (SampleZone)->SampleZone){if(track in 0..15&&pad in -1..15)projectEdit("sample-$track-$pad"){it.instrument(track){i->i.edit(pad,edit)}}}
-    fun assignSample(track: Int,pad: Int,asset: Int){if(track in 0..15&&pad in -1..15)projectEdit{p->val a=p.asset(asset)?:error("Choose a sample.");p.instrument(track){i->i.edit(pad){it.load(a)}.copy(mode=if(pad<0)1 else 2)}}}
+    fun instrument(track: Int,mode: Int){if(track in 0 until ProjectLimits.TRACKS&&mode in 0..2)projectEdit{it.instrument(track){i->i.copy(mode=mode)}}}
+    fun sampleEdit(track: Int,pad: Int,edit: (SampleZone)->SampleZone){if(track in 0 until ProjectLimits.TRACKS&&pad in -1..15)projectEdit("sample-$track-$pad"){it.instrument(track){i->i.edit(pad,edit)}}}
+    fun assignSample(track: Int,pad: Int,asset: Int){if(track in 0 until ProjectLimits.TRACKS&&pad in -1..15)projectEdit{p->val a=p.asset(asset)?:error("Choose a sample.");p.instrument(track){i->i.edit(pad){it.load(a)}.copy(mode=if(pad<0)1 else 2)}}}
     fun sampleFavorite(asset: Int){projectEdit{p->p.copy(assets=p.assets.map{if(it.id==asset)it.copy(favorite=!it.favorite)else it})}}
     fun sampleGroup(asset: Int,name: String){projectEdit{p->p.copy(assets=p.assets.map{if(it.id==asset)it.copy(group=name.trim().take(64))else it})}}
-    fun sampleClip(asset: Int,slot: Int){projectEdit{p->val a=p.asset(asset)?:error("Choose a sample.");val target=if(p.clip(slot)==null)slot else p.emptySlot(slot%16)?:error("This track has no empty slots.")
+    fun sampleClip(asset: Int,slot: Int){projectEdit{p->val a=p.asset(asset)?:error("Choose a sample.");val target=if(p.clip(slot)==null)slot else p.emptySlot(slot%ProjectLimits.TRACKS)?:error("This track has no empty slots.")
         p.put(Clip(target,a.name.take(64),(a.frames.toDouble()/a.rate*mutableState.value.bpm/60).coerceAtLeast(.0625),asset=a.id,last=a.frames))}}
-    fun hitPad(track: Int,pad: Int){if(track !in 0..15||pad !in 0..15)return;val id=nextTouchId();noteOn(track,36+pad,id);control.postDelayed({noteOff(track,id)},120)}
+    fun hitPad(track: Int,pad: Int){if(track !in 0 until ProjectLimits.TRACKS||pad !in 0..15)return;val id=nextTouchId();noteOn(track,36+pad,id);control.postDelayed({noteOff(track,id)},120)}
     fun previewSample(id: Int){control.post{if(wantsAudio&&!mutableState.value.busy&&syncEngine())bridge.preview(id)else message("Start audio to audition samples.")}}
     fun stopPreview(){control.post{bridge.stopPreview()}}
     private fun addSamples(d: ProjectDocument,items: List<Pair<String,File>>,group: String): ProjectDocument {
@@ -533,7 +533,7 @@ class AudioService : Service() {
         }catch(e: Exception){created.forEach{it.second.delete()};throw e}
     },"Samples added. Audition, favorite, or assign them to the sampler and pads.")}
     fun factoryKit(track: Int){work("Creating starter kit",{d->
-        require(track in 0..15);val created=mutableListOf<Pair<String,File>>()
+        require(track in 0 until ProjectLimits.TRACKS);val created=mutableListOf<Pair<String,File>>()
         try{
             val existing=FactorySamples.names.map{name->d.project.assets.firstOrNull{it.group=="Astra starter kit"&&it.name==name}}
             val next=if(existing.all{it!=null})d else {
@@ -568,7 +568,7 @@ class AudioService : Service() {
     },"Audio clip added in the next empty scene on this track. Play it instead of the source to reduce instrument processing. Original kept; mixer and effects remain live.")}
     fun stretchClip(slot: Int,beats: Double,semitones: Double){work("Stretching audio",{d->
         val clip=d.project.clip(slot)?:error("Select an audio clip.")
-        val target=d.project.emptySlot(slot%16)?:error("This track needs an empty scene slot for the new clip.")
+        val target=d.project.emptySlot(slot%ProjectLimits.TRACKS)?:error("This track needs an empty scene slot for the new clip.")
         val frames=StretchSettings.outputFrames(d.project,clip,d.bpm,beats,semitones)
         val file=File(files.audioDir,"${java.util.UUID.randomUUID()}.wav")
         try{check(!cancelled.get()){ "Cancelled." };val code=bridge.stretch(file,clip.asset,clip.first,clip.last,frames,semitones)
@@ -612,13 +612,13 @@ class AudioService : Service() {
         };null
     },"Recording WAV saved to your chosen location.")}
     fun sampleSelection(path: String,first: Long,last: Long,slot: Int,sampler: Boolean,root: Int,fade: Boolean){work("Extracting selection",{d->
-        require(slot in 0..127&&root in 0..127)
-        val source=labFile(path);val target=if(sampler)-1 else if(d.project.clip(slot)==null)slot else d.project.emptySlot(slot%16)?:error("This track needs an empty scene slot.")
+        require(slot in 0 until ProjectLimits.CLIPS&&root in 0..127)
+        val source=labFile(path);val target=if(sampler)-1 else if(d.project.clip(slot)==null)slot else d.project.emptySlot(slot%ProjectLimits.TRACKS)?:error("This track needs an empty scene slot.")
         require(last>first&&AudioStorage.canAdd(d.project,last-first)){"Selection exceeds the 2 GiB WAV, 8 GiB source-frame or 64 sample limits. Select a shorter section."}
         val output=File(files.audioDir,"${java.util.UUID.randomUUID()}.wav")
         try{WaveFile(source).use{it.extract(output,first,last,if(fade)(it.rate*.002).roundToInt()else 0){check(!cancelled.get()){"Cancelled."}}}
             val name=(MicrophoneRecorder.displayName(source).take(48)+" cut").take(64);val next=addSamples(d,listOf(name to output),"Recorded / extracted");val a=next.project.assets.last()
-            val project=if(sampler)next.project.instrument(slot%16){it.copy(mode=1,sample=SampleZone(root=root).load(a))}
+            val project=if(sampler)next.project.instrument(slot%ProjectLimits.TRACKS){it.copy(mode=1,sample=SampleZone(root=root).load(a))}
                 else next.project.put(Clip(target,name,(a.frames.toDouble()/a.rate*d.bpm/60).coerceAtLeast(.0625),asset=a.id,last=a.frames))
             next.copy(project=project).also{require(it.valid()){"Selection exceeds the timeline limits."}}
         }catch(e: Exception){output.delete();throw e}
@@ -626,7 +626,7 @@ class AudioService : Service() {
     fun saveProject(uri: Uri){work("Saving project",{files.saveArchive(it,uri,cancelled);null},"Project saved with synths, effects and audio.")}
     fun openProject(uri: Uri){control.post{if(!mutableState.value.busy)stopAudio("Opening project…")};work("Opening project",{val d=files.openArchive(uri,cancelled);loadAssets(d);d},"Project opened. Start audio to play.",true)}
     fun starter(){control.post{if(!mutableState.value.ready||mutableState.value.busy)return@post;stopTransport();commit{old->StarterProject.create(presets).let{it.copy(project=it.project.copy(assets=old.project.assets))}};message("Green circuit loaded. Start audio and press Play, or launch individual clips.")}}
-    fun newProject(){control.post{if(mutableState.value.busy)return@post;stopTransport();history.clear();bridge.loadAssets(emptyList());adopt(document().copy(project=Project(),tracks=List(16){TrackControls()}));syncEngine();message("New project. Your synth patches and effects are retained.")}}
+    fun newProject(){control.post{if(mutableState.value.busy)return@post;stopTransport();history.clear();bridge.loadAssets(emptyList());adopt(document().copy(project=Project(),tracks=List(ProjectLimits.TRACKS){TrackControls()}));syncEngine();message("New project. Your synth patches and effects are retained.")}}
     fun exportWave(uri: Uri,rate: Int=48000,tail: Float=4f,floating: Boolean=false){work("Rendering WAV",{d->
         require(d.project.regions.isNotEmpty()){ "Place clips in Arrangement before exporting." }
         val bytes=ExportNames.bytes(d.project,d.bpm,rate,tail,floating)
@@ -676,7 +676,7 @@ class AudioService : Service() {
         }
     }
     fun astraRequest(prompt: String, selectedSlot: Int, gemini: Boolean) { control.post {
-        if(mutableState.value.astra.working||mutableState.value.busy||!mutableState.value.ready||selectedSlot !in 0..127)return@post
+        if(mutableState.value.astra.working||mutableState.value.busy||!mutableState.value.ready||selectedSlot !in 0 until ProjectLimits.CLIPS)return@post
         if(mutableState.value.recording>=0){astraState{it.copy(status="Finish MIDI recording before asking Astra to edit the project.")};return@post}
         if(prompt.length>8000){astraState{it.copy(status="Keep requests under 8,000 characters; paste JSON in the JSON field.")};return@post}
         if(gemini){

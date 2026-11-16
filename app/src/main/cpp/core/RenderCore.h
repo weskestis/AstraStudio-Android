@@ -11,7 +11,8 @@
 #include <limits>
 
 namespace astra {
-inline constexpr int kTrackCount = 16;
+inline constexpr int kPatchSlots = 128;
+inline constexpr int kFxSlots = 128;
 inline constexpr int kVoiceCount = 128;
 inline constexpr uint64_t kImmediate = std::numeric_limits<uint64_t>::max();
 inline constexpr std::size_t kQueueCapacity = 4096;
@@ -45,8 +46,8 @@ struct CoreSnapshot {
 };
 
 struct FxSnapshot {
-    std::array<float,16> sidechain{};
-    std::array<float,48> bands{};
+    std::array<float,kTrackCount> sidechain{};
+    std::array<float,kTrackCount*3> bands{};
     float limiterReduction{},latency{},sampleRate{};
     std::array<float,64> spectrum{};
     int meterTrack{-1};uint32_t analyzerDrops{};
@@ -131,21 +132,21 @@ private:
     synth::WavetableBank wavetables_;
     sampler::Kernel sampleKernel_;sampler::Voice preview_;
     struct PatchSlot { synth::Patch patch; std::atomic<bool> busy{false}; };
-    std::array<PatchSlot, 64> patchSlots_{};
+    std::array<PatchSlot, kPatchSlots> patchSlots_{};
     struct FxSlot { fx::Config config; std::atomic<bool> busy{false}; };
-    std::array<FxSlot,32> fxSlots_{};
+    std::array<FxSlot,kFxSlots> fxSlots_{};
     struct PlanSlot {std::unique_ptr<project::Plan> plan;std::atomic<bool> busy{false};};
     std::array<PlanSlot,3> planSlots_;int activePlan_{-1};project::Sequencer sequence_;
-    std::array<std::atomic<int>,16> publishedClips_{},publishedQueued_{};
-    std::array<std::atomic<float>,16> publishedPhase_{};std::atomic<int> publishedMode_{};
+    std::array<std::atomic<int>,kTrackCount> publishedClips_{},publishedQueued_{};
+    std::array<std::atomic<float>,kTrackCount> publishedPhase_{};std::atomic<int> publishedMode_{};
     fx::Reverb returnA_;fx::PingPong returnB_;fx::Config returnConfig_;
     fx::LookaheadLimiter limiter_;
     fx::FixedDelay<fx::Rack::latency> clickDelay_;
     fx::Spectrum analyzer_;
-    int meterTrack_{16};
+    int meterTrack_{kTrackCount};
     float limiterDrive_{1},targetLimiterDrive_{1};
-    std::array<std::atomic<float>,16> publishedReduction_{};
-    std::array<std::atomic<float>,48> publishedBands_{};
+    std::array<std::atomic<float>,kTrackCount> publishedReduction_{};
+    std::array<std::atomic<float>,kTrackCount*3> publishedBands_{};
     std::atomic<float> publishedLimiter_{0};
     uint64_t nextOrder_{}; // Single, serialized control producer.
     uint64_t frame_{};

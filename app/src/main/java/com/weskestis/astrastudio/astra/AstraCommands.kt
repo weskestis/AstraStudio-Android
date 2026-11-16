@@ -51,8 +51,8 @@ object AstraCommands {
         require(s.isNotBlank() && s.length <= limit && s.none { it.isISOControl() && !(key=="summary" && it in "\n\t") }) { "'$key' is empty, too long or contains a control character." }; return s
     }
     private fun JSONObject.bool(key: String, default: Boolean = false): Boolean = if(!has(key)) default else opt(key) as? Boolean ?: error("'$key' must be true or false.")
-    private fun JSONObject.track() = int("track",1,16)-1
-    private fun JSONObject.slot() = (int("scene",1,8)-1)*16 + track()
+    private fun JSONObject.track() = int("track",1,ProjectLimits.TRACKS)-1
+    private fun JSONObject.slot() = (int("scene",1,ProjectLimits.SCENES)-1)*ProjectLimits.TRACKS + track()
     private fun JSONObject.minor(): Boolean = when(str("scale","minor")) { "minor" -> true; "major" -> false; else -> error("Scale must be minor or major.") }
     private fun replaceClip(d: ProjectDocument, c: Clip, replace: Boolean, changes: MutableList<String>): ProjectDocument {
         val old=d.project.clip(c.slot)
@@ -80,7 +80,7 @@ object AstraCommands {
                         val slot=c.slot();val style=c.str("style");require(style in PatternGenerator.styles) { "Unsupported pattern style." }
                         val key=c.str("root","F");val minor=c.minor();val name=c.str("name","$key ${if(minor)"minor" else "major"} $style")
                         var clip=PatternGenerator.create(slot,style,key,minor,c.int("bars",1,16,4),d.project.barBeats,c.int("seed",0,1000000,0),name)
-                        if(d.project.instruments[slot%16].mode==2){
+                        if(d.project.instruments[slot%ProjectLimits.TRACKS].mode==2){
                             val pitch=mapOf("kick" to 36,"snare" to 38,"hats" to 42)[style]
                             if(pitch!=null)clip=clip.copy(notes=clip.notes.map{it.copy(pitch=pitch)})
                             require(clip.notes.all{it.pitch in 36..51}){"This track is a drum rack (MIDI 36–51). Use a drum pattern or choose a synth/sampler track for the bassline."}
@@ -121,7 +121,7 @@ object AstraCommands {
                         d=d.copy(patches=d.patches.toMutableList().also{it[t]=next});changes+="Track ${t+1}, modulation slot ${slot+1}: ${sources[source]} → ${targets[target]}, amount $amount."
                     }
                     "sidechain" -> {
-                        val source=c.int("sourceTrack",1,16)-1;val target=c.int("targetTrack",1,16)-1;require(source!=target){"External sidechain needs two different tracks."}
+                        val source=c.int("sourceTrack",1,ProjectLimits.TRACKS)-1;val target=c.int("targetTrack",1,ProjectLimits.TRACKS)-1;require(source!=target){"External sidechain needs two different tracks."}
                         var fx=d.effects[target].parameter(F.ScOn,1f).parameter(F.ScSource,source.toFloat())
                         val knobs=listOf(Triple("threshold",F.ScThreshold,-28.0),Triple("ratio",F.ScRatio,6.0),Triple("attack",F.ScAttack,1.0),Triple("release",F.ScRelease,100.0),Triple("mix",F.ScMix,1.0))
                         for((key,id,default)in knobs){val spec=F.parameters[id];fx=fx.parameter(id,c.num(key,spec.minimum.toDouble(),spec.maximum.toDouble(),default).toFloat())}
@@ -139,7 +139,7 @@ object AstraCommands {
                         val old=d.effects[t];val fx=old.copy(name="Custom / Astra",wire=old.wire.toMutableList().also{it[id]=value})
                         d=d.copy(effects=d.effects.toMutableList().also{it[t]=fx});changes+="Track ${t+1}: $name = $value."
                     }
-                    "place" -> { val slot=c.slot();val at=c.num("beat",0.0,65536.0);d=d.copy(project=d.project.place(slot,at));changes+="Place track ${slot%16+1}, scene ${slot/16+1} at beat $at in Arrangement." }
+                    "place" -> { val slot=c.slot();val at=c.num("beat",0.0,65536.0);d=d.copy(project=d.project.place(slot,at));changes+="Place track ${slot%ProjectLimits.TRACKS+1}, scene ${slot/ProjectLimits.TRACKS+1} at beat $at in Arrangement." }
                 }
                 require(d.valid()){ "The command would create an invalid project or exceed its capacity." }
             } catch(e: IllegalArgumentException) { throw IllegalArgumentException("Command ${index+1}: ${e.message}",e) }

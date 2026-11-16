@@ -79,6 +79,55 @@ class WorkspaceSmokeTest {
         return this
     }
     private fun click(tag: String){val node=compose.onNodeWithTag(tag);runCatching{node.scrollOnUiThread()};node.assertIsDisplayed().performClick()}
+    @Test fun fiftyTracksPickerArchivePlaybackAndMasterExport(){
+        compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
+        click("File");click("New project");click("Confirm project")
+        click("Choose track");compose.onNodeWithTag("Track picker").performScrollToIndex(49);click("Select track 50")
+        compose.onNodeWithTag("Choose track").assertTextContains("Track 50 / 50",substring=true)
+        compose.waitUntil(10000){compose.onAllNodesWithTag("Empty 49").fetchSemanticsNodes().isNotEmpty()}
+        shot("26-fifty-tracks-session-phone")
+        click("Choose track");back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val binding=ServiceTestRule();val service=(binding.bindService(Intent(context,AudioService::class.java)) as AudioService.LocalBinder).service
+        val source=File(context.cacheDir,"capacity-55Hz.wav");val archive=File(context.cacheDir,"capacity.astra");val wave=File(context.cacheDir,"capacity192.wav")
+        val io=ProjectFiles(context);var restored: ProjectDocument?=null
+        FloatWaveWriter(source,48000,1).use{writer->val samples=FloatArray(12000){(.002*kotlin.math.sin(2*Math.PI*55*it/48000)).toFloat()};writer.write(samples,samples.size)}
+        try{
+            service.tempo(120f);compose.waitUntil(10000){service.state.value.bpm==120f}
+            service.importAudio(Uri.fromFile(source),49);compose.waitUntil(20000){service.state.value.project.clip(49)?.isAudio==true&&!service.state.value.busy}
+            service.projectEdit{p->val c=p.clip(49)!!;p.copy(clips=List(50){c.copy(slot=it,name="Layer ${it+1}")},regions=List(50){Region(it+1,it,0.0,c.length)})}
+            compose.waitUntil(10000){service.state.value.project.regions.size==50}
+            click("Arrangement");compose.waitUntil(10000){compose.onAllNodesWithTag("Timeline track 50").fetchSemanticsNodes().isNotEmpty()}
+            compose.onNodeWithTag("Timeline track 50").assertIsDisplayed();shot("27-fifty-tracks-arrangement-phone")
+            compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
+            compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
+            compose.onNodeWithTag("Timeline track 50").assertIsDisplayed();shot("28-fifty-tracks-landscape")
+            back();compose.onNodeWithTag("Session grid").assertIsDisplayed();compose.onNodeWithTag("Choose track").assertTextContains("Track 50 / 50",substring=true)
+            val state=service.state.value
+            val doc=ProjectDocument(state.project,state.bpm,state.master,state.limiterDrive,state.limiterRelease,state.tracks,state.patches,state.effects)
+            val cancel=AtomicBoolean(false);io.saveArchive(doc,Uri.fromFile(archive),cancel);restored=io.openArchive(Uri.fromFile(archive),cancel)
+            assertEquals(50,restored.tracks.size);assertEquals(doc.project.clips,restored.project.clips);assertEquals(doc.project.regions,restored.project.regions)
+            val bridge=AudioBridge()
+            try{
+                assertTrue(bridge.loadAssets(restored.project.assets.map{it.id to io.audioFile(it)}))
+                assertEquals(0,bridge.export(wave,restored,192000,0f,false))
+                val head=ByteBuffer.wrap(wave.inputStream().use{it.readNBytes(44)}).order(ByteOrder.LITTLE_ENDIAN)
+                assertEquals(192000,head.getInt(24));assertEquals(24,head.getShort(34).toInt());assertEquals(288044L,wave.length())
+                WaveFile(wave).use{f->val data=FloatArray(24000);f.read(12000,12000,data);assertTrue(data.any{kotlin.math.abs(it)>.01f})}
+                assertEquals(0,bridge.start());assertTrue(bridge.project(restored.project));assertTrue(bridge.tempo(120f));assertTrue(bridge.transport(true));assertTrue(bridge.scene(0,0f));assertTrue(bridge.meterTrack(49))
+                compose.waitUntil(10000){bridge.sequence().active[49]==49&&bridge.fxStats().meterTrack==49}
+                assertEquals(50,bridge.sequence().active.size);assertEquals(150,bridge.fxStats().bands.size)
+                assertTrue(bridge.meterTrack(50));compose.waitUntil(10000){bridge.fxStats().meterTrack==50}
+                bridge.stop()
+            }finally{bridge.close()}
+            service.undo();compose.waitUntil(10000){service.state.value.project.regions.isEmpty()}
+            service.redo();compose.waitUntil(10000){service.state.value.project.regions.size==50}
+        }finally{
+            restored?.project?.assets?.forEach{io.audioFile(it).delete()}
+            listOf(source,archive,wave).forEach{it.delete()};binding.unbindService()
+            compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_PORTRAIT}
+        }
+    }
     @Test fun master192ControlsRenderAndShareExactPcm24(){
         compose.waitUntil(20000){compose.onAllNodesWithTag("Session grid").fetchSemanticsNodes().isNotEmpty()}
         click("File");click("New project");click("Confirm project")
@@ -142,11 +191,11 @@ class WorkspaceSmokeTest {
             assertEquals(2L*1024*1024,service.state.value.storage.audioBytes)
             assertEquals(48000L*6*8,service.state.value.storage.sourceBytes)
             click("Resample");click("Bounce instrument")
-            compose.waitUntil(20000){service.state.value.project.clip(16)!=null&&!service.state.value.busy}
-            val p=service.state.value.project;assertTrue(p.clip(16)!!.isAudio);assertTrue(p.clip(16)!!.warp);assertNotNull(p.clip(0))
-            val files=ProjectFiles(context);val bounced=files.audioFile(p.asset(p.clip(16)!!.asset)!!)
+            compose.waitUntil(20000){service.state.value.project.clip(ProjectLimits.TRACKS)!=null&&!service.state.value.busy}
+            val p=service.state.value.project;assertTrue(p.clip(ProjectLimits.TRACKS)!!.isAudio);assertTrue(p.clip(ProjectLimits.TRACKS)!!.warp);assertNotNull(p.clip(0))
+            val files=ProjectFiles(context);val bounced=files.audioFile(p.asset(p.clip(ProjectLimits.TRACKS)!!.asset)!!)
             WaveFile(bounced).use{wave->val values=FloatArray(1024);wave.read(1000,512,values);for(i in 0 until 512){assertEquals(samples[1000+i],values[i*2],0f);assertEquals(values[i*2],values[i*2+1],0f)}}
-            service.undo();compose.waitUntil(10000){service.state.value.project.clip(16)==null};service.redo();compose.waitUntil(10000){service.state.value.project.clip(16)!=null}
+            service.undo();compose.waitUntil(10000){service.state.value.project.clip(ProjectLimits.TRACKS)==null};service.redo();compose.waitUntil(10000){service.state.value.project.clip(ProjectLimits.TRACKS)!=null}
             back();service.projectEdit{it.place(0,0.0)};compose.waitUntil(10000){service.state.value.project.regions.isNotEmpty()}
             click("File");click("Share finished track")
             val previous=service.state.value.finishedExports.map{it.path}.toSet()
@@ -408,7 +457,7 @@ class WorkspaceSmokeTest {
         val bridge=AudioBridge()
         try{
             val presets=SynthSchema.presets.indices.map(bridge::preset)
-            val base=StarterProject.create(presets).let{it.copy(project=Project(),patches=List(16){presets[0]})}
+            val base=StarterProject.create(presets).let{it.copy(project=Project(),patches=List(ProjectLimits.TRACKS){presets[0]})}
             val json=AstraCommands.envelope("Native command render",listOf(cmd("tempo","bpm" to 145),cmd("preset","track" to 1,"preset" to "FM Alloy"),cmd("pattern","track" to 1,"scene" to 1,"style" to "riddim","root" to "F","bars" to 1),cmd("place","track" to 1,"scene" to 1,"beat" to 0)))
             val result=AstraCommands.compile(json,base,presets)
             val wave=File(context.cacheDir,"astra-command-render.wav")
@@ -447,10 +496,10 @@ class WorkspaceSmokeTest {
         click("Render stretch")
         compose.waitUntil(30000){compose.onAllNodesWithText("Stretched audio added as a new clip and in Samples → Stretched. Original preserved; Undo removes the new version.").fetchSemanticsNodes().isNotEmpty()}
         shot("13-stretch");back();compose.onNodeWithTag("Session grid").assertIsDisplayed()
-        compose.onNodeWithTag("Launch 16").scrollOnUiThread().assertExists()
-        click("Undo");compose.onNodeWithTag("Empty 16").scrollOnUiThread().assertExists()
+        compose.onNodeWithTag("Launch ${ProjectLimits.TRACKS}").scrollOnUiThread().assertExists()
+        click("Undo");compose.onNodeWithTag("Empty ${ProjectLimits.TRACKS}").scrollOnUiThread().assertExists()
         compose.onNodeWithTag("Launch 0").assertExists()
-        click("Redo");compose.onNodeWithTag("Launch 16").scrollOnUiThread().assertExists()
+        click("Redo");compose.onNodeWithTag("Launch ${ProjectLimits.TRACKS}").scrollOnUiThread().assertExists()
         click("File");click("Export arrangement")
         compose.onNodeWithTag("Export float").assertIsSelected();shot("14-float-export")
         back();compose.onNodeWithTag("Session grid").assertIsDisplayed()

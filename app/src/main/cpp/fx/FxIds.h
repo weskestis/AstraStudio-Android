@@ -199,7 +199,7 @@ inline constexpr std::array<Spec, ParameterCount> specs{{
     {-24.0f, 12.0f, -3.0f, false},
     {0.0f, 1.0f, 1.0f, false},
     {0.0f, 1.0f, 0.0f, true},
-    {-1.0f, 15.0f, -1.0f, true},
+    {-1.0f, 49.0f, -1.0f, true},
     {-60.0f, 0.0f, -28.0f, false},
     {1.0f, 20.0f, 6.0f, false},
     {0.1f, 100.0f, 1.0f, false},

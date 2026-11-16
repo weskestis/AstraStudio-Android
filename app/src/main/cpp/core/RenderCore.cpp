@@ -15,7 +15,7 @@ RenderCore::RenderCore() noexcept {
         sine_[i] = static_cast<float>(std::sin(2.0 * std::numbers::pi * static_cast<double>(i) / 2048.0));
     }
     sequence_.bind(this,sequenceNote,sequenceAutomation);
-    for(int i=0;i<16;++i){publishedClips_[i]=-1;publishedQueued_[i]=-2;}
+    for(int i=0;i<kTrackCount;++i){publishedClips_[i]=-1;publishedQueued_[i]=-2;}
     prepare(48000.0);
 }
 
@@ -50,11 +50,11 @@ bool RenderCore::valid(const Command& c) noexcept {
         case CommandType::Transport:
         case CommandType::Metronome: return c.value == 0.0f || c.value == 1.0f;
         case CommandType::Tempo: return c.value >= 30.0f && c.value <= 300.0f;
-        case CommandType::PatchSnapshot: return c.note >= 0 && c.note < 64 && c.frame == kImmediate;
-        case CommandType::FxSnapshot: return c.note >= 0 && c.note < 32 && c.frame == kImmediate;
+        case CommandType::PatchSnapshot: return c.note >= 0 && c.note < kPatchSlots && c.frame == kImmediate;
+        case CommandType::FxSnapshot: return c.note >= 0 && c.note < kFxSlots && c.frame == kImmediate;
         case CommandType::LimiterDrive: return c.value >= 0 && c.value <= 24;
         case CommandType::LimiterRelease: return c.value >= 20 && c.value <= 500;
-        case CommandType::MeterTrack: return c.value >= 0 && c.value <= 16 && c.value == std::floor(c.value);
+        case CommandType::MeterTrack: return c.value >= 0 && c.value <= kTrackCount && c.value == std::floor(c.value);
         case CommandType::ProjectSnapshot: return c.note>=0&&c.note<3&&c.frame==kImmediate;
         case CommandType::LaunchClip: case CommandType::LaunchScene: return c.note>=-1&&c.note<8&&c.value>=0&&c.value<=24;
         case CommandType::Seek: return c.value>=0&&c.value<=65536;
@@ -401,7 +401,7 @@ void RenderCore::render(float* output, int32_t frames) noexcept {
         right *= master_*limiterDrive_;
         if (std::abs(left) > kCeiling || std::abs(right) > kCeiling) ++clipped_;
         const auto limited=limiter_.tick({left,right});left=limited.l;right=limited.r;
-        if(meterTrack_==16)analyzer_.push(limited,16);
+        if(meterTrack_==kTrackCount)analyzer_.push(limited,kTrackCount);
         if(sourceTrack_>=0&&sourceTrack_<kTrackCount){left=dry[sourceTrack_].l;right=dry[sourceTrack_].r;}
         output[2 * i] = left;
         output[2 * i + 1] = right;
@@ -424,7 +424,7 @@ void RenderCore::publish(float left, float right) noexcept {
         for(int b=0;b<3;++b)publishedBands_[t*3+b].store(bands[b],std::memory_order_relaxed);}
     publishedLimiter_.store(limiter_.reduction(),std::memory_order_relaxed);
     const auto seq=sequence_.snapshot();publishedMode_.store(seq.mode,std::memory_order_relaxed);
-    for(int t=0;t<16;++t){publishedClips_[t].store(seq.active[t],std::memory_order_relaxed);publishedQueued_[t].store(seq.queued[t],std::memory_order_relaxed);publishedPhase_[t].store(seq.phase[t],std::memory_order_relaxed);}
+    for(int t=0;t<kTrackCount;++t){publishedClips_[t].store(seq.active[t],std::memory_order_relaxed);publishedQueued_[t].store(seq.queued[t],std::memory_order_relaxed);publishedPhase_[t].store(seq.phase[t],std::memory_order_relaxed);}
     uint32_t count = 0;
     for (const auto& voice : voices_) if (voice.active) ++count;
     publishedFrame_.store(frame_, std::memory_order_relaxed);
@@ -439,12 +439,12 @@ void RenderCore::publish(float left, float right) noexcept {
 }
 
 project::Snapshot RenderCore::sequenceSnapshot()const noexcept {
-    project::Snapshot s;s.mode=publishedMode_.load(std::memory_order_relaxed);for(int t=0;t<16;++t){s.active[t]=publishedClips_[t].load(std::memory_order_relaxed);s.queued[t]=publishedQueued_[t].load(std::memory_order_relaxed);s.phase[t]=publishedPhase_[t].load(std::memory_order_relaxed);}return s;
+    project::Snapshot s;s.mode=publishedMode_.load(std::memory_order_relaxed);for(int t=0;t<kTrackCount;++t){s.active[t]=publishedClips_[t].load(std::memory_order_relaxed);s.queued[t]=publishedQueued_[t].load(std::memory_order_relaxed);s.phase[t]=publishedPhase_[t].load(std::memory_order_relaxed);}return s;
 }
 FxSnapshot RenderCore::effectsSnapshot() noexcept {
     FxSnapshot result;
-    for(int t=0;t<16;++t)result.sidechain[t]=publishedReduction_[t].load(std::memory_order_relaxed);
-    for(int b=0;b<48;++b)result.bands[b]=publishedBands_[b].load(std::memory_order_relaxed);
+    for(int t=0;t<kTrackCount;++t)result.sidechain[t]=publishedReduction_[t].load(std::memory_order_relaxed);
+    for(int b=0;b<kTrackCount*3;++b)result.bands[b]=publishedBands_[b].load(std::memory_order_relaxed);
     result.limiterReduction=publishedLimiter_.load(std::memory_order_relaxed);
     result.latency=static_cast<float>(outputLatencyFrames());result.sampleRate=static_cast<float>(sampleRate_);
     result.spectrum=analyzer_.analyze(result.sampleRate);result.meterTrack=analyzer_.track();result.analyzerDrops=analyzer_.dropped();return result;

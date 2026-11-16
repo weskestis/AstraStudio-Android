@@ -1,5 +1,6 @@
 #pragma once
 #include "fx/FxPrimitives.h"
+#include "core/Limits.h"
 #include "sampler/Sampler.h"
 #include "TempoMap.h"
 #include "WarpVoice.h"
@@ -9,7 +10,7 @@
 #include <string>
 #include <vector>
 namespace astra::project {
-constexpr int kTracks=16,kScenes=8,kClips=128,kAssets=64,kMaxRegions=512,kMaxNotes=256,kMaxPoints=64;
+constexpr int kTracks=kTrackCount,kScenes=kSceneCount,kClips=kClipCount,kAssets=64,kMaxRegions=kRegionCount,kMaxNotes=256,kMaxPoints=64;
 constexpr uint32_t kSequenceId=0x40000000U;
 using Samples=std::array<std::shared_ptr<const Sample>,kAssets>;
 struct Note {double start{},length{};int pitch{};float velocity{};};
@@ -30,7 +31,7 @@ struct Plan {
     double endBeat()const noexcept;
 };
 std::unique_ptr<Plan> decodePlan(std::span<const double>,const Samples&) noexcept;
-struct Snapshot {std::array<int,16> active{},queued{};std::array<float,16> phase{};int mode{};};
+struct Snapshot {std::array<int,kTracks> active{},queued{};std::array<float,kTracks> phase{};int mode{};};
 // Callbacks are plain function pointers into RenderCore. No ownership or allocation
 // crosses the render boundary; immutable Plan slots retire on the control thread.
 class Sequencer {
@@ -44,7 +45,7 @@ public:
     void rewind()noexcept{stop();for(auto& t:tracks_){t.launchBeat=0;t.queued=-2;}}
     void launch(int track,int scene,double beat,double quantum)noexcept;
     void scene(int scene,double beat,double quantum)noexcept;
-    void tick(double beat,float bpm,std::array<fx::Stereo,16>& audio)noexcept;
+    void tick(double beat,float bpm,std::array<fx::Stereo,kTracks>& audio)noexcept;
     bool loop(double& beat)const noexcept;
     double beatUnit()const noexcept{return plan_?4.0/plan_->denominator:1;}
     double barBeats()const noexcept{return plan_?plan_->barBeats():4;}
@@ -57,8 +58,8 @@ private:
     void enter(int track,int slot,int region,double phase,double audioOffset,double elapsed,float bpm)noexcept;
     void event(int track,const Clip& clip,const Event& e)noexcept;
     uint32_t nextId()noexcept;
-    const sampler::Kernel* kernel_{};const Plan* plan_{};std::array<Track,16> tracks_{};double rate_{48000},previousBeat_{-1};uint32_t id_{kSequenceId};int automationClock_{};
-    std::array<WarpVoice,16> warps_;
+    const sampler::Kernel* kernel_{};const Plan* plan_{};std::array<Track,kTracks> tracks_{};double rate_{48000},previousBeat_{-1};uint32_t id_{kSequenceId};int automationClock_{};
+    std::array<WarpVoice,kTracks> warps_;
     void* owner_{};NoteFn note_{};AutoFn automation_{};
 };
 } // namespace astra::project

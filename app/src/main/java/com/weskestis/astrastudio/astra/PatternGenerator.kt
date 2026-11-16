@@ -1,5 +1,6 @@
 package com.weskestis.astrastudio.astra
 
+import com.weskestis.astrastudio.project.ProjectLimits
 import com.weskestis.astrastudio.project.Clip
 import java.util.Random
 import java.util.Locale
@@ -12,7 +13,7 @@ object PatternGenerator {
         return mapOf("c" to 0,"c#" to 1,"db" to 1,"d" to 2,"d#" to 3,"eb" to 3,"e" to 4,"fb" to 4,"e#" to 5,"f" to 5,"f#" to 6,"gb" to 6,"g" to 7,"g#" to 8,"ab" to 8,"a" to 9,"a#" to 10,"bb" to 10,"b" to 11,"cb" to 11,"b#" to 0)[n] ?: error("Use a note name such as F, C# or Bb.")
     }
     fun create(slot: Int, style: String, root: String, minor: Boolean, bars: Int, barBeats: Double, seed: Int, name: String): Clip {
-        require(slot in 0..127 && style in styles && bars in 1..16)
+        require(slot in 0 until ProjectLimits.CLIPS && style in styles && bars in 1..16)
         val key = PatternGenerator.root(root); val length = bars * barBeats
         var clip = Clip(slot, name, length, root=key, minor=minor)
         val random = Random(seed.toLong())

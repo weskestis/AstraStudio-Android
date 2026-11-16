@@ -57,12 +57,12 @@ int main(){
         // Split at beat 5 (three seconds), retaining sample-exact source offset.
         plan.regions[0]={{1,0,0,5,0,0},{2,0,5,3,0,144000}};
         project::Sequencer sequencer;sequencer.prepare(48000,kernel.get());sequencer.activate(&plan);project::TempoClock clock;double beat=0;
-        inRender=true;for(int frame=0;frame<288000;++frame){std::array<fx::Stereo,16> audio{};sequencer.tick(beat,145,audio);check(std::abs(audio[0].l-sample->stereo[frame*2])<1e-6,"raw audio stays continuous across tempo and sample-exact split");beat=clock.tick(&map,beat,145,48000);}inRender=false;
-        sequencer.stop();std::array<fx::Stereo,16> audio{};inRender=true;sequencer.tick(6,145,audio);inRender=false;
+        inRender=true;for(int frame=0;frame<288000;++frame){std::array<fx::Stereo,astra::kTrackCount> audio{};sequencer.tick(beat,145,audio);check(std::abs(audio[0].l-sample->stereo[frame*2])<1e-6,"raw audio stays continuous across tempo and sample-exact split");beat=clock.tick(&map,beat,145,48000);}inRender=false;
+        sequencer.stop();std::array<fx::Stereo,astra::kTrackCount> audio{};inRender=true;sequencer.tick(6,145,audio);inRender=false;
         check(std::abs(audio[0].l-sample->stereo[192000*2])<1e-6,"seek after tempo boundary restores exact sample position");
     }
     {auto w=wire(map);check(project::decodePlan(w,{})!=nullptr,"version 3 tempo wire decodes");auto bad=w;bad.back()=2;check(!project::decodePlan(bad,{}),"reject nonboolean ramp");Temp f;
-        std::array<synth::Patch,16> patches{};std::array<fx::Config,16> effects{};std::array<float,project::kMixValues> mix{};mix[0]=145;mix[1]=.7;mix[3]=80;for(int t=0;t<16;++t)mix[4+t*6]=.8;
+        std::array<synth::Patch,astra::kTrackCount> patches{};std::array<fx::Config,astra::kTrackCount> effects{};std::array<float,project::kMixValues> mix{};mix[0]=145;mix[1]=.7;mix[3]=80;for(int t=0;t<16;++t)mix[4+t*6]=.8;
         check(project::renderWave(f.path,w,{},patches,effects,mix,48000,0,cancel,progress,true)==0,"tempo map float export");auto audio=project::readSample(f.path,project::kSampleBudget);check(audio&&audio->frames()==288000,"export duration includes tempo changes");
         auto core=std::make_unique<RenderCore>();check(core->setProject(w,{}),"live tempo map");core->enqueue({CommandType::Transport,0,0,0,1});std::array<float,1024> output{};
         inRender=true;for(int i=0;i<375;++i)core->render(output.data(),512);inRender=false;

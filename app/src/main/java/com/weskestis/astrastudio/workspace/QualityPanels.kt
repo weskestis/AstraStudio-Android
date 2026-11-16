@@ -70,8 +70,8 @@ import kotlin.math.*
     else Text(result.exceptionOrNull()?.message?:"Enter a valid length and pitch.",fontSize=12.sp,color=Muted)
     Text("Pitch and duration are independent. Best transparency is usually near 75–150% length; large shifts can soften attacks or add texture. No automatic loudness boost or normalization is applied.",fontSize=12.sp,color=Muted)
     Text("This creates a new clip in the next free scene on this track and a sample in Stretched. Originals remain editable. The result has a fixed duration and does not automatically follow later BPM changes.",fontSize=12.sp,color=Muted)
-    Action("Render stretch",frames!=null&&!s.busy&&s.project.emptySlot(slot%16)!=null,"Render stretch"){focus.clearFocus();keyboard?.hide();service.stretchClip(slot,target!!,shift!!)}
-    if(s.project.emptySlot(slot%16)==null)Text("Free a clip slot on this track first.",color=Green)
+    Action("Render stretch",frames!=null&&!s.busy&&s.project.emptySlot(slot%ProjectLimits.TRACKS)!=null,"Render stretch"){focus.clearFocus();keyboard?.hide();service.stretchClip(slot,target!!,shift!!)}
+    if(s.project.emptySlot(slot%ProjectLimits.TRACKS)==null)Text("Free a clip slot on this track first.",color=Green)
     Text(s.message,color=Green,modifier=Modifier.padding(vertical=12.dp))
     Action("Open samples",click=openSamples)
 }

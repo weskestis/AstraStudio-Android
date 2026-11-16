@@ -159,17 +159,17 @@ int main() {
     }
     {
         auto core=std::make_unique<RenderCore>(); std::array<float,512> out{};
-        for(int i=0;i<64;++i)check(core->setPatch(i%16,preset(i%8)),"fill patch mailbox");
+        for(int i=0;i<kPatchSlots;++i)check(core->setPatch(i%kTrackCount,preset(i%8)),"fill patch mailbox");
         check(!core->setPatch(0,preset(0)),"mailbox backpressure");
         render(*core,out.data(),256);
-        for(int i=0;i<64;++i)check(core->setPatch(i%16,preset(i%8)),"mailbox slots recycled");
+        for(int i=0;i<kPatchSlots;++i)check(core->setPatch(i%kTrackCount,preset(i%8)),"mailbox slots recycled");
         core->panic();render(*core,out.data(),256);
-        for(int i=0;i<64;++i)check(core->setPatch(i%16,preset(i%8)),"panic releases queued patch slots");
+        for(int i=0;i<kPatchSlots;++i)check(core->setPatch(i%kTrackCount,preset(i%8)),"panic releases queued patch slots");
         render(*core,out.data(),256);
     }
     {
         auto core=std::make_unique<RenderCore>(); std::atomic<bool> done{false};
-        std::thread producer([&]{for(int i=0;i<1000;++i){auto p=preset(i%8);while(!core->setPatch(i%16,p))std::this_thread::yield();}done.store(true,std::memory_order_release);});
+        std::thread producer([&]{for(int i=0;i<1000;++i){auto p=preset(i%8);while(!core->setPatch(i%kTrackCount,p))std::this_thread::yield();}done.store(true,std::memory_order_release);});
         std::array<float,256> out{};
         do {render(*core,out.data(),128);}while(!done.load(std::memory_order_acquire));
         producer.join();render(*core,out.data(),128);

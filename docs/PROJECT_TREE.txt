@@ -11,6 +11,7 @@ app/src/main/assets/THIRD_PARTY_LICENSES.txt
 app/src/main/cpp/AudioEngine.cpp
 app/src/main/cpp/AudioEngine.h
 app/src/main/cpp/CMakeLists.txt
+app/src/main/cpp/core/Limits.h
 app/src/main/cpp/core/RenderCore.cpp
 app/src/main/cpp/core/RenderCore.h
 app/src/main/cpp/core/SpscRing.h
@@ -56,6 +57,7 @@ app/src/main/cpp/project/WaveWriter.h
 app/src/main/cpp/sampler/Sampler.cpp
 app/src/main/cpp/sampler/Sampler.h
 app/src/main/cpp/tests/AllocationTracker.cpp
+app/src/main/cpp/tests/CapacityTests.cpp
 app/src/main/cpp/tests/CoreTests.cpp
 app/src/main/cpp/tests/FxTests.cpp
 app/src/main/cpp/tests/MasterTests.cpp
@@ -96,6 +98,7 @@ app/src/main/java/com/weskestis/astrastudio/project/FactorySamples.kt
 app/src/main/java/com/weskestis/astrastudio/project/FinishedTracks.kt
 app/src/main/java/com/weskestis/astrastudio/project/ProjectCodec.kt
 app/src/main/java/com/weskestis/astrastudio/project/ProjectFiles.kt
+app/src/main/java/com/weskestis/astrastudio/project/ProjectLimits.kt
 app/src/main/java/com/weskestis/astrastudio/project/ProjectModel.kt
 app/src/main/java/com/weskestis/astrastudio/project/Resampling.kt
 app/src/main/java/com/weskestis/astrastudio/project/SampleInstrument.kt
@@ -126,6 +129,8 @@ app/src/main/res/xml/finished_paths.xml
 app/src/test/java/com/weskestis/astrastudio/astra/AstraTests.kt
 app/src/test/java/com/weskestis/astrastudio/fx/FxConfigTest.kt
 app/src/test/java/com/weskestis/astrastudio/midi/MidiDecoderTest.kt
+app/src/test/java/com/weskestis/astrastudio/project/CapacityTests.kt
+app/src/test/java/com/weskestis/astrastudio/project/LegacyFixture.kt
 app/src/test/java/com/weskestis/astrastudio/project/ProjectTests.kt
 app/src/test/java/com/weskestis/astrastudio/project/SamplerTests.kt
 app/src/test/java/com/weskestis/astrastudio/project/StorageTests.kt
@@ -136,6 +141,7 @@ app/src/test/java/com/weskestis/astrastudio/synth/SynthPatchTest.kt
 build.gradle.kts
 docs/ARCHITECTURE.md
 docs/ASTRA.md
+docs/CAPACITY.md
 docs/EFFECTS.md
 docs/PROJECT_TREE.txt
 docs/QUALITY.md
@@ -156,7 +162,9 @@ scripts/test-interface.sh
 scripts/test-native.sh
 settings.gradle.kts
 signing/astra-development.keystore
+tools/capacity-schema.json
 tools/fx-schema.json
+tools/generate_capacity_schema.py
 tools/generate_fx_schema.py
 tools/generate_synth_schema.py
 tools/synth-schema.json

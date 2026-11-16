@@ -1,5 +1,7 @@
 package com.weskestis.astrastudio.astra
 
+import com.weskestis.astrastudio.project.ProjectLimits
+
 import com.weskestis.astrastudio.project.ProjectDocument
 import com.weskestis.astrastudio.synth.SynthSchema
 import org.json.JSONObject
@@ -17,7 +19,7 @@ object OfflineCommands {
     )
     private fun pattern(s: String) = Regex(s,RegexOption.IGNORE_CASE)
     fun compile(raw: String, selectedSlot: Int, d: ProjectDocument): String {
-        require(selectedSlot in 0..127 && raw.length<=8000)
+        require(selectedSlot in 0 until ProjectLimits.CLIPS && raw.length<=8000)
         val text=raw.trim().trimEnd('.').replace(Regex("\\s+")," ")
         require(text.isNotBlank()) { "Type a music command first." }
         if(text.startsWith("{")||text.startsWith("```json")) return raw
@@ -30,8 +32,8 @@ object OfflineCommands {
         phrase.matchEntire(text)?.let { match ->
             val g=match.groupValues
             fun integer(value: String, fallback: Int): Int = if(value.isEmpty())fallback else value.toIntOrNull()?:error("That number is too large.")
-            val track=integer(g[5],selectedSlot%16+1);require(track in 1..16){"Choose track 1–16."}
-            val scene=if(g[6].isNotEmpty())integer(g[6],1) else if(d.project.clip(selectedSlot)==null && track==selectedSlot%16+1) selectedSlot/16+1 else (d.project.emptySlot(track-1)?.div(16)?.plus(1)?:error("Track $track has no empty scene. Select another track or use JSON with explicit replacement."))
+            val track=integer(g[5],selectedSlot%ProjectLimits.TRACKS+1);require(track in 1..ProjectLimits.TRACKS){"Choose track 1–${ProjectLimits.TRACKS}."}
+            val scene=if(g[6].isNotEmpty())integer(g[6],1) else if(d.project.clip(selectedSlot)==null && track==selectedSlot%ProjectLimits.TRACKS+1) selectedSlot/ProjectLimits.TRACKS+1 else (d.project.emptySlot(track-1)?.div(ProjectLimits.TRACKS)?.plus(1)?:error("Track $track has no empty scene. Select another track or use JSON with explicit replacement."))
             val style=when(g[2].lowercase(Locale.ROOT)){"dubstep"->"riddim";"hi-hat"->"hats";else->g[2].lowercase(Locale.ROOT)}
             if(g[1].isNotEmpty())out+=cmd("tempo","bpm" to g[1].toDouble())
             out+=cmd("pattern","track" to track,"scene" to scene,"style" to style,"root" to g[3].ifBlank{"F"}.replace(" sharp","#",true).replace(" flat","b",true),"scale" to g[4].ifBlank{"minor"}.lowercase(Locale.ROOT),"bars" to integer(g[7],4),"seed" to 0)

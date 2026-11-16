@@ -17,6 +17,6 @@ private:
     Config config_;Values values_{},target_{};std::array<float,kUnits> unitMix_{};
     Equalizer eq_;Multiband multiband_;Saturator saturator_;Sidechain sidechain_;PingPong delay_;Reverb reverb_;Chorus chorus_;ModulationFx modulation_;
     FixedDelay<latency> dry_,parallelPad_,detectorDelay_;
-    Stereo last_{},tail_{};float rate_{48000},bpm_{145},smooth_{.004f},controlSmooth_{.1f};int countdown_{},fade_{};bool dirty_{true};
+    Stereo last_{},tail_{};float rate_{48000},bpm_{145},smooth_{.004f},controlSmooth_{.1f},outputGain_{1};int countdown_{},fade_{};bool dirty_{true},bypassed_{true};
 };
 } // namespace astra::fx

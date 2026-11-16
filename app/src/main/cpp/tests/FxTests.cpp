@@ -153,7 +153,7 @@ int main(){
     }
     {
         auto core=std::make_unique<RenderCore>();std::vector<float> out(48000*2);Config c=preset(2);c[ReverbFreeze]=1;
-        for(int i=0;i<32;++i)check(core->setEffects(0,c),"FX mailbox capacity");
+        for(int i=0;i<kFxSlots;++i)check(core->setEffects(i%kTrackCount,c),"FX mailbox capacity");
         check(!core->setEffects(0,c),"FX mailbox backpressure");
         render(*core,out.data(),128);
         check(core->setEffects(0,c),"FX mailbox recycled");

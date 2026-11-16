@@ -12,8 +12,8 @@ data class Clip(val slot: Int,val name: String="MIDI clip",val length: Double=16
     val notes: List<MidiNote> = emptyList(),val automation: List<List<AutoPoint>> = List(4){emptyList()},
     val asset: Int = -1,val first: Long = 0,val last: Long = 0,val root: Int = 5,val minor: Boolean = true,
     val warp: Boolean=false,val sourceBpm: Double=120.0,val warpStart: Long=0,val pitch: Double=0.0) {
-    val track get()=slot%16
-    val scene get()=slot/16
+    val track get()=slot%ProjectLimits.TRACKS
+    val scene get()=slot/ProjectLimits.TRACKS
     val isAudio get()=asset>=0
     fun note(id: Int)=notes.firstOrNull{it.id==id}
     fun nextId()=(notes.maxOfOrNull{it.id}?:0)+1
@@ -47,7 +47,7 @@ data class Clip(val slot: Int,val name: String="MIDI clip",val length: Double=16
 data class Region(val id: Int,val slot: Int,val beat: Double,val length: Double,val offset: Double=0.0,val audioOffset: Long=0)
 data class Project(val name: String="Untitled",val numerator: Int=4,val denominator: Int=4,
     val mode: Int=0,val quantization: Int=0,val loop: Boolean=false,val loopStart: Double=0.0,val loopEnd: Double=16.0,
-    val clips: List<Clip> = emptyList(),val regions: List<Region> = emptyList(),val assets: List<AudioAsset> = emptyList(),val instruments: List<SampleInstrument> = List(16){SampleInstrument()},val tempoPoints: List<TempoPoint> = emptyList(),val tempoEnabled: Boolean=false) {
+    val clips: List<Clip> = emptyList(),val regions: List<Region> = emptyList(),val assets: List<AudioAsset> = emptyList(),val instruments: List<SampleInstrument> = List(ProjectLimits.TRACKS){SampleInstrument()},val tempoPoints: List<TempoPoint> = emptyList(),val tempoEnabled: Boolean=false) {
     val barBeats get()=numerator*4.0/denominator
     val launchBeats get()=when(quantization){1->1.0;2->.5;else->barBeats}
     fun timelineSeconds(first: Double,last: Double,bpm: Float)=TempoMap.seconds(if(tempoEnabled)tempoPoints else emptyList(),first,last,bpm)
@@ -57,9 +57,9 @@ data class Project(val name: String="Untitled",val numerator: Int=4,val denomina
     fun asset(id: Int)=assets.firstOrNull{it.id==id}
     fun put(clip: Clip)=copy(clips=clips.filter{it.slot!=clip.slot}+clip)
     fun remove(slot: Int)=copy(clips=clips.filter{it.slot!=slot},regions=regions.filter{it.slot!=slot})
-    fun emptySlot(track: Int)=(0..7).map{it*16+track}.firstOrNull{clip(it)==null}
+    fun emptySlot(track: Int)=(0..7).map{it*ProjectLimits.TRACKS+track}.firstOrNull{clip(it)==null}
     fun duplicate(slot: Int,target: Int): Project {val source=clip(slot)?:error("Choose a clip first.");require(clip(target)==null){"That slot is occupied."};return put(source.copy(slot=target,name=(source.name+" copy").take(64)))}
-    fun place(slot: Int,at: Double): Project {val c=clip(slot)?:error("Choose a clip first.");require(regions.size<512){"The arrangement holds up to 512 regions."}
+    fun place(slot: Int,at: Double): Project {val c=clip(slot)?:error("Choose a clip first.");require(regions.size<ProjectLimits.REGIONS){"The arrangement holds up to ${ProjectLimits.REGIONS} regions."}
         val r=Region((regions.maxOfOrNull{it.id}?:0)+1,slot,at.coerceAtLeast(0.0),c.length)
         val next=copy(regions=regions+r);require(next.valid()){ "That region overlaps another clip or exceeds the timeline." };return next}
     fun editRegion(id: Int,beat: Double?=null,length: Double?=null): Project {val next=copy(regions=regions.map{if(it.id==id)it.copy(beat=beat?:it.beat,length=length?:it.length) else it});require(next.valid()){ "Regions on one track cannot overlap." };return next}
@@ -75,7 +75,7 @@ data class Project(val name: String="Untitled",val numerator: Int=4,val denomina
         val next=copy(regions=regions.filter{it.id!=id}+r.copy(length=left)+b);require(next.valid());return next
     }
     fun nativeWire(): DoubleArray {
-        val data=ArrayList<Double>();data.addAll(listOf(4.0,mode.toDouble(),numerator.toDouble(),denominator.toDouble(),if(loop)1.0 else 0.0,loopStart,loopEnd,clips.size.toDouble(),regions.size.toDouble()))
+        val data=ArrayList<Double>();data.addAll(listOf(5.0,mode.toDouble(),numerator.toDouble(),denominator.toDouble(),if(loop)1.0 else 0.0,loopStart,loopEnd,clips.size.toDouble(),regions.size.toDouble()))
         for(c in clips.sortedBy{it.slot}) {
             data.addAll(listOf(c.slot.toDouble(),c.length,c.asset.toDouble(),c.first.toDouble(),c.last.toDouble(),c.notes.size.toDouble(),c.automation.sumOf{it.size}.toDouble()))
             for(n in c.notes)data.addAll(listOf(n.beat,n.length,n.pitch.toDouble(),n.velocity.toDouble()))
@@ -91,13 +91,13 @@ data class Project(val name: String="Untitled",val numerator: Int=4,val denomina
         if(!TempoMap.valid(tempoPoints,tempoEnabled))return false;
         if(name.isBlank()||name.length>64||name.any{it.isISOControl()}||numerator !in 1..12||denominator !in listOf(2,4,8)||mode !in 0..1||quantization !in 0..2)return false
         if(!loopStart.isFinite()||!loopEnd.isFinite()||loopStart<0||loopEnd<=loopStart||loopEnd>65536)return false
-        if(clips.size>128||clips.map{it.slot}.toSet().size!=clips.size||regions.size>512||regions.map{it.id}.toSet().size!=regions.size)return false
-        if(instruments.size!=16||instruments.any{!it.valid(assets)})return false
+        if(clips.size>ProjectLimits.CLIPS||clips.map{it.slot}.toSet().size!=clips.size||regions.size>ProjectLimits.REGIONS||regions.map{it.id}.toSet().size!=regions.size)return false
+        if(instruments.size!=ProjectLimits.TRACKS||instruments.any{!it.valid(assets)})return false
         if(assets.size>64||assets.map{it.id}.toSet().size!=assets.size||assets.sumOf{it.frames}>AudioStorage.MAX_PROJECT_FRAMES)return false
         for(a in assets)if(a.id !in 0..63||a.rate !in 8000..384000||a.frames !in 1..AudioStorage.MAX_ASSET_FRAMES||!a.file.matches(Regex("[A-Za-z0-9_-]{1,100}\\.wav"))||a.name.isBlank()||a.name.length>128||a.group.length>64||a.waveform.size!=1024||a.waveform.any{!it.isFinite()||abs(it)>8})return false
         for(c in clips){
             if(!c.sourceBpm.isFinite()||c.sourceBpm !in 30.0..300.0||!c.pitch.isFinite()||c.pitch !in -24.0..24.0||c.warpStart<0||(!c.isAudio&&(c.warp||c.warpStart!=0L||c.pitch!=0.0)))return false
-            if(c.slot !in 0..127||c.name.isBlank()||c.name.length>64||!c.length.isFinite()||c.length !in .0625..65536.0||c.root !in 0..11||c.asset !in -1..63||c.first<0||c.last<0||c.notes.size>256||c.notes.map{it.id}.toSet().size!=c.notes.size||c.automation.size!=4)return false
+            if(c.slot !in 0 until ProjectLimits.CLIPS||c.name.isBlank()||c.name.length>64||!c.length.isFinite()||c.length !in .0625..65536.0||c.root !in 0..11||c.asset !in -1..63||c.first<0||c.last<0||c.notes.size>256||c.notes.map{it.id}.toSet().size!=c.notes.size||c.automation.size!=4)return false
             if(c.isAudio){val a=asset(c.asset)?:return false;if(c.last<=c.first||c.last>a.frames||c.notes.isNotEmpty()||c.warpStart>=c.last-c.first)return false}
             for(n in c.notes)if(n.id !in 1..1000000000||!n.beat.isFinite()||!n.length.isFinite()||n.beat<0||n.length<1.0/960||n.beat+n.length>c.length+1e-8||n.pitch !in 0..127||!n.velocity.isFinite()||n.velocity !in .001f..1f)return false
             for(lane in 0..3){val points=c.automation[lane];if(points.size>64)return false;var last=-1.0
@@ -107,13 +107,13 @@ data class Project(val name: String="Untitled",val numerator: Int=4,val denomina
             if(r.id !in 1..1000000000||!r.beat.isFinite()||!r.length.isFinite()||!r.offset.isFinite()||r.beat<0||r.length<1.0/960||r.beat+r.length>65536||r.offset !in 0.0..65536.0||r.audioOffset<0)return false
             if(c.isAudio&&r.audioOffset>=c.last-c.first)return false
         }
-        for(track in 0..15){var end=0.0;for(r in regions.filter{it.slot%16==track}.sortedBy{it.beat}){if(r.beat<end-1e-8)return false;end=r.beat+r.length}}
+        for(track in 0 until ProjectLimits.TRACKS){var end=0.0;for(r in regions.filter{it.slot%ProjectLimits.TRACKS==track}.sortedBy{it.beat}){if(r.beat<end-1e-8)return false;end=r.beat+r.length}}
         return true
     }
 }
 data class ProjectDocument(val project: Project,val bpm: Float,val master: Float,val limiterDrive: Float,val limiterRelease: Float,
     val tracks: List<TrackControls>,val patches: List<SynthPatch>,val effects: List<FxConfig>) {
-    fun valid()=project.valid()&&bpm.isFinite()&&bpm in 30f..300f&&master.isFinite()&&master in 0f..1f&&limiterDrive.isFinite()&&limiterDrive in 0f..24f&&limiterRelease.isFinite()&&limiterRelease in 20f..500f&&tracks.size==16&&patches.size==16&&effects.size==16&&tracks.all{
+    fun valid()=project.valid()&&bpm.isFinite()&&bpm in 30f..300f&&master.isFinite()&&master in 0f..1f&&limiterDrive.isFinite()&&limiterDrive in 0f..24f&&limiterRelease.isFinite()&&limiterRelease in 20f..500f&&tracks.size==ProjectLimits.TRACKS&&patches.size==ProjectLimits.TRACKS&&effects.size==ProjectLimits.TRACKS&&tracks.all{
         it.gain.isFinite()&&it.gain in 0f..2f&&it.pan.isFinite()&&it.pan in -1f..1f&&it.sendA.isFinite()&&it.sendA in 0f..1f&&it.sendB.isFinite()&&it.sendB in 0f..1f&&it.name.length<=32}
     fun mixWire()=(listOf(bpm,master,limiterDrive,limiterRelease)+tracks.flatMap{listOf(it.gain,it.pan,if(it.mute)1f else 0f,if(it.solo)1f else 0f,it.sendA,it.sendB)}).toFloatArray()
 }
@@ -131,4 +131,4 @@ class ProjectHistory {
     fun redo(current: ProjectDocument): ProjectDocument? {end();if(redo.isEmpty())return null;undo.addLast(current);return redo.removeLast()}
     fun clear(){undo.clear();redo.clear();end()}
 }
-data class SequenceStats(val active: List<Int> = List(16){-1},val queued: List<Int> = List(16){-2},val phase: List<Float> = List(16){0f},val mode: Int=0)
+data class SequenceStats(val active: List<Int> = List(ProjectLimits.TRACKS){-1},val queued: List<Int> = List(ProjectLimits.TRACKS){-2},val phase: List<Float> = List(ProjectLimits.TRACKS){0f},val mode: Int=0)

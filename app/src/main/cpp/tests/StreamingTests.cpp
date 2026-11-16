@@ -60,7 +60,7 @@ int main(){
         for(int frame=0;frame<2200;++frame)for(int t=0;t<16;++t){inRender=true;const auto v=voices[t].tick(*kernel);inRender=false;
             const auto expected=referenceVoices[t].tick(*kernel);if(v.l!=expected.l||v.r!=expected.r)std::fprintf(stderr,"voice frame=%d track=%d got=%g,%g expected=%g,%g misses=%llu\n",frame,t,v.l,v.r,expected.l,expected.r,(unsigned long long)streamed->misses());check(v.l==expected.l&&v.r==expected.r,"sixteen looping forward/reverse streamed sampler voices match resident voices");}
     }
-    Samples a{},b{};a[0]=streamed;b[0]=resident;std::array<synth::Patch,16> patches{};std::array<fx::Config,16> effects{};std::atomic<float> progress{0};
+    Samples a{},b{};a[0]=streamed;b[0]=resident;std::array<synth::Patch,astra::kTrackCount> patches{};std::array<fx::Config,astra::kTrackCount> effects{};std::atomic<float> progress{0};
     const auto w=wire(450001,480001);const auto m=mix();
     check(renderWave(out.c_str(),w,a,patches,effects,m,48000,0,cancel,progress,true)==0,"streamed export completes");
     check(renderWave(ref.c_str(),w,b,patches,effects,m,48000,0,cancel,progress,true)==0,"resident reference export");

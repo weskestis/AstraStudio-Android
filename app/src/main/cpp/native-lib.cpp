@@ -149,9 +149,9 @@ extern "C" JNIEXPORT jboolean JNICALL
 Java_com_weskestis_astrastudio_audio_AudioBridge_nativeReadFxStats(JNIEnv* env,jobject,jlong handle,jobject buffer) {
     if(!buffer)return JNI_FALSE;
     auto* address=env->GetDirectBufferAddress(buffer);
-    if(!address||env->GetDirectBufferCapacity(buffer)<133*static_cast<jlong>(sizeof(float)))return JNI_FALSE;
+    if(!address||env->GetDirectBufferCapacity(buffer)<astra::kFxValues*static_cast<jlong>(sizeof(float)))return JNI_FALSE;
     std::lock_guard guard(registryMutex);auto* engine=findEngine(handle);if(!engine)return JNI_FALSE;
-    const auto s=engine->effectsSnapshot();std::array<float,133> values{};int at=0;
+    const auto s=engine->effectsSnapshot();std::array<float,astra::kFxValues> values{};int at=0;
     for(float v:s.sidechain)values[at++]=v;
     for(float v:s.bands)values[at++]=v;
     values[at++]=s.limiterReduction;values[at++]=s.latency;
@@ -166,7 +166,7 @@ struct Utf {JNIEnv* env; jstring value;const char* text;Utf(JNIEnv* e,jstring v)
 }
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_weskestis_astrastudio_audio_AudioBridge_nativeSetProject(JNIEnv* env,jobject,jlong handle,jdoubleArray data){
-    if(!data||env->GetArrayLength(data)>400000)return JNI_FALSE;
+    if(!data||env->GetArrayLength(data)>astra::kProjectWireLimit)return JNI_FALSE;
     try{std::vector<double> wire(static_cast<std::size_t>(env->GetArrayLength(data)));env->GetDoubleArrayRegion(data,0,static_cast<jsize>(wire.size()),wire.data());if(env->ExceptionCheck())return JNI_FALSE;
         std::lock_guard guard(registryMutex);auto* engine=findEngine(handle);return engine&&engine->setProject(wire)?JNI_TRUE:JNI_FALSE;
     }catch(const std::bad_alloc&){return JNI_FALSE;}
@@ -174,9 +174,9 @@ Java_com_weskestis_astrastudio_audio_AudioBridge_nativeSetProject(JNIEnv* env,jo
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_weskestis_astrastudio_audio_AudioBridge_nativeReadSequence(JNIEnv* env,jobject,jlong handle,jobject buffer){
     if(!buffer)return JNI_FALSE;auto* address=env->GetDirectBufferAddress(buffer);
-    if(!address||env->GetDirectBufferCapacity(buffer)<49*static_cast<jlong>(sizeof(float)))return JNI_FALSE;
-    std::lock_guard guard(registryMutex);auto* engine=findEngine(handle);if(!engine)return JNI_FALSE;const auto s=engine->sequenceSnapshot();std::array<float,49> values{};
-    for(int t=0;t<16;++t){values[t]=static_cast<float>(s.active[t]);values[16+t]=static_cast<float>(s.queued[t]);values[32+t]=s.phase[t];}values[48]=static_cast<float>(s.mode);
+    if(!address||env->GetDirectBufferCapacity(buffer)<astra::kSequenceValues*static_cast<jlong>(sizeof(float)))return JNI_FALSE;
+    std::lock_guard guard(registryMutex);auto* engine=findEngine(handle);if(!engine)return JNI_FALSE;const auto s=engine->sequenceSnapshot();std::array<float,astra::kSequenceValues> values{};
+    for(int t=0;t<astra::kTrackCount;++t){values[t]=static_cast<float>(s.active[t]);values[astra::kTrackCount+t]=static_cast<float>(s.queued[t]);values[2*astra::kTrackCount+t]=s.phase[t];}values[3*astra::kTrackCount]=static_cast<float>(s.mode);
     std::memcpy(address,values.data(),sizeof(values));return JNI_TRUE;
 }
 extern "C" JNIEXPORT jboolean JNICALL
@@ -204,16 +204,16 @@ Java_com_weskestis_astrastudio_audio_AudioBridge_nativeAssetInfo(JNIEnv* env,job
 }
 extern "C" JNIEXPORT jint JNICALL
 Java_com_weskestis_astrastudio_audio_AudioBridge_nativeExport(JNIEnv* env,jobject,jlong handle,jstring path,jdoubleArray data,jfloatArray patchData,jfloatArray effectData,jfloatArray mixData,jint rate,jfloat tail,jboolean floating,jint sourceTrack){
-    if(!path||!data||!patchData||!effectData||!mixData||env->GetArrayLength(data)>400000||
-       env->GetArrayLength(patchData)!=16*astra::synth::kWireCount||env->GetArrayLength(effectData)!=16*astra::fx::kWireCount||env->GetArrayLength(mixData)!=astra::project::kMixValues)return 1;
+    if(!path||!data||!patchData||!effectData||!mixData||env->GetArrayLength(data)>astra::kProjectWireLimit||
+       env->GetArrayLength(patchData)!=astra::kTrackCount*astra::synth::kWireCount||env->GetArrayLength(effectData)!=astra::kTrackCount*astra::fx::kWireCount||env->GetArrayLength(mixData)!=astra::project::kMixValues)return 1;
     bool expected=false;if(!exportBusy.compare_exchange_strong(expected,true))return 1;
     struct Done{~Done(){exportBusy.store(false);}}done;exportCancel=false;exportProgress=0;
     try{astra::project::Samples samples;{std::lock_guard guard(registryMutex);auto* e=findEngine(handle);if(!e)return 1;samples=e->samples;}
         Utf output(env,path);if(!output.text)return 2;
         std::vector<double> wire(static_cast<std::size_t>(env->GetArrayLength(data)));env->GetDoubleArrayRegion(data,0,static_cast<jsize>(wire.size()),wire.data());
-        std::array<astra::synth::Patch,16> patches;std::array<astra::fx::Config,16> effects;std::array<float,astra::project::kMixValues> mix;
+        std::array<astra::synth::Patch,astra::kTrackCount> patches;std::array<astra::fx::Config,astra::kTrackCount> effects;std::array<float,astra::project::kMixValues> mix;
         env->GetFloatArrayRegion(mixData,0,astra::project::kMixValues,mix.data());
-        for(int i=0;i<16;++i){std::array<float,astra::synth::kWireCount> p;env->GetFloatArrayRegion(patchData,i*astra::synth::kWireCount,astra::synth::kWireCount,p.data());if(!patches[i].decode(p))return 1;
+        for(int i=0;i<astra::kTrackCount;++i){std::array<float,astra::synth::kWireCount> p;env->GetFloatArrayRegion(patchData,i*astra::synth::kWireCount,astra::synth::kWireCount,p.data());if(!patches[i].decode(p))return 1;
             std::array<float,astra::fx::kWireCount> f;env->GetFloatArrayRegion(effectData,i*astra::fx::kWireCount,astra::fx::kWireCount,f.data());if(!effects[i].decode(f))return 1;}
         if(env->ExceptionCheck())return 1;
         return astra::project::renderWave(output.text,wire,samples,patches,effects,mix,rate,tail,exportCancel,exportProgress,floating,sourceTrack);

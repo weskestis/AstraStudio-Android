@@ -31,7 +31,7 @@ void header(const char* path,int rate,int bits,int64_t frames){auto* f=std::fope
 }
 }
 int main(){
-    std::atomic<bool> cancel{false};std::atomic<float> progress{};auto m=mix();std::array<synth::Patch,16> patches{};std::array<fx::Config,16> effects{};
+    std::atomic<bool> cancel{false};std::atomic<float> progress{};auto m=mix();std::array<synth::Patch,astra::kTrackCount> patches{};std::array<fx::Config,astra::kTrackCount> effects{};
     Samples samples{};samples[0]=tone(48000,55);const auto wire=audioWire(samples[0]->frames());
     for(int rate:kExportRates){Temp f;check(renderWave(f.path,wire,samples,patches,effects,m,rate,.125f,cancel,progress,false)==0,"supported rate renders PCM24");header(f.path,rate,24,rate/2+static_cast<int64_t>(std::ceil(rate*.125)));check(progress==1,"render progress reaches one");}
     {Temp f;for(int rate:{0,12345,384000})check(renderWave(f.path,wire,samples,patches,effects,m,rate,0,cancel,progress,false)==1,"unsupported master rate rejected");
@@ -58,7 +58,7 @@ int main(){
     {Temp f;check(renderWave(f.path,midiWire(),Samples{},patches,effects,m,192000,0,cancel,progress,false)==0,"MIDI synth master renders directly at 192 kHz");auto s=readSample(f.path,kSampleBudget);check(s&&magnitude(*s,440)>.001,"synth note keeps A4 tuning");}
     {auto kernel=std::make_unique<sampler::Kernel>();Sequencer seq;check(seq.prepare(192000,kernel.get()),"192 kHz Warp preparation");Plan p;p.mode=1;p.samples[0]=tone(48000,220);auto& c=p.clips[0];c.present=true;c.asset=0;c.last=p.samples[0]->frames();c.length=1;c.warp=true;c.sourceBpm=120;p.regions[0]={{1,0,0,1,0,0}};p.tempo={true,{{0,90,false},{.5,120,true}}};seq.activate(&p);
         Sample out;out.rate=192000;out.stereo.resize(192000);TempoClock clock;double beat=0;
-        inRender=true;for(int i=0;i<96000;++i){std::array<fx::Stereo,16> audio{};seq.tick(beat,120,audio);out.stereo[2*i]=audio[0].l;out.stereo[2*i+1]=audio[0].r;beat=clock.tick(&p.tempo,beat,120,192000);}inRender=false;
+        inRender=true;for(int i=0;i<96000;++i){std::array<fx::Stereo,astra::kTrackCount> audio{};seq.tick(beat,120,audio);out.stereo[2*i]=audio[0].l;out.stereo[2*i+1]=audio[0].r;beat=clock.tick(&p.tempo,beat,120,192000);}inRender=false;
         check(magnitude(out,220)>.15,"warped 48 kHz source retains pitch during 192 kHz tempo-map rendering");}
     cancel=true;{Temp f;check(renderWave(f.path,wire,samples,patches,effects,m,192000,0,cancel,progress,false)==3,"high-rate export cancellation");}
     check(realtimeAllocations==0&&realtimeDeallocations==0,"high-rate DSP, Warp and comb allocate/free nothing during render");

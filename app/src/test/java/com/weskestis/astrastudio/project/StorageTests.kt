@@ -9,11 +9,11 @@ import org.junit.Test
 
 class StorageTests {
     private fun asset(id: Int,frames: Long)=AudioAsset(id,"Long take","take$id.wav",48000,frames,List(1024){0f})
-    private fun doc(p: Project)=ProjectDocument(p,120f,.7f,0f,80f,List(16){TrackControls()},List(16){SynthPatch.initial()},List(16){FxConfig.initial()})
+    private fun doc(p: Project)=ProjectDocument(p,120f,.7f,0f,80f,List(ProjectLimits.TRACKS){TrackControls()},List(ProjectLimits.TRACKS){SynthPatch.initial()},List(ProjectLimits.TRACKS){FxConfig.initial()})
     private fun rejects(f: ()->Unit)=assertTrue(runCatching(f).isFailure)
     @Test fun largeSourceAndFrameOffsetsSurviveProjectRoundTrip(){val a=asset(0,100000000);val p=Project(assets=listOf(a),clips=listOf(Clip(0,asset=0,first=70000000,last=71000000)))
-        assertTrue(p.valid());val d=doc(p);val json=ProjectCodec.encode(d);assertEquals(5,JSONObject(json).getInt("version"));assertEquals(d,ProjectCodec.decode(json));assertEquals(70000000.0,p.nativeWire()[12],0.0)}
-    @Test fun oldProjectFormatsRetainMetadata(){val d=doc(Project(assets=listOf(asset(0,48000))));for(version in 1..4){val json=JSONObject(ProjectCodec.encode(d)).put("version",version);assertEquals(d,ProjectCodec.decode(json.toString()))}}
+        assertTrue(p.valid());val d=doc(p);val json=ProjectCodec.encode(d);assertEquals(6,JSONObject(json).getInt("version"));assertEquals(d,ProjectCodec.decode(json));assertEquals(70000000.0,p.nativeWire()[12],0.0)}
+    @Test fun oldProjectFormatsRetainMetadata(){val d=doc(Project(assets=listOf(asset(0,48000))));for(version in 1..4){val json=legacyJson(d,version);assertEquals(d,ProjectCodec.decode(json.toString()))}}
     @Test fun perSourceAndTotalCapacityAreIndependent(){val full=Project(assets=List(4){asset(it,AudioStorage.MAX_ASSET_FRAMES)});assertTrue(full.valid());assertFalse(full.copy(assets=full.assets+asset(4,1)).valid());assertFalse(Project(assets=listOf(asset(0,AudioStorage.MAX_ASSET_FRAMES+1))).valid());assertFalse(AudioStorage.canAdd(full,1));assertTrue(AudioStorage.canAdd(Project(),100000000))}
     @Test fun sampleSlotsStillHaveAnExplicitBound(){val full=Project(assets=List(64){asset(it,1)});assertTrue(full.valid());assertFalse(AudioStorage.canAdd(full,1));assertFalse(full.copy(assets=full.assets+asset(64,1)).valid())}
     @Test fun renderCapacityReservesWaveHeader(){assertTrue(AudioStorage.canAdd(Project(),AudioStorage.MAX_RENDER_FRAMES));assertFalse(AudioStorage.canAdd(Project(),AudioStorage.MAX_RENDER_FRAMES+1));assertFalse(AudioStorage.canAdd(Project(),Long.MAX_VALUE));assertFalse(AudioStorage.canAdd(Project(),0))}

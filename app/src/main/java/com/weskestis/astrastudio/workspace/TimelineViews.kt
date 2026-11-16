@@ -5,6 +5,7 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -26,19 +27,24 @@ import kotlin.math.*
 @Composable
 internal fun SessionView(s: StudioState,selected: Int,select: (Int)->Unit,edit: (Int)->Unit,create: (Int)->Unit,
     launch: (Int)->Unit,scene: (Int)->Unit,stop: (Int)->Unit,mixer: (Int)->Unit,phase: (Int)->Float){
+    val tracks=rememberLazyListState()
+    LaunchedEffect(selected%ProjectLimits.TRACKS){
+        val target=selected%ProjectLimits.TRACKS
+        if(tracks.layoutInfo.visibleItemsInfo.none{it.index==target})tracks.scrollToItem(target)
+    }
     Row(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("Session grid")){
         Column(Modifier.width(60.dp)){
             Box(Modifier.height(96.dp),contentAlignment=Alignment.Center){Text("SCENE",fontSize=9.sp,color=Muted)}
-            repeat(8){row->TextButton({scene(row)},Modifier.height(68.dp).fillMaxWidth().testTag("Scene ${row+1}")){Text("▶ ${row+1}")}}
+            repeat(ProjectLimits.SCENES){row->TextButton({scene(row)},Modifier.height(68.dp).fillMaxWidth().testTag("Scene ${row+1}")){Text("▶ ${row+1}")}}
         }
-        Row(Modifier.horizontalScroll(rememberScrollState())){
-            repeat(16){track->Column(Modifier.width(168.dp)){
-                Column(Modifier.height(96.dp).fillMaxWidth().background(if(selected%16==track)DimGreen else Color(0xFF0A130D)).clickable{mixer(track)}.padding(8.dp),verticalArrangement=Arrangement.SpaceBetween){
+        LazyRow(Modifier.weight(1f).testTag("Session tracks"),state=tracks){
+            items(ProjectLimits.TRACKS,key={it}){track->Column(Modifier.width(168.dp)){
+                Column(Modifier.height(96.dp).fillMaxWidth().background(if(selected%ProjectLimits.TRACKS==track)DimGreen else Color(0xFF0A130D)).clickable{mixer(track)}.padding(8.dp),verticalArrangement=Arrangement.SpaceBetween){
                     Text("${track+1} / ${trackName(s,track)}",color=Green,fontSize=12.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
                     Text(listOfNotNull(if(s.tracks[track].armed)"ARM" else null,if(s.tracks[track].solo)"SOLO" else null,if(s.tracks[track].mute)"MUTE" else null).joinToString(" · ").ifEmpty{"Mixer / sends ›"},color=Muted,fontSize=10.sp)
                     Text("${s.patches[track].name}",fontSize=10.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
                 }
-                repeat(8){row->val slot=row*16+track;val c=s.project.clip(slot);val active=s.sequence.active[track]==slot;val queued=s.sequence.queued[track]==row
+                repeat(ProjectLimits.SCENES){row->val slot=row*ProjectLimits.TRACKS+track;val c=s.project.clip(slot);val active=s.sequence.active[track]==slot;val queued=s.sequence.queued[track]==row
                     Row(Modifier.height(68.dp).padding(2.dp).background(if(selected==slot)Color(0xFF1A3D24)else Color(0xFF0B160E)).border(1.dp,if(queued)Color(0xFFB6F56B)else if(active)Green else Grid),verticalAlignment=Alignment.CenterVertically){
                         if(c==null)TextButton({create(slot)},Modifier.fillMaxSize().testTag("Empty $slot")){Text("+",color=Muted)}
                         else{
@@ -103,6 +109,12 @@ internal fun DrawScope.clipPreview(c: Clip,p: Project,origin: Offset,area: Size,
     val paint=remember{Paint(Paint.ANTI_ALIAS_FLAG).apply{color=android.graphics.Color.rgb(162,186,167)}}
     LaunchedEffect(follow,beat){if(follow&&s.stats.playing&&(beat<start||beat>=start+span))start=floor(beat/span)*span}
     val region=p.regions.firstOrNull{it.id==selected}
+    val tracks=rememberLazyListState()
+    val trackRegions=remember(p.regions){p.regions.groupBy{it.slot%ProjectLimits.TRACKS}}
+    LaunchedEffect(slot%ProjectLimits.TRACKS){
+        val target=slot%ProjectLimits.TRACKS
+        if(tracks.layoutInfo.visibleItemsInfo.none{it.index==target})tracks.scrollToItem(target)
+    }
     Column(Modifier.fillMaxSize().testTag("Arrangement timeline")){
         Tools{
             Action("Place clip",p.clip(slot)!=null){service.projectEdit{it.place(slot,cursor)}}
@@ -127,19 +139,21 @@ internal fun DrawScope.clipPreview(c: Clip,p: Project,origin: Offset,area: Size,
             if(p.loop){val x=left+((p.loopStart-start)/span*width).toFloat();val end=left+((p.loopEnd-start)/span*width).toFloat();clipRect(left,0f,size.width,size.height){drawLine(Green,Offset(x,28.dp.toPx()),Offset(end,28.dp.toPx()),3.dp.toPx());drawLine(Green,Offset(x,22.dp.toPx()),Offset(x,32.dp.toPx()),2.dp.toPx());drawLine(Green,Offset(end,22.dp.toPx()),Offset(end,32.dp.toPx()),2.dp.toPx())}}
             val x=left+((cursor-start)/span*width).toFloat();if(x>=left&&x<=size.width)drawLine(Color.White,Offset(x,0f),Offset(x,size.height),2.dp.toPx())
         }
-        Box(Modifier.weight(1f).verticalScroll(rememberScrollState())){
-            Canvas(Modifier.fillMaxWidth().height((16*68).dp).testTag("Timeline canvas")
-                .pointerInput(p.regions,start,span){detectTapGestures(onDoubleTap={point->val t=(point.y/68.dp.toPx()).toInt().coerceIn(0,15);val at=start+(point.x-104.dp.toPx())/(size.width-104.dp.toPx())*span;p.regions.firstOrNull{it.slot%16==t&&at>=it.beat&&at<it.beat+it.length}?.let{select(it);edit()}},onTap={point->val t=(point.y/68.dp.toPx()).toInt().coerceIn(0,15);trackSelect(t);if(point.x>=104.dp.toPx()){val at=(start+(point.x-104.dp.toPx())/(size.width-104.dp.toPx())*span).coerceIn(0.0,65536.0);cursorChange(round(at*4)/4);p.regions.firstOrNull{it.slot%16==t&&at>=it.beat&&at<it.beat+it.length}?.let(select)}})}
-                .pointerInput(p.regions,start,span){detectHorizontalDragGestures(onDragStart={point->val t=(point.y/68.dp.toPx()).toInt();val at=start+(point.x-104.dp.toPx())/(size.width-104.dp.toPx())*span;drag=if(point.x<104.dp.toPx())null else p.regions.firstOrNull{it.slot%16==t&&at>=it.beat&&at<it.beat+it.length};drag?.let(select);dragDelta=0f},onHorizontalDrag={change,amount->if(drag!=null){change.consume();dragDelta+=amount}},onDragCancel={drag=null},onDragEnd={drag?.let{r->val at=(round((r.beat+dragDelta/(size.width-104.dp.toPx())*span)*4)/4).coerceAtLeast(0.0);service.projectEdit{it.editRegion(r.id,beat=at)}};drag=null})}){
+        LazyColumn(Modifier.weight(1f).testTag("Timeline canvas"),state=tracks){
+            items(ProjectLimits.TRACKS,key={it}){t->
+            val regions=trackRegions[t].orEmpty()
+            Canvas(Modifier.fillMaxWidth().height(68.dp).testTag("Timeline track ${t+1}")
+                .pointerInput(p.regions,start,span){detectTapGestures(onDoubleTap={point->val at=start+(point.x-104.dp.toPx())/(size.width-104.dp.toPx())*span;regions.firstOrNull{at>=it.beat&&at<it.beat+it.length}?.let{select(it);edit()}},onTap={point->trackSelect(t);if(point.x>=104.dp.toPx()){val at=(start+(point.x-104.dp.toPx())/(size.width-104.dp.toPx())*span).coerceIn(0.0,65536.0);cursorChange(round(at*4)/4);regions.firstOrNull{at>=it.beat&&at<it.beat+it.length}?.let(select)}})}
+                .pointerInput(p.regions,start,span){detectHorizontalDragGestures(onDragStart={point->val at=start+(point.x-104.dp.toPx())/(size.width-104.dp.toPx())*span;drag=if(point.x<104.dp.toPx())null else regions.firstOrNull{at>=it.beat&&at<it.beat+it.length};drag?.let(select);dragDelta=0f},onHorizontalDrag={change,amount->if(drag!=null){change.consume();dragDelta+=amount}},onDragCancel={drag=null},onDragEnd={drag?.let{r->val at=(round((r.beat+dragDelta/(size.width-104.dp.toPx())*span)*4)/4).coerceAtLeast(0.0);service.projectEdit{it.editRegion(r.id,beat=at)}};drag=null})}){
                 val left=104.dp.toPx();val width=size.width-left;val row=68.dp.toPx()
                 paint.textSize=11.sp.toPx()
-                repeat(16){t->val y=t*row;drawRect(if(t==slot%16)Color(0xFF102218)else if(t%2==0)Color(0xFF070D09)else Color(0xFF0B130E),Offset(0f,y),Size(size.width,row));drawLine(Grid,Offset(0f,y+row),Offset(size.width,y+row));drawContext.canvas.nativeCanvas.drawText("${t+1} ${trackName(s,t).take(12)}",8.dp.toPx(),y+27.dp.toPx(),paint)}
+                run{val y=0f;drawRect(if(t==slot%ProjectLimits.TRACKS)Color(0xFF102218)else if(t%2==0)Color(0xFF070D09)else Color(0xFF0B130E),Offset(0f,y),Size(size.width,row));drawLine(Grid,Offset(0f,y+row),Offset(size.width,y+row));drawContext.canvas.nativeCanvas.drawText("${t+1} ${trackName(s,t).take(12)}",8.dp.toPx(),y+27.dp.toPx(),paint)}
                 clipRect(left,0f,size.width,size.height){
                     var at=floor(start/p.barBeats)*p.barBeats
                     while(at<=start+span){val x=left+((at-start)/span*width).toFloat();drawLine(Grid,Offset(x,0f),Offset(x,size.height));at+=p.barBeats}
-                    for(r in p.regions){val c=p.clip(r.slot)?:continue;val position=if(drag?.id==r.id)r.beat+dragDelta/width*span else r.beat
+                    for(r in regions){val c=p.clip(r.slot)?:continue;val position=if(drag?.id==r.id)r.beat+dragDelta/width*span else r.beat
                         if(position+r.length<start||position>start+span)continue
-                        val x=left+((position-start)/span*width).toFloat();val y=(r.slot%16)*row+3.dp.toPx();val w=(r.length/span*width).toFloat()
+                        val x=left+((position-start)/span*width).toFloat();val y=3.dp.toPx();val w=(r.length/span*width).toFloat()
                         drawRoundRect(if(r.id==selected)Color(0xFF2B673B)else Color(0xFF173D23),Offset(x,y),Size(w,row-6.dp.toPx()),cornerRadius=androidx.compose.ui.geometry.CornerRadius(3.dp.toPx()))
                         clipRect(max(left,x),y,min(size.width,x+w),y+row-6.dp.toPx()){
                             drawContext.canvas.nativeCanvas.drawText(c.name,x+5.dp.toPx(),y+15.dp.toPx(),paint)
@@ -150,6 +164,7 @@ internal fun DrawScope.clipPreview(c: Clip,p: Project,origin: Offset,area: Size,
                     val cx=left+((cursor-start)/span*width).toFloat();drawLine(Color.White.copy(alpha=.6f),Offset(cx,0f),Offset(cx,size.height),1.dp.toPx())
                     if(s.stats.playing&&s.sequence.mode==1){val x=left+((beat-start)/span*width).toFloat();drawLine(Green,Offset(x,0f),Offset(x,size.height),2.dp.toPx())}
                 }
+            }
             }
         }
     }

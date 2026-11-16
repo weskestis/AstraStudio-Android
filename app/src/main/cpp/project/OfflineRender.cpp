@@ -5,9 +5,9 @@
 #include <cstring>
 namespace astra::project {
 int renderWave(const char* path,std::span<const double> wire,const Samples& samples,
- const std::array<synth::Patch,16>& patches,const std::array<fx::Config,16>& effects,
+ const std::array<synth::Patch,kTracks>& patches,const std::array<fx::Config,kTracks>& effects,
  const std::array<float,kMixValues>& mix,int rate,float tail,std::atomic<bool>& cancel,std::atomic<float>& progress,bool floating,int sourceTrack){
-    if(sourceTrack< -1||sourceTrack>=16)return 1;
+    if(sourceTrack< -1||sourceTrack>=kTracks)return 1;
     if(std::find(kExportRates.begin(),kExportRates.end(),rate)==kExportRates.end()||!std::isfinite(tail)||tail<0||tail>30||wire.size()<9)return 1;
     for(float x:mix)if(!std::isfinite(x))return 1;
     if(mix[0]<30||mix[0]>300||mix[1]<0||mix[1]>1||mix[2]<0||mix[2]>24||mix[3]<20||mix[3]>500)return 1;
@@ -20,7 +20,7 @@ int renderWave(const char* path,std::span<const double> wire,const Samples& samp
     core->sourceTrack(sourceTrack);
     if(!core->enqueue({CommandType::Tempo,0,0,0,mix[0]})||!core->enqueue({CommandType::MasterGain,0,0,0,mix[1]})||
        !core->enqueue({CommandType::LimiterDrive,0,0,0,mix[2]})||!core->enqueue({CommandType::LimiterRelease,0,0,0,mix[3]}))return 1;
-    for(int t=0;t<16;++t){if(!core->setPatch(t,patches[t])||!core->setEffects(t,effects[t]))return 1;
+    for(int t=0;t<kTracks;++t){if(!core->setPatch(t,patches[t])||!core->setEffects(t,effects[t]))return 1;
         constexpr CommandType types[6]={CommandType::TrackGain,CommandType::TrackPan,CommandType::TrackMute,CommandType::TrackSolo,CommandType::SendA,CommandType::SendB};
         for(int n=0;n<6;++n)if(!core->enqueue({types[n],t,0,0,mix[4+t*6+n]}))return 1;
     }

@@ -42,7 +42,7 @@ Tests also cover logarithmic ramp timing/inversion, exact duration after stretch
 
 ## Limits and compatibility
 
-Limits remain **16 tracks, 8 scenes, 128 total voices, 64 sample assets and 512 MiB decoded sample data**. A stretch/bounce must fit alongside its retained originals. This budget is not total app RAM: DSP, Kotlin UI, undo snapshots, workers and temporary buffers require additional memory. Audio remains fully decoded in memory. Export is RIFF WAV with a roughly 4 GiB file limit, not RF64. No 96/192 kHz mix export or disk streaming is introduced.
+The original Phase 7 limits below are historical; current capacity is documented in [CAPACITY.md](CAPACITY.md) and [STREAMING.md](STREAMING.md). Phase 7 used **16 tracks, 8 scenes, 128 total voices, 64 sample assets and 512 MiB decoded sample data**. A stretch/bounce must fit alongside its retained originals. This budget is not total app RAM: DSP, Kotlin UI, undo snapshots, workers and temporary buffers require additional memory. Audio remains fully decoded in memory. Export is RIFF WAV with a roughly 4 GiB file limit, not RF64. No 96/192 kHz mix export or disk streaming is introduced.
 
 Projects now save as schema v3. Earlier v1/v2 projects migrate with the tempo map disabled. Earlier APKs cannot read v3 files. Development signing remains unchanged, so Phase 7 installs over prior Astra development builds. Physical Xperia latency, thermal throttling, sustained large-project performance and live Gemini behavior still require device testing.
 

@@ -10,7 +10,7 @@ void Rack::configure(const Config& config) noexcept{
     const bool structural=!config_.structureEquals(config);
     if(structural){tail_=last_;fade_=64;}
     for(int id=0;id<kUnits;++id)if(config_[enableIds[id]]==0&&config[enableIds[id]]!=0)resetUnit(id);
-    config_=config;target_=config.effective();dirty_=true;countdown_=0;
+    bypassed_=false;config_=config;target_=config.effective();dirty_=true;countdown_=0;
     if(structural){eq_.reset();multiband_.reset();sidechain_.reset();modulation_.reset();}
 }
 void Rack::update() noexcept{
@@ -19,7 +19,7 @@ void Rack::update() noexcept{
     for(int i=0;i<ParameterCount;++i){if(specs[i].integer)values_[i]=target_[i];else{
         const float difference=target_[i]-values_[i];if(std::abs(difference)<1e-5f)values_[i]=target_[i];else{values_[i]=flush(values_[i]+controlSmooth_*difference);moving=true;}}}
     eq_.set(values_,rate_);multiband_.set(values_,rate_);saturator_.set(values_,rate_);sidechain_.set(values_,rate_);
-    delay_.set(values_,rate_,bpm_);reverb_.set(values_,rate_);chorus_.set(values_,rate_);modulation_.set(values_,rate_);dirty_=moving;
+    delay_.set(values_,rate_,bpm_);reverb_.set(values_,rate_);chorus_.set(values_,rate_);modulation_.set(values_,rate_);outputGain_=dbGain(values_[RackOutput]);dirty_=moving;
 }
 void Rack::resetUnit(int id) noexcept{
     switch(id){case 0:eq_.reset();break;case 1:multiband_.reset();break;case 2:saturator_.reset();break;case 3:sidechain_.reset();break;
@@ -36,15 +36,18 @@ Stereo Rack::unit(int id,Stereo x,Stereo detector) noexcept{
 }
 Stereo Rack::tick(Stereo input,Stereo externalDetector) noexcept{
     if(countdown_--<=0){update();countdown_=31;}
-    for(int i=0;i<kUnits;++i){const float target=config_[enableIds[i]];unitMix_[i]+=smooth_*(target-unitMix_[i]);if(std::abs(target-unitMix_[i])<1e-6f)unitMix_[i]=target;}
+    if(!bypassed_){bypassed_=true;for(int i=0;i<kUnits;++i){const float target=config_[enableIds[i]];unitMix_[i]+=smooth_*(target-unitMix_[i]);if(std::abs(target-unitMix_[i])<1e-6f)unitMix_[i]=target;bypassed_=bypassed_&&unitMix_[i]==0&&target==0;}}
     const auto dry=dry_.tick(input),lateDetector=detectorDelay_.tick(externalDetector);Stereo wet{};
-    if(config_[RackMode]==0){wet=input;bool delayed=false;for(int id:config_.order){wet=unit(id,wet,delayed?lateDetector:externalDetector);if(id==2)delayed=true;}}
+    // Keep the fixed-delay histories warm while skipping eight disabled units.
+    // A disabled unit fades to zero before this path becomes eligible.
+    if(bypassed_){wet=saturator_.tick(input,0);if(config_[RackMode]!=0)wet=blend(wet,parallelPad_.tick(input),values_[RackBalance]);}
+    else if(config_[RackMode]==0){wet=input;bool delayed=false;for(int id:config_.order){wet=unit(id,wet,delayed?lateDetector:externalDetector);if(id==2)delayed=true;}}
     else{
         std::array<Stereo,2> lanes{input,input};std::array<bool,2> delayed{};
         for(int id:config_.order){const int lane=config_.lane[id];lanes[lane]=unit(id,lanes[lane],delayed[lane]?lateDetector:externalDetector);if(id==2)delayed[lane]=true;}
         const int pad=delayed[0]?1:0;lanes[pad]=parallelPad_.tick(lanes[pad]);wet=blend(lanes[0],lanes[1],values_[RackBalance]);
     }
-    Stereo out=blend(dry,wet,values_[RackMix])*dbGain(values_[RackOutput]);
+    Stereo out=blend(dry,wet,values_[RackMix])*outputGain_;
     if(!std::isfinite(out.l)||!std::isfinite(out.r))out={};
     out.l=std::clamp(out.l,-64.0f,64.0f);out.r=std::clamp(out.r,-64.0f,64.0f);
     if(fade_>0){out=blend(out,tail_,static_cast<float>(fade_--)/64);}

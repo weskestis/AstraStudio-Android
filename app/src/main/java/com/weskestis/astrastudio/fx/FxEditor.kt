@@ -1,5 +1,7 @@
 package com.weskestis.astrastudio.fx
 
+import com.weskestis.astrastudio.project.ProjectLimits
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -32,7 +34,7 @@ fun FxEditor(track: Int, state: StudioState, service: AudioService, initialUnit:
     var expanded by rememberSaveable { mutableStateOf(true) }
     com.weskestis.astrastudio.workspace.PanelBackHandler(expanded){expanded=false}
     val set: (Int,Float)->Unit = { id,v -> service.fxParameter(track,id,v) }
-    LaunchedEffect(track,masterSpectrum) { service.meterTrack(if(masterSpectrum)16 else track) }
+    LaunchedEffect(track,masterSpectrum) { service.meterTrack(if(masterSpectrum)ProjectLimits.TRACKS else track) }
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("EFFECTS / TRACK ${track+1}", fontWeight = FontWeight.Bold)
@@ -45,7 +47,7 @@ fun FxEditor(track: Int, state: StudioState, service: AudioService, initialUnit:
             Param(config,FxSchema.RackMix,set)
             Param(config,FxSchema.RackOutput,set)
             Choices("Spectrum source",if(masterSpectrum)1 else 0,listOf("This track","Master")){masterSpectrum=it==1}
-            SpectrumDisplay(config,state.fxStats,if(masterSpectrum)16 else track,!masterSpectrum)
+            SpectrumDisplay(config,state.fxStats,if(masterSpectrum)ProjectLimits.TRACKS else track,!masterSpectrum)
             Text("Spectrum −100 to 0 dBFS • EQ curve ±24 dB • 20 Hz–20 kHz",fontSize=11.sp)
             Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 config.order.forEach { id ->
@@ -79,7 +81,7 @@ fun FxEditor(track: Int, state: StudioState, service: AudioService, initialUnit:
                         listOf(FxSchema.ShaperPre,FxSchema.ShaperPost,FxSchema.ShaperMix).forEach{Param(config,it,set)}
                     }
                     3 -> {
-                        Choices("Detector source",config[FxSchema.ScSource].toInt()+1,listOf("Self")+(1..16).map{"Track $it"}){set(FxSchema.ScSource,(it-1).toFloat())}
+                        Choices("Detector source",config[FxSchema.ScSource].toInt()+1,listOf("Self")+(1..ProjectLimits.TRACKS).map{"Track $it"}){set(FxSchema.ScSource,(it-1).toFloat())}
                         Text("External tracks trigger before their effects, volume and mute. Play a phrase on that track, then audition this one.",fontSize=12.sp)
                         ReductionHistory(track,state.fxStats.sidechain[track],state.stats.frame)
                         listOf(FxSchema.ScThreshold,FxSchema.ScRatio,FxSchema.ScAttack,FxSchema.ScRelease,FxSchema.ScKnee,FxSchema.ScHighpass,FxSchema.ScMakeup,FxSchema.ScMix).forEach{Param(config,it,set)}

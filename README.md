@@ -1,10 +1,18 @@
-# Astra Studio — 192 kHz master export
+# Astra Studio — Phase 11 / 50 tracks
 
-Android 14+ native music workstation, built for **Sony Xperia 1 IV** first. Package `com.weskestis.astrastudio`, version **0.10.1-master192**, green and black throughout. This is a development DAW, with implemented editing/playback features and explicit limits below; it is not yet a production-certified replacement for a desktop workstation.
+Android 14+ native music workstation, built for **Sony Xperia 1 IV** first. Package `com.weskestis.astrastudio`, version **0.11.0-phase11**, green and black throughout. This is a development DAW, with implemented editing/playback features and explicit limits below; it is not yet a production-certified replacement for a desktop workstation.
 
 ## Full workstation development goal
 
 The goal is a professional Android DAW with Ableton Live-level workflow depth and sound-design capability. Phase 13 is a possible release milestone within that goal, not the finish line. The [full roadmap and capability ledger](docs/ROADMAP.md) records the remaining scope, current limitations and completion criteria. Phase 10 adds bounded project audio streaming, instrument phrase bounces and finished-track sharing. Device measurements and full-track freezing remain open; the next feature increments continue closing the capability ledger.
+
+## 50 tracks and layers
+
+Phase 11 expands the complete project to **50 tracks**, **8 scenes / 400 clip slots** and **2,048 arrangement regions**. Every track supports the existing synth, sampler/drums, audio clips, mixer, inserts, sends, automation, Astra commands, resampling and master export. Tap **Track … / 50** beside Session/Arrangement to jump to any track. The grid and timeline compose only visible tracks and retain the selected track through rotation and Back navigation.
+
+Existing projects migrate automatically: old clip/scene positions, instruments, routing and arrangement regions stay together. New saves use JSON version 6 and native wire version 5. Keep an original portable copy if you also need to open it in an older APK, which cannot read the new format.
+
+The **128 shared instrument voices**, 64 audio assets and existing streamed-audio budgets are unchanged. Fifty stored tracks are not a guarantee of fifty simultaneous heavy synth/effects chains on a phone. Live playback uses the device rate; 192 kHz is an offline master option. Hardware MIDI channels still address tracks 1–16; clips, Keys and Astra address all 50. [Capacity, migration and measurements](docs/CAPACITY.md).
 
 ## 192 kHz / 24-bit master
 
@@ -66,7 +74,7 @@ Full workflow, command reference and limitations: [Astra Phase 5](docs/ASTRA.md)
 
 ## Install and make a track
 
-Install `AstraStudio_0.10.1_192kHz.apk` over Phase 10 or an earlier Astra build. The development signing certificate is unchanged. GitHub fallback: **Actions → Android 192 kHz Master → a successful run → AstraStudio-Master192-APK**.
+Install `AstraStudio_0.11.0_50Tracks.apk` over Phase 10 or an earlier Astra build. The development signing certificate is unchanged. GitHub fallback: **Actions → Android Phase 11 - 50 Tracks → a successful run → AstraStudio-Phase11-50Tracks-APK**.
 
 1. **File → Load starter song** opens Green circuit: original, editable MIDI drums, bass and lead, two scenes and a 16-bar arrangement. Save your current project first.
 2. Tap **Start audio**, then **Play**. Session Play launches Scene 1; Arrangement Play begins at the white cursor. Clip/scene launch buttons follow the selected bar, quarter-note or eighth-note quantization.
@@ -103,7 +111,7 @@ Factory patches: **Init Sine, Liquid Riddim, Metal Maw, Trance Prism, Sub Pressu
 
 - C++20 with Oboe/AAudio float-stereo output; low-latency/exclusive request and shared fallback.
 - Fixed command queue, event heap, patch mailbox and voice/filter storage. No owned-renderer heap allocations or mutexes in the callback.
-- 16 mixer tracks, 128 total voice slots, sample-frame note scheduling, note IDs and overflow panic handling.
+- 50 mixer tracks, 128 total voice slots, sample-frame note scheduling, note IDs and overflow panic handling.
 - Smoothed volume/pan/mute/solo/master, transport, tap tempo, metronome, output meters and callback/xrun diagnostics.
 - Android foreground media playback service, audio focus, headphone-disconnect handling and route recovery.
 - USB MIDI hot plug; basic MIDI 1/2 notes and CC 120/123. MIDI channel 1–16 maps to track 1–16. Full expression and MIDI-CI are later work.

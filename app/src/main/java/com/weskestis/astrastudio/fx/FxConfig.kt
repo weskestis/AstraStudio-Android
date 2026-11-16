@@ -1,5 +1,7 @@
 package com.weskestis.astrastudio.fx
 
+import com.weskestis.astrastudio.project.ProjectLimits
+
 import kotlin.math.roundToInt
 
 data class FxConfig(val name: String, val wire: List<Float>) {
@@ -76,7 +78,7 @@ data class FxConfig(val name: String, val wire: List<Float>) {
 }
 
 data class FxStats(
-    val sidechain: List<Float> = List(16){0f}, val bands: List<Float> = List(48){0f},
+    val sidechain: List<Float> = List(ProjectLimits.TRACKS){0f}, val bands: List<Float> = List(ProjectLimits.TRACKS*3){0f},
     val limiterReduction: Float = 0f, val latencyFrames: Int = 0,
     val spectrum: List<Float> = List(64){-100f}, val sampleRate: Float = 48000f,
     val meterTrack: Int = -1, val analyzerDrops: Long = 0,

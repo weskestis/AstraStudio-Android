@@ -22,13 +22,13 @@ Each stream owns a shared callback object containing its own RenderCore. The cal
 
 All capacities are allocated before starting a stream:
 
-- 16 mixer tracks; 128 total voices across the whole engine.
+- 50 mixer tracks; 128 total voices across the whole engine.
 - 4,096 command slots in a fixed SPSC ring.
 - 8,192 slots in a fixed binary event heap, ordered by frame then submission order.
 - Maximum 256 commands accepted from the queue and 512 scheduled events dispatched per callback.
 - One metronome sine table, shared immutable wavetable banks, 64 patch-transfer slots and fixed per-voice filter/FIR/operator state. All are constructed off the callback.
-- 32 effects mailbox slots, preallocated delay storage for all 16 racks, fixed limiter/compensation buffers and a 32,768-frame analyzer queue. FFT runs on the control thread.
-- A fixed 16-float stack accumulator per sample. No callback-sized scratch allocation.
+- 128 effects mailbox slots, preallocated delay storage for all 50 racks, fixed limiter/compensation buffers and a 32,768-frame analyzer queue. FFT runs on the control thread.
+- A fixed 50-track stereo stack accumulator per sample. No callback-sized scratch allocation.
 
 Supported ABIs are `arm64-v8a` (Xperia 1 IV and other modern phones) and `x86_64` (emulators). Compile-time assertions enforce lock-free atomics on these targets. This phase deliberately does not claim 32-bit support.
 
@@ -66,7 +66,7 @@ AAudio low-latency/exclusive output is requested first. Shared mode is a fallbac
 
 The foreground service declares both required foreground permissions and the mediaPlayback service type, starts from a visible user action, displays a Stop action, and is not sticky after process death. Audio-focus loss and the becoming-noisy broadcast stop playback. A disconnected stream can reopen on the control thread with playback stopped. Repeated recovery failures stop the service. Phase 5 adds Internet permission for explicit Gemini requests. No microphone or broad storage permission is requested; the Speak button delegates to an installed Android recognition activity. User-started assistant network jobs use the existing dataSync foreground-service type.
 
-USB MIDI hot plug uses both Android transport registrations. When Android exposes a shared USB identity, UMP is preferred over the legacy sibling to avoid doubled input. MIDI 1 byte-stream parsing supports running status, real-time bytes between messages and fragmented messages. UMP supports MIDI 1 and MIDI 2 Note On/Off, 16-bit MIDI 2 velocity, group identity and channel-specific CC 120/123. Groups share the same 16 mixer tracks but retain distinct note IDs. Input-device disconnect releases that device's notes.
+USB MIDI hot plug uses both Android transport registrations. When Android exposes a shared USB identity, UMP is preferred over the legacy sibling to avoid doubled input. MIDI 1 byte-stream parsing supports running status, real-time bytes between messages and fragmented messages. UMP supports MIDI 1 and MIDI 2 Note On/Off, 16-bit MIDI 2 velocity, group identity and channel-specific CC 120/123. Groups share the first 16 mixer tracks but retain distinct note IDs. Input-device disconnect releases that device's notes.
 
 This is **basic MIDI 2 note input**, not full MIDI 2 compliance: MIDI-CI negotiation, per-note expression, sustain, pitch bend, controller mapping, MIDI output and sample-clock alignment of external timestamps remain later work. Touch/MIDI notes enter the next available block. Physical USB hardware behavior still requires device testing.
 

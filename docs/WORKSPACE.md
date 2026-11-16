@@ -4,7 +4,7 @@
 
 The green/black workspace adapts to portrait and landscape without locking rotation. Track columns and toolbars scroll horizontally; scenes and track rows scroll vertically. Bottom device chips stay accessible. Editors remain open until Back or Close. Main buttons use 48 dp targets; dense Canvas notes also have exact-value editing controls.
 
-Session holds 16 tracks × 8 scenes. A clip body selects it, double-tap/long-press edits it, and its separate launch button queues it. Scene buttons launch every track together; empty slots stop that track at the same boundary. Quantization is one signature-aware bar, one quarter note or one eighth note. Re-launch retriggers at the next boundary. Stop-track uses the same quantization.
+Session holds 50 tracks × 8 scenes (400 clip slots). Tap Track … / 50 to select a track directly; the grid and Arrangement scroll to it. A clip body selects it, double-tap/long-press edits it, and its separate launch button queues it. Scene buttons launch every track together; empty slots stop that track at the same boundary. Quantization is one signature-aware bar, one quarter note or one eighth note. Re-launch retriggers at the next boundary. Stop-track uses the same quantization.
 
 Arrangement regions reference source clips. Select a source in Session, switch to Arrangement, tap the ruler and Place clip. Horizontal dragging snaps region starts to quarter beats. Region opens exact start/length fields, delete and audio sample split. Regions cannot overlap on one track. Duplicate region retains the same source; Duplicate clip creates an independent editable source in the next free scene slot. Source edits therefore affect all regions using that clip.
 
@@ -30,7 +30,7 @@ WAV export always uses Arrangement, includes the same synths, effects, automatio
 
 ## Limits and deferred features
 
-16 tracks, 8 scenes, 128 shared voices, 512 nonoverlapping arrangement regions, 256 notes per clip, 64 audio assets and 512 MiB decoded stereo audio per project. Timeline ends at 65,536 quarter-note beats. Full-length tracks fit within the audio budget; there is no arbitrary 60-second import cutoff. Raw input/archives also have bounded size, and RIFF export is limited to 4 GiB. Actual polyphony, route latency and thermal limits require Xperia testing.
+50 tracks, 8 scenes, 128 shared voices, 2,048 nonoverlapping arrangement regions, 256 notes per clip and 64 audio assets. Phase 10 storage supports 2 GiB per imported file and 8 GiB of stereo-float-equivalent source frames, with a 128 MiB active audio-page/resident budget. This excludes DSP and temporary export memory. Timeline ends at 65,536 quarter-note beats. Full-length tracks can stream within these storage limits; there is no arbitrary 60-second import cutoff. Raw input/archives also have bounded size, and RIFF export is limited to 4 GiB. Actual polyphony, route latency and thermal limits require Xperia testing.
 
 Not implemented: microphone recording, simultaneous recording into multiple clips, arrangement overdub, MIDI file interchange, per-note expression, plugin hosting, automatic live time stretch, arbitrary automation targets, arrangement crossfades, per-region pitch envelopes or arbitrary Astra operations beyond the Phase 5 allowlist. The original starter uses synthesized percussion, not a hidden drum sampler. Astra commands and Gemini listening are described in [ASTRA.md](ASTRA.md).
 

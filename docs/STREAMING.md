@@ -2,7 +2,7 @@
 
 ## Playback and storage
 
-Project imports now allow **2 GiB per source file**, **64 audio assets** and **1,073,741,824 source frames** across the project (8 GiB when expressed as stereo float32). One asset is limited to 268,435,456 frames. Those are storage/format limits, not a promise that every possible project can run in real time. Track/scene/voice limits remain **16 / 8 / 128**.
+Project imports now allow **2 GiB per source file**, **64 audio assets** and **1,073,741,824 source frames** across the project (8 GiB when expressed as stereo float32). One asset is limited to 268,435,456 frames. Those are storage/format limits, not a promise that every possible project can run in real time. Track/scene/voice limits remain **50 / 8 / 128**.
 
 Sources whose decoded stereo size is at most 1 MiB remain resident. Larger sources allocate **64 pages × 4,096 stereo float frames = 2 MiB** of audio page storage per asset, independent of file duration. The active asset bank therefore has a **128 MiB audio-page/resident ceiling**. This figure excludes synth/effect/warp state, the UI, page metadata, decoder buffers, temporary import/archive copies and independent offline readers. Project replacement can briefly retain old assets until existing immutable playback plans retire; an export holds its own bounded pages as well. It is not a whole-process RAM cap.
 
@@ -16,7 +16,7 @@ A cold seek or overloaded storage can still exhaust prepared pages. Live playbac
 
 Exports, resampling and Stretch open **separate synchronous readers on the rendering worker**. They wait for their own file reads rather than capturing live underrun silence. Read failures fail the render. Independent file positions and page storage keep a simultaneous export from evicting playback pages. Audio sources stay on disk; page caches disappear when their owning plans/assets retire. No persistent decoded cache copies are created.
 
-Project JSON is now **version 5**; versions 1–4 load. The native wire layout remains version 4 because the timing/device fields are unchanged. Older APKs cannot read version-5 projects. Portable archive extraction remains bounded and transactional, with fresh local filenames. Originals and undoable source references are retained.
+Phase 11 project JSON is **version 6**; versions 1–5 load and migrate the original 16-track scene stride. Native wire version 5 carries all 50 tracks and accepts older versions 1–4 with migration. Older APKs cannot read version-6 projects. Portable archive extraction remains bounded and transactional, with fresh local filenames. Originals and undoable source references are retained.
 
 ## Bounce instrument to clip
 
