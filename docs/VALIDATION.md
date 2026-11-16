@@ -1,6 +1,24 @@
-# Phase 12 validation in progress
+# Phase 12 — freeze, recovery and performance validation
 
-Development **0.12.0-phase12 / versionCode 13**. Local Kotlin tests: **186 passed**. The new native freeze suite passed **104 checks**, including exact live/frozen output in fixtures at 48/96/192 kHz with constant and changing tempos, instrument tails, live effects/sidechain, seek/stop/unfreeze and Session behavior; zero callback allocations/frees. The initial Android CI run passed all 16 tests; the final native optimization and strict sanitizer configuration are being revalidated. The sections below are historical Phase 11 and earlier evidence. [Phase 12 scope](RELIABILITY.md).
+Development **0.12.0-phase12 / versionCode 13**, Android 14+.
+
+Verified executable/test source commit: `cf1ade9de325746ea1ddeb510809287e6d1f2a35`.
+[Successful build and Android run](https://github.com/weskestis/AstraStudio-Android/actions/runs/43825850008). [Feature behavior and limits](RELIABILITY.md).
+
+- All **186 Kotlin tests passed**, zero failures or ignored tests. Coverage includes frozen-source fingerprints and invalidation, cache asset ownership, JSON/wire migration, recovery rotation and corruption handling, stale recovery selections, and performance counters, alongside the earlier suites.
+- All **11 native suites passed** in Release and with AddressSanitizer/UndefinedBehaviorSanitizer, locally and in CI. The new freeze suite passed **104 checks**, with **zero render-thread allocations or frees**. Fixtures verify exact live/frozen samples at 48/96/192 kHz, constant and changing tempos, gaps and instrument tails, source filter automation, live mixer/effects/sidechain, seek/loop/stop/unfreeze, Session originals, PCM24 export, malformed metadata and a disk-streamed warped source.
+- Sanitizer CI runs with `UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1`; all final native logs contain zero UBSan or AddressSanitizer error diagnostics. Host core and test executables use matching RTTI settings so the vptr check remains active; Android retains its no-RTTI build.
+- All **16 Android instrumentation tests passed**, zero failures, errors or skips, in **164.696 seconds**, on API 34 x86_64 at **1080 × 2520**. Tests exercise freeze/unfreeze through JNI, Undo with restored audio assets, source-edit invalidation, portable-project round-trip, recovery selection and restoration, performance reporting, Back navigation and rotation. Earlier recording, Sample Lab, Warp, synth/sampler, Astra, sharing, 50-track and 192 kHz tests remain green.
+- APK assembly and lint passed: **0 lint errors**, 25 advisory warnings. Final green/black Freeze, frozen-track, Recovery and Performance screenshots were reviewed; landscape Freeze keeps its action reachable. Screenshots and emulator timings do not establish physical Xperia performance.
+
+## Verified APK
+
+- File: `AstraStudio_0.12.0_FreezeRecovery.apk` — **28,595,046 bytes**, taken from the successful CI build.
+- SHA-256: `74af07b8500d934a760ab08277ef38e19efef4564ffef889e43744ec6314014c`.
+- Certificate SHA-256: `1bff24ae64d74c99d9540a1ecc5acccc8479367f44772b305144d2c10ce4bd45`.
+- Package `com.weskestis.astrastudio`; minimum/target API 34; ARM64 and x86_64. Signature verification, 16 KiB ZIP alignment and all six native libraries' LOAD-segment alignment passed. The unchanged development certificate supports installing over Astra 11 without uninstalling.
+
+Freeze renders Arrangement sources to 32-bit float at 48/96/192 kHz, retains originals and leaves mixer/effects/sidechain/sends live. It consumes existing source-asset capacity; it does not raise the 50-track, 128-voice or 64-asset limits. Exact-match fixtures use non-overloaded voice pools; reducing live voices can change voice stealing in an overloaded project. Three prior autosaves provide local recovery, not a separate backup. Physical Xperia sustained CPU load, thermals, memory pressure and end-to-end audio latency remain unmeasured. The sections below preserve historical Phase 11 and earlier evidence.
 
 ---
 
