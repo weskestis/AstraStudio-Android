@@ -146,15 +146,13 @@ void Sequencer::tick(double beat,float bpm,std::array<fx::Stereo,kTracks>& audio
                 phase=std::fmod(std::max(0.0,beat-at->start+at->offset),c.length);audioOffset=static_cast<double>(at->audioOffset);
                 }}}
         if(slot<0){if(t.slot>=0)release(i);clearAutomation(i);t.phase=0;continue;}
-        const auto& c=plan_->clips[slot];bool entered=t.slot!=slot||t.region!=region||t.hash!=c.hash||phase+1e-8<t.previous||(c.warp&&t.warpBpm!=bpm);
+        const auto& c=plan_->clips[slot];const bool frozen=plan_->mode==1&&plan_->frozen[i].asset>=0;bool entered=t.slot!=slot||t.region!=region||t.hash!=c.hash||phase+1e-8<t.previous||(!frozen&&c.warp&&t.warpBpm!=bpm);
         const bool continueWarp=c.warp&&t.slot==slot&&t.hash==c.hash&&t.warpBpm==bpm&&region>=0&&t.region>=0&&
             audioOffset==t.lastAudioOffset&&std::abs((phase-t.previous)-(beat-t.previousAbsolute))<1e-7;
         if(entered){if(c.asset>=0&&plan_->mode==1){const double cycleStart=beat-phase;elapsed=plan_->tempo.seconds(std::max(0.0,cycleStart),beat,bpm);if(cycleStart<0)elapsed+=-cycleStart*60/plan_->tempo.bpmAt(0,bpm);}
             enter(i,slot,region,phase,audioOffset,elapsed,bpm);}
-        const bool frozen=plan_->mode==1&&plan_->frozen[i].asset>=0;
-        if(frozen){}
-        else if(c.asset<0){while(t.cursor<c.events.size()&&c.events[t.cursor].beat<=phase+1e-10)event(i,c,c.events[t.cursor++]);}
-        else{const auto& sample=*plan_->samples[c.asset];if(c.warp&&kernel_){const auto* map=plan_->mode==1?&plan_->tempo:nullptr;
+        if(!frozen&&c.asset<0){while(t.cursor<c.events.size()&&c.events[t.cursor].beat<=phase+1e-10)event(i,c,c.events[t.cursor++]);}
+        else if(!frozen){const auto& sample=*plan_->samples[c.asset];if(c.warp&&kernel_){const auto* map=plan_->mode==1?&plan_->tempo:nullptr;
                 if(entered&&!continueWarp){warps_[i].start(c,sample,beat,phase,audioOffset,bpm,map);t.warpBpm=bpm;}
                 audio[i]=warps_[i].tick(sample,map);
             }else if(kernel_)audio[i]=kernel_->read(sample,t.reader,t.audioPosition,c.first,c.last,t.audioBand,sample.rate==rate_);

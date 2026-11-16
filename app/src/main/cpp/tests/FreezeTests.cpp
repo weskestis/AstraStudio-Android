@@ -62,6 +62,20 @@ int main(){
             auto bad=cachedWire;bad.back()=frozen->frames()+1;check(!decodePlan(bad,bank),"invalid cached music frame count rejected");bad=cachedWire;bad[bad.size()-3]=50;check(!decodePlan(bad,bank),"invalid frozen track rejected");bad=cachedWire;bad[bad.size()-2]=63;check(!decodePlan(bad,bank),"missing freeze asset rejected");bad=cachedWire;bad[bad.size()-4]=2;bad.insert(bad.end(),{1,0,double(music)});check(!decodePlan(bad,bank),"duplicate cached asset rejected");
         }
     }
+    { // Freeze already-warped audio, then retain its original editable warp state.
+        auto original=wire(-1,0,true);
+        original.erase(original.begin()+9,original.begin()+36);
+        original.insert(original.begin()+9,{0,2,1,0,96000,0,0});
+        original.erase(original.end()-2,original.end());original.insert(original.end(),{1,0,1,138,0,-7,0});
+        const auto plan=decodePlan(original,samples);check(plan!=nullptr,"warped audio freeze fixture decodes");
+        const int music=static_cast<int>(std::ceil(plan->tempo.seconds(0,2,120)*48000));Temp source,live,cached;
+        check(renderWave(source.path,original,samples,patches,effects,m,48000,2.f,cancel,progress,true,0)==0,"warped source renders to freeze");
+        Samples bank=samples;bank[0]=readSample(source.path,kPlaybackBudget,true);check(bank[0]&&bank[0]->stream,"freeze uses real bounded disk pages");
+        auto frozenWire=original;frozenWire.back()=1;frozenWire.insert(frozenWire.end(),{0,0,double(music)});
+        check(renderWave(live.path,original,samples,patches,effects,m,48000,2.f,cancel,progress,true)==0,"original warped audio master");
+        check(renderWave(cached.path,frozenWire,bank,patches,effects,m,48000,2.f,cancel,progress,true)==0,"streamed freeze export uses complete offline reads");
+        auto a=readSample(live.path,kSampleBudget),b=readSample(cached.path,kSampleBudget);check(a&&b&&a->stereo==b->stereo,"warped source and streamed freeze produce identical master samples");
+    }
     {auto kernel=std::make_unique<sampler::Kernel>();Sequencer seq;Observer observer;seq.bind(&observer,Observer::note,nullptr);check(seq.prepare(48000,kernel.get()),"prepare cached sequencer");
         Plan p;p.mode=1;p.samples[0]=tone(48000,96000);p.frozen[0]={0,48000};p.tempo={true,{{0,120,true},{1,60,false}}};auto& c=p.clips[0];c.present=true;c.length=2;c.notes={{0,2,60,1}};p.regions[0]={{1,0,0,2,0,0}};seq.activate(&p);
         std::array<fx::Stereo,kTracks> out{};inRender=true;seq.tick(.5,120,out);seq.renderFrozen(.5,120,true,out);inRender=false;

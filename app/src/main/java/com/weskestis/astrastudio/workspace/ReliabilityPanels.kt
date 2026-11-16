@@ -22,8 +22,7 @@ import java.util.Date
     var tail by rememberSaveable{mutableStateOf("10")}
     val frozen=s.project.frozen.firstOrNull{it.track==track}
     Text("ARRANGEMENT FREEZE · ${trackName(s,track)}",color=Green,fontWeight=FontWeight.Bold)
-    Text("Renders this track for the whole arrangement, including gaps and instrument releases, into stereo float audio. Playback pauses while freezing. Original clips and notes stay in the project.",fontSize=13.sp)
-    Text("Mixer, inserts, sidechains, sends and their automation stay live. Session and Keys in Session use the original instruments. Source or tempo edits automatically unfreeze affected tracks.",fontSize=13.sp,modifier=Modifier.padding(vertical=8.dp))
+    Text("Reduce Arrangement processing by rendering this track to audio. Originals stay editable; playback pauses while freezing.",fontSize=13.sp)
     if(frozen!=null){
         val asset=s.project.asset(frozen.asset)!!
         Text("Frozen · ${ExportFormats.label(asset.rate)} / 32-bit float",color=Green,modifier=Modifier.testTag("Frozen status"))
@@ -37,6 +36,7 @@ import java.util.Date
         Action("Freeze full track",!s.busy&&seconds!=null&&s.project.regions.any{it.slot%ProjectLimits.TRACKS==track},"Freeze full track"){service.freezeTrack(track,rate,seconds!!)}
         if(s.project.regions.none{it.slot%ProjectLimits.TRACKS==track})Text("Place clips on this track in Arrangement first.",color=Green)
     }
+    Text("Mixer, effects, sidechains and sends stay live. Session uses the original instruments. Source or tempo edits automatically unfreeze affected tracks.",fontSize=13.sp,modifier=Modifier.padding(top=12.dp))
     Text("Undo restores the previous freeze state. Portable projects include both sources and frozen audio. A frozen source has the resolution selected here; a later higher-rate export cannot recreate missing detail. Set a tail long enough for your instrument.",color=Muted,fontSize=12.sp,modifier=Modifier.padding(top=12.dp))
 }
 

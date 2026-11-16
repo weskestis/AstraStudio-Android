@@ -39,6 +39,7 @@ class WorkspaceSmokeTest {
     @get:Rule val notifications=GrantPermissionRule.grant(android.Manifest.permission.POST_NOTIFICATIONS)
     @After fun captureFinalState(){runCatching{shot("99-last-screen")};runCatching{compose.onAllNodes(isRoot())[0].printToLog("ASTRA_UI_TEST")}}
     private fun shot(name: String) {
+        compose.waitForIdle();InstrumentationRegistry.getInstrumentation().waitForIdleSync()
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         val bitmap=requireNotNull(InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot())
         // UTP uninstalls the app after the test, removing its private directory.
@@ -94,7 +95,7 @@ class WorkspaceSmokeTest {
             service.projectEdit{it.place(0,0.0)};compose.waitUntil(10000){service.state.value.project.regions.size==1}
             click("Choose track");compose.onNodeWithTag("Track picker").performScrollToIndex(0);click("Select track 1")
             click("Open freeze");compose.onNodeWithTag("Freeze rate 192000").scrollOnUiThread().assertIsSelected()
-            click("Freeze rate 48000");shot("29-freeze-phone")
+            click("Freeze rate 48000");compose.onNodeWithTag("Freeze rate 48000").assertIsSelected();shot("29-freeze-phone")
             compose.runOnUiThread{compose.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
             compose.waitUntil(10000){compose.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
             compose.onNodeWithTag("Freeze rate 48000").scrollOnUiThread().assertIsSelected();shot("30-freeze-landscape")
@@ -136,8 +137,8 @@ class WorkspaceSmokeTest {
                 compose.waitUntil(15000){service.state.value.project.name==name&&runCatching{ProjectCodec.decode(File(context.filesDir,"current.astra.json").readText()).project.name==name}.getOrDefault(false)}
             }
             click("File");click("Open recovery");compose.waitUntil(15000){service.state.value.recovery.any{it.name=="Recovery B"}}
-            shot("32-recovery-phone")
-            val index=service.state.value.recovery.indexOfFirst{it.name=="Recovery B"};click("Restore recovery $index")
+            val index=service.state.value.recovery.indexOfFirst{it.name=="Recovery B"}
+            compose.onNodeWithTag("Restore recovery $index").scrollOnUiThread().assertIsDisplayed();shot("32-recovery-phone");click("Restore recovery $index")
             compose.waitUntil(20000){!service.state.value.busy&&service.state.value.project.name=="Recovery B"}
             service.undo();compose.waitUntil(10000){!service.state.value.busy&&service.state.value.project.name=="Recovery C"}
             back();compose.onNodeWithTag("Session grid").assertIsDisplayed()

@@ -46,7 +46,7 @@ jobs:
         run: |
           cmake -S app/src/main/cpp -B build/sanitized -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer' -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined'
           cmake --build build/sanitized --parallel 2
-          ASAN_OPTIONS=detect_leaks=0 ctest --test-dir build/sanitized --output-on-failure
+          ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 ctest --test-dir build/sanitized --output-on-failure
       - name: Render factory preset audition
         run: build/host/astra_render_presets build/Phase2-preset-audition.wav
       - name: Build, test and lint
