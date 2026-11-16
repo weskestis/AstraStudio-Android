@@ -1,6 +1,24 @@
-# 192 kHz master validation in progress
+# 192 kHz master validation
 
-Development **0.10.1-master192 / versionCode 11**. Native master-format fixtures pass; final build, Android screenshots and APK identity will be recorded after CI. [Mastering scope](../MASTERING.md).
+Development **0.10.1-master192 / versionCode 11**, Android 14+.
+
+Verified executable/test source commit: `d0c026e2c8c08c68a42d03df78c772f6f74a117b`.
+[Successful build and Android run](https://github.com/weskestis/AstraStudio-Android/actions/runs/43810894346). [Mastering scope and use](../MASTERING.md).
+
+- All **149 Kotlin unit tests passed**, zero failures or ignored tests. Added checks cover every offered sample rate, exact PCM24/float byte counts, fractional-tail rounding, tempo-map duration and the standard RIFF size boundary.
+- All **nine native suites passed** in Release and with AddressSanitizer/UndefinedBehaviorSanitizer. The new master suite completed **341,240 checks**, with **zero render-thread allocations or frees**. It verifies actual headers, packed 24-bit precision and final dither; a streamed 30 kHz fixture surviving the native 192 kHz path; 48→192 kHz bass conversion; synth pitch; all eight effect types; tempo-following Warp; 20 Hz comb delay timing across internal rates; cancellation and oversized-RIFF rejection.
+- All **13 Android instrumentation tests passed**, zero failures/errors/skips, in **129.858 seconds**, on API 34 x86_64 at 1080 × 2520. The new test selects the preset in both export screens, rotates portrait/landscape, checks Back navigation, and renders a real PCM24 WAV through JNI. It verifies **192,000 Hz, stereo, 24 bits, six bytes/frame, 864,000 frames and 5,184,044 bytes** for the half-second source plus four-second tail. FileProvider reads, saved copies and a separate direct export match byte for byte. Earlier recording, Sample Lab, Warp, MIDI, project, Astra and sharing checks remain green.
+- The first UI run stopped on concurrent Compose snapshot access during microphone-screen rotation. Inspection found that the pinned test library measures scrolling geometry off the UI thread. Explicit test scroll measurements and actions now run on the UI thread; the complete final suite passed with those checks retained. This was a test-harness correction, not a change to microphone capture or UI dependencies.
+- APK assembly and lint passed: **0 lint errors**, 24 advisory warnings in CI. Green/black export and sharing screenshots were reviewed in portrait and landscape; controls wrap and scroll, and the export action remains reachable.
+
+## Verified APK
+
+- File: `AstraStudio_0.10.1_192kHz.apk` — **28,463,970 bytes**.
+- SHA-256: `44378533bc5e67334b3b016fb782f9118fa4b6eee3fb0b079516d02505a0c438`.
+- Certificate SHA-256: `1bff24ae64d74c99d9540a1ecc5acccc8479367f44772b305144d2c10ce4bd45`.
+- Package `com.weskestis.astrastudio`; minimum/target API 34; ARM64 and x86_64. Signature verification, 16 KiB ZIP alignment and all six native libraries' LOAD-segment alignment passed. The unchanged development certificate permits installing over Phase 10. The final CI APK was byte-identical to the independently verified package.
+
+This is selectable offline master rendering. Live hardware and microphone rates are unchanged; physical Xperia render speed, thermal behavior and high-rate hardware output remain unmeasured. Source recordings retain their existing detail. PCM24 stereo at 192 kHz uses 69.12 MB/minute; standard RIFF limits a single export to roughly 62 minutes including tails. Sample-peak limiting remains in place; true-peak/loudness certification is still open. This update does not complete the broader workstation roadmap.
 
 ---
 

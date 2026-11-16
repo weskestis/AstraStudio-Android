@@ -6,7 +6,7 @@ Build a professional Android DAW with Ableton Live-level workflow depth and soun
 
 Target device: Sony Xperia 1 IV (XQ-CT62), Android 14+. Preserve the green/black interface, phone-only installation and file workflows, hierarchical Back navigation, original recordings, and public source repository. EDM, riddim, dubstep, trance and house remain the production focus. Sound quality and repeatable project/export behavior take priority over adding controls that are disconnected from the engine.
 
-The current delivered baseline is Phase 10, version 0.10.0-phase10. Its verified executable/test commit is `de808a463b70abf117c1070f2d3574f8dca518b8`; see [validation](VALIDATION.md). The existing implementation is a foundation with working features and explicit limits, not a claim of full parity.
+The current baseline is Phase 10 plus the 192 kHz master update, version 0.10.1-master192. Its verified executable/test commit is `d0c026e2c8c08c68a42d03df78c772f6f74a117b`; see [validation](VALIDATION.md). The existing implementation is a foundation with working features and explicit limits, not a claim of full parity.
 
 ## Milestones and numbering
 
@@ -26,7 +26,7 @@ Phase 10 implements bounded source streaming, direction-aware prefetch, separate
 
 These are project requirements and acceptance criteria. “Partial” means an implemented starting point exists, not that the full capability is done. The Live 12 documentation is the reference baseline for the comparison; changes in the reference product should be recorded explicitly rather than silently moving the target.
 
-| Area | Current implementation (Phase 10) | Required development / acceptance |
+| Area | Current implementation (0.10.1) | Required development / acceptance |
 | --- | --- | --- |
 | Session performance | Partial: launch grid, scenes, quantization | More flexible scene/clip capacity, launch behaviors, follow actions, capture of a Session performance into Arrangement, and reliable live editing with deterministic timing. |
 | Arrangement editing | Partial: regions, splits, duplicates and basic zoom | Multiselection and linked editing, fades/crossfades, consolidation, detailed clip properties, flexible lanes, group organization, and touch editing without accidental panel closure. |
@@ -41,7 +41,7 @@ These are project requirements and acceptance criteria. “Partial” means an i
 | Effects and creative processing | Partial: eight reorderable native effect types per track | Expand the effect palette, processing options and modulation; support flexible device instances and deeper racks. Validate spectral, dynamic, timing and stereo behavior against documented design targets. |
 | Mixing and routing | Partial: 16 tracks, fixed device capacities, two shared returns and sidechain | Group/bus routing, more flexible sends/returns, instrument/audio/MIDI racks, channel I/O, latency reporting/compensation and explicit cycle handling. Preserve deterministic routing in live and offline paths. |
 | Project capacity and resource use | 16 tracks, 8 scenes, 128 shared voices, 64 assets; bounded streamed pages, 2 GiB imports and 8 GiB source-frame equivalent capacity | Replace early structural limits where feasible with scalable project data, bounded active resources, streaming and freezing. Publish measured active-playback capacity separately from stored track/layer count. No invented promise of unlimited simultaneous DSP on the phone. |
-| Precision, metering and delivery | Float processing/export, PCM24 delivery, sample-peak limiter | True-peak/loudness metering and limiting where specified, selectable offline quality, high-quality conversion, stems and flexible output formats/rates. Check phase, timing, headroom and dither across repeated edits/exports. Higher rate/bit-depth labels alone do not establish higher fidelity. |
+| Precision, metering and delivery | Native 44.1–192 kHz offline rendering, float processing/export, dithered PCM24 delivery, sample-peak limiter | True-peak/loudness metering and limiting where specified, selectable offline quality, high-quality conversion, stems and flexible output formats/rates. Check phase, timing, headroom and dither across repeated edits/exports. Higher rate/bit-depth labels alone do not establish higher fidelity. |
 | Browser and content management | Partial: imports, ZIP packs, collections/favorites and portable projects | Search/tags, preview workflows, preset/device/rack assets, missing-media recovery, collect/relink, user templates and scalable content indexing. Keep original recordings recoverable and exportable. |
 | Extension ecosystem | No external plug-in host or custom-device authoring environment | Investigate a native device/extension architecture, custom-device authoring and third-party integration. Track VST/AU, Max-device and Live-project compatibility as separate unresolved requirements; a native extension SDK cannot be presented as proof that those formats work. Record feasibility and any required adaptations explicitly. |
 | Analysis and intelligent tools | Local pitch/spectrum analysis; bounded Astra commands and optional Gemini requests | Broader musical analysis, audio-to-MIDI and stem-separation workflows where feasible, richer safe engine commands, useful project context and preview/Undo. Keep local tools usable without an AI account; network operations remain explicit. |
