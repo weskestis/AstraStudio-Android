@@ -130,7 +130,19 @@ class WorkspaceSmokeTest {
             service.projectEdit{it.put(it.clip(0)!!.add(0.0,45,.5)).place(0,0.0)};compose.waitUntil(10000){service.state.value.project.regions.isNotEmpty()}
             val d=document();val files=ProjectFiles(context);files.saveArchive(d,Uri.fromFile(archive),AtomicBoolean(false));val restored=files.openArchive(Uri.fromFile(archive),AtomicBoolean(false))
             assertEquals(d.project.tables,restored.project.tables);assertEquals(2048,restored.project.asset(restored.project.tables[0][0])!!.cycle)
-            val bridge=AudioBridge();try{assertTrue(bridge.loadAssets(restored.project.assets.map{it.id to files.audioFile(it)}));assertTrue(bridge.project(restored.project));assertEquals(0,bridge.export(output,restored,192000,.1f,false));WaveFile(output).use{w->assertEquals(192000,w.rate);val data=FloatArray(19200*2);w.read(0,19200,data);assertTrue(data.any{kotlin.math.abs(it)>.00001f})}}finally{bridge.close();restored.project.assets.forEach{files.audioFile(it).delete()}}
+            assertArrayEquals("Portable project preserves every original wavetable byte",table,files.audioFile(restored.project.asset(restored.project.tables[0][0])!!).readBytes())
+            val bridge=AudioBridge()
+            try{
+                assertTrue("Reopened pack sources load into the native bank",bridge.loadAssets(restored.project.assets.map{it.id to files.audioFile(it)}))
+                // Offline export decodes its document directly. project() is a live-stream
+                // publication API and correctly rejects an engine that has not been started.
+                assertEquals("Reopened imported wavetable renders through JNI",0,bridge.export(output,restored,192000,.1f,false))
+                WaveFile(output).use{w->
+                    assertEquals(192000,w.rate)
+                    val data=FloatArray(19200*2);w.read(0,19200,data)
+                    assertTrue("Reopened wavetable master contains audio",data.any{kotlin.math.abs(it)>.00001f})
+                }
+            }finally{bridge.close();restored.project.assets.forEach{files.audioFile(it).delete()}}
             service.newProject();compose.waitUntil(10000){service.state.value.project.assets.isEmpty()};assertEquals(2,service.state.value.packs.sounds.size)
         }finally{fixture.delete();pack.delete();archive.delete();output.delete();binding.unbindService()}
     }
